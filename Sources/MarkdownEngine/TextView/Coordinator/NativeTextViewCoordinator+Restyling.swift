@@ -11,6 +11,77 @@
 import AppKit
 
 extension NativeTextViewCoordinator {
+    /// Atomically rebuilds the text view's contents + base attributes + Markdown styling from a storage-form `text`; caller handles scroll/overscroll and code-block selection refresh.
+    func rebuildTextStorageAndStyle(
+        _ textView: NSTextView,
+        from text: String,
+        invalidateLayout: Bool = false
+    ) {
+        let displayState = WikiLinkService.makeDisplayState(from: text)
+        let displayText = displayState.display
+        wikiLinkMetadata = displayState.metadata
+
+        if textView.string != displayText {
+            textView.string = displayText
+        }
+        lastSyncedText = text
+        let nsDisplay = displayText as NSString
+        let fullRange = NSRange(location: 0, length: nsDisplay.length)
+
+        let (baseFont, paragraph) = TextStylingService.makeBaseFontAndStyle(
+            fontName: fontName,
+            fontSize: fontSize,
+            layoutBridge: layoutBridge,
+            configuration: configuration
+        )
+        let baseAttrs: [NSAttributedString.Key: Any] = [
+            .font: baseFont,
+            .foregroundColor: configuration.theme.bodyText,
+            .paragraphStyle: paragraph
+        ]
+        textView.textStorage?.beginEditing()
+        textView.textStorage?.removeAttribute(.link, range: fullRange)
+        textView.textStorage?.setAttributes(baseAttrs, range: fullRange)
+
+        let tokens = parsedDocument(for: displayText).tokens
+        let caretLocation = textView.selectedRange().location
+        activeTokenIndices = MarkdownDetection.computeActiveTokenIndices(
+            selectionRange: textView.selectedRange(),
+            tokens: tokens,
+            in: nsDisplay
+        )
+
+        let ranges = MarkdownStyler.styleAttributes(
+            text: displayText,
+            fontName: fontName,
+            fontSize: fontSize,
+            layoutBridge: layoutBridge,
+            caretLocation: caretLocation,
+            activeTokenIndices: activeTokenIndices,
+            precomputedTokens: tokens,
+            configuration: configuration
+        )
+        for (range, attrs) in ranges {
+            for (key, value) in attrs {
+                textView.textStorage?.addAttribute(key, value: value, range: range)
+            }
+        }
+        textView.textStorage?.endEditing()
+
+        textView.typingAttributes = TextStylingService.makeBaseTypingAttributes(
+            font: baseFont,
+            paragraphStyle: paragraph,
+            theme: configuration.theme
+        )
+
+        if let tlm = textView.textLayoutManager {
+            if invalidateLayout {
+                tlm.invalidateLayout(for: tlm.documentRange)
+            }
+            tlm.ensureLayout(for: tlm.documentRange)
+        }
+    }
+
     func restyleTextView(
         _ textView: NSTextView,
         paragraphCandidates: [NSRange],

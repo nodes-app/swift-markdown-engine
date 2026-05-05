@@ -48,6 +48,9 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var wtInitialSelectionRange: NSRange?
     enum WTMode { case unknown, proofread, rewrite }
     var wtDetectedMode: WTMode = .unknown
+    var wtUndoObserverTokens: [NSObjectProtocol] = []
+    var wtUndoneDuringSession: Bool = false
+    var wtPostUndoSnapshot: String?
     var lastAppliedInlineReplacementID: UUID?
     var activeTokenIndices: Set<Int> = []
     var previousActiveTokenIndices: Set<Int> = []
