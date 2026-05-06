@@ -2,6 +2,8 @@
 //  NativeTextViewSelectionTypes.swift
 //  MarkdownEngine
 //
+//  Created by Luca Chen on 16.03.26.
+//
 //  Public selection / replacement value types exposed by NativeTextViewWrapper.
 //
 

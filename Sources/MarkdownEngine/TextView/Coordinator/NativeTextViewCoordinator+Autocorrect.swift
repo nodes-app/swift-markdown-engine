@@ -2,6 +2,8 @@
 //  NativeTextViewCoordinator+Autocorrect.swift
 //  MarkdownEngine
 //
+//  Created by Luca Chen on 16.03.26.
+//
 //  Toggles AppKit's auto-correct, spell-check, grammar-check and quote
 //  substitution off when the caret enters tokens where those features are
 //  unwanted (code blocks, LaTeX, links). The decision is cached so it only

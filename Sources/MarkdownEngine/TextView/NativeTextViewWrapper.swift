@@ -297,70 +297,15 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             (nsView as? ClampedScrollView)?.clampToInsets()
         }
 
-        let displayState = WikiLinkService.makeDisplayState(from: text)
-        let displayText = displayState.display
-        context.coordinator.wikiLinkMetadata = displayState.metadata
-        if textView.string != displayText {
-            textView.string = displayText
-        }
-        context.coordinator.lastSyncedText = text
-        let nsDisplay = displayText as NSString
-        let fullRange = NSRange(location: 0, length: nsDisplay.length)
-
-        let activeConfiguration = context.coordinator.configuration
-        let (baseFont, paragraph) = TextStylingService.makeBaseFontAndStyle(
-            fontName: fontName,
-            fontSize: fontSize,
-            layoutBridge: context.coordinator.layoutBridge,
-            configuration: activeConfiguration
+        // Sync coordinator's font fields BEFORE the rebuild so the helper
+        // reads the current values from the View struct.
+        context.coordinator.fontName = fontName
+        context.coordinator.fontSize = fontSize
+        context.coordinator.rebuildTextStorageAndStyle(
+            textView,
+            from: text,
+            invalidateLayout: isNodeSwitch
         )
-
-        let baseAttrs: [NSAttributedString.Key: Any] = [
-            .font: baseFont,
-            .foregroundColor: activeConfiguration.theme.bodyText,
-            .paragraphStyle: paragraph
-        ]
-        textView.textStorage?.beginEditing()
-        textView.textStorage?.removeAttribute(.link, range: fullRange)
-        textView.textStorage?.setAttributes(baseAttrs, range: fullRange)
-
-        let currentCaretLocation = textView.selectedRange().location
-        // Reuse the coordinator's tokenize cache.
-        let tokens = context.coordinator.parsedDocument(for: displayText).tokens
-        let updatedActiveTokenIndices = MarkdownDetection.computeActiveTokenIndices(
-            selectionRange: textView.selectedRange(), tokens: tokens, in: nsDisplay
-        )
-        context.coordinator.activeTokenIndices = updatedActiveTokenIndices
-
-        let ranges = MarkdownStyler.styleAttributes(
-            text: displayText,
-            fontName: fontName,
-            fontSize: fontSize,
-            layoutBridge: context.coordinator.layoutBridge,
-            caretLocation: currentCaretLocation,
-            activeTokenIndices: updatedActiveTokenIndices,
-            precomputedTokens: tokens,
-            configuration: activeConfiguration
-        )
-        for (range, attrs) in ranges {
-            for (key, value) in attrs {
-                textView.textStorage?.addAttribute(key, value: value, range: range)
-            }
-        }
-        textView.textStorage?.endEditing()
-        // Reset typingAttributes to body before the layout pass so the phantom end-of-document line doesn't inherit the previous file's heading metrics.
-        textView.typingAttributes = TextStylingService.makeBaseTypingAttributes(
-            font: baseFont,
-            paragraphStyle: paragraph,
-            theme: activeConfiguration.theme
-        )
-        // Force full layout so paragraph heights stay stable after attribute changes.
-        if let tlm = textView.textLayoutManager {
-            if isNodeSwitch {
-                tlm.invalidateLayout(for: tlm.documentRange)
-            }
-            tlm.ensureLayout(for: tlm.documentRange)
-        }
         if let tv = nsView.documentView as? NativeTextView {
             tv.recalcOverscroll(for: nsView)
             (nsView as? ClampedScrollView)?.clampToInsets()
@@ -371,14 +316,6 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             }
         }
 
-        textView.typingAttributes = TextStylingService.makeBaseTypingAttributes(
-            font: baseFont,
-            paragraphStyle: paragraph,
-            theme: activeConfiguration.theme
-        )
-
-        context.coordinator.fontName = fontName
-        context.coordinator.fontSize = fontSize
         context.coordinator.onCaretRectChange = onCaretRectChange
         context.coordinator.onInlineSelectionChange = onInlineSelectionChange
         context.coordinator.onCodeBlockSelectionChange = onCodeBlockSelectionChange

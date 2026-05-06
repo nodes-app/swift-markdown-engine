@@ -24,9 +24,13 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var fontName: String
     var fontSize: CGFloat
     var configuration: MarkdownEditorConfiguration = .default {
-        didSet { subscribeToBusNotifications(replacing: oldValue.services.bus) }
+        didSet {
+            subscribeToBusNotifications(replacing: oldValue.services.bus)
+            subscribeToAppearanceNotification()
+        }
     }
     private var busObservers: [NSObjectProtocol] = []
+    private var registeredAppearanceObserverName: Notification.Name?
     weak var textView: NSTextView?
     var layoutBridge: LayoutBridge?
     var layoutDelegate: MarkdownLayoutManagerDelegate?
@@ -44,6 +48,9 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var wtInitialSelectionRange: NSRange?
     enum WTMode { case unknown, proofread, rewrite }
     var wtDetectedMode: WTMode = .unknown
+    var wtUndoObserverTokens: [NSObjectProtocol] = []
+    var wtUndoneDuringSession: Bool = false
+    var wtPostUndoSnapshot: String?
     var lastAppliedInlineReplacementID: UUID?
     var activeTokenIndices: Set<Int> = []
     var previousActiveTokenIndices: Set<Int> = []
@@ -110,18 +117,26 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
         self.onInlineSelectionChange = onInlineSelectionChange
         self.lastSyncedText = text.wrappedValue
         super.init()
-        // The syntax-highlighter's appearance signal name comes from the
-        // service implementation, not the bus, so we observe it as soon as
-        // the coordinator exists. The other listeners are wired up via
-        // ``subscribeToBusNotifications`` once configuration arrives.
-        if let appearanceName = configuration.services.syntaxHighlighter.appearanceDidChangeNotification {
-            NotificationCenter.default.addObserver(
-                self,
-                selector: #selector(handleAppearanceChange(_:)),
-                name: appearanceName,
-                object: nil
-            )
+        // Init + didSet share this helper so the observer tracks whichever service is current.
+        subscribeToAppearanceNotification()
+    }
+
+    /// (Re)register the syntax-highlighter appearance observer; idempotent and unsubscribes on nil.
+    private func subscribeToAppearanceNotification() {
+        let target = configuration.services.syntaxHighlighter.appearanceDidChangeNotification
+        if registeredAppearanceObserverName == target { return }
+        if let current = registeredAppearanceObserverName {
+            NotificationCenter.default.removeObserver(self, name: current, object: nil)
         }
+        registeredAppearanceObserverName = nil
+        guard let name = target else { return }
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAppearanceChange(_:)),
+            name: name,
+            object: nil
+        )
+        registeredAppearanceObserverName = name
     }
 
     /// Subscribe to whichever bus notification names the current configuration

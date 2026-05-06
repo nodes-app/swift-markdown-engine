@@ -2,6 +2,8 @@
 //  MarkdownStyler+TaskCheckboxes.swift
 //  MarkdownEngine
 //
+//  Created by Luca Chen on 16.03.26.
+//
 //  GitHub-style `- [ ] / - [x]` task checkbox styling and strike-through.
 //
 

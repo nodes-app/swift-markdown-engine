@@ -2,6 +2,8 @@
 //  BottomOverscrollPolicy.swift
 //  MarkdownEngine
 //
+//  Created by Luca Chen on 16.03.26.
+//
 //  Computes the comfortable bottom-of-document slack so the caret never
 //  hugs the bottom edge of the visible viewport while typing.
 //

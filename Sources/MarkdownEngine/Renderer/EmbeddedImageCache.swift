@@ -2,7 +2,7 @@
 //  EmbeddedImageCache.swift
 //  MarkdownEngine
 //
-//  Created by Claude on 16.03.26.
+//  Created by Luca Chen on 16.03.26.
 //
 
 import AppKit

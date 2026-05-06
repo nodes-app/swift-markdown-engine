@@ -2,6 +2,8 @@
 //  NativeTextViewCoordinator+Find.swift
 //  MarkdownEngine
 //
+//  Created by Luca Chen on 16.03.26.
+//
 //  Find-in-document highlighting. The host app posts the bus notifications
 //  registered in `MarkdownEditorBus.findScrollToRange` /
 //  `findClearHighlights` to drive the highlight overlay; this extension

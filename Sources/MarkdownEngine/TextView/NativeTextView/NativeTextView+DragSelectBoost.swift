@@ -2,6 +2,8 @@
 //  NativeTextView+DragSelectBoost.swift
 //  MarkdownEngine
 //
+//  Created by Luca Chen on 16.03.26.
+//
 //  Mouse-down entry point for the text view, plus the autoscroll-boost timer
 //  that keeps drag-selection moving when the cursor sits near a window edge.
 //

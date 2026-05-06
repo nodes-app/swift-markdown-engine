@@ -2,6 +2,8 @@
 //  NativeTextViewCoordinator+CodeBlocks.swift
 //  MarkdownEngine
 //
+//  Created by Luca Chen on 16.03.26.
+//
 //  Tracks code-block selections in the document so the host can render the
 //  small "copy code" button overlay on top of every fenced code block. Skips
 //  blocks the caret is currently inside (`activeTokenIndices`) to avoid the

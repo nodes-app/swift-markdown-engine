@@ -2,6 +2,8 @@
 //  NativeTextViewCoordinator+Notifications.swift
 //  MarkdownEngine
 //
+//  Created by Luca Chen on 16.03.26.
+//
 //  Bus-notification handlers wired up by `subscribeToBusNotifications`.
 //  These translate embedder-posted requests (apply bold / italic / heading
 //  level) into the corresponding ContextMenu actions, and refresh styling

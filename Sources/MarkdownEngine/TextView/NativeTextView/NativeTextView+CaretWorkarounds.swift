@@ -2,9 +2,9 @@
 //  NativeTextView+CaretWorkarounds.swift
 //  MarkdownEngine
 //
-//  Caret-indicator workarounds: snap the indicator to the layout-manager's
-//  caret rect after collapsed→visible transitions, hide/resize around block
-//  images, and fix the trailing-newline phantom-EOD position (FB22524198).
+//  Created by Luca Chen on 16.03.26.
+//
+//  Caret-indicator workarounds: block-image hide/resize + trailing-`\n` Y-snap (FB22524198).
 //
 
 import AppKit
@@ -65,7 +65,7 @@ extension NativeTextView {
         isApplyingCaretShift = false
     }
 
-    /// Workaround for FB22524198: snap the caret indicator to `lastLineMaxY + paragraphSpacing` when AppKit transiently places it on the previous line's top at trailing-`\n` end-of-doc.
+    /// FB22524198: AppKit drops the trailing-`\n` caret onto the previous line's top — snap it to `lastLineMaxY + paragraphSpacing` instead. (Companion to FB15131180; this one fixes Y, the other fixes height.)
     func fixPhantomTrailingCaret() {
         if let indicator = subviews.first(where: { type(of: $0) == NSTextInsertionIndicator.self }),
            observedCaretIndicator !== indicator {

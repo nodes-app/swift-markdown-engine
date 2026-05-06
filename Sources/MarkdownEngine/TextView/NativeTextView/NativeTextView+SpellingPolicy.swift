@@ -2,6 +2,8 @@
 //  NativeTextView+SpellingPolicy.swift
 //  MarkdownEngine
 //
+//  Created by Luca Chen on 16.03.26.
+//
 //  Spell-check suppression inside code spans, code blocks, LaTeX, and other
 //  coordinator-flagged tokens — anything that should be exempt from the
 //  default underline pass.

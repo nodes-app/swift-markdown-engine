@@ -2,6 +2,8 @@
 //  PasteboardImageReader.swift
 //  MarkdownEngine
 //
+//  Created by Luca Chen on 16.03.26.
+//
 //  Pasteboard inspection helpers used to detect and extract images
 //  from paste / drop events into the editor.
 //

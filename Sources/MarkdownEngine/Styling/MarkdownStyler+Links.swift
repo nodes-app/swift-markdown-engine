@@ -2,6 +2,8 @@
 //  MarkdownStyler+Links.swift
 //  MarkdownEngine
 //
+//  Created by Luca Chen on 16.03.26.
+//
 //  Auto-detected URLs, [text](url) Markdown links, and [[Name]] wiki links.
 //
 

@@ -3,70 +3,52 @@
 //  MarkdownEngine
 //
 //  Created by Luca Chen on 20.06.25.
-//  Purpose: Adds a cleaner right-click menu with Markdown formatting actions.
+//
+//  Right-click menu with toggleable Markdown formatting actions.
 //
 
 import Cocoa
 import SwiftUI
 
 extension NativeTextViewWrapper.Coordinator {
-    // Override context menu to redirect Bold to Markdown action
     public func textView(_ textView: NSTextView,
                   menu: NSMenu,
                   for event: NSEvent,
                   at charIndex: Int) -> NSMenu? {
         let customMenu = menu.copy() as? NSMenu ?? NSMenu()
 
-        // Replace the default Font submenu with a custom Format menu
         if let fontIndex = customMenu.items.firstIndex(where: { $0.title == "Font" }) {
             customMenu.removeItem(at: fontIndex)
             let formatItem = NSMenuItem(title: "Format", action: nil, keyEquivalent: "")
             let formatSubmenu = NSMenu(title: "Format")
-            // Bold item
             let boldItem = NSMenuItem(title: "Bold", action: #selector(didMarkdownBold(_:)), keyEquivalent: "")
             boldItem.target = self
             formatSubmenu.addItem(boldItem)
-            // Italic item
             let italicItem = NSMenuItem(title: "Italic", action: #selector(didMarkdownItalic(_:)), keyEquivalent: "")
             italicItem.target = self
             formatSubmenu.addItem(italicItem)
             formatItem.submenu = formatSubmenu
             customMenu.insertItem(formatItem, at: fontIndex)
-            // Heading top-level menu
+
             let headingItem = NSMenuItem(title: "Heading", action: nil, keyEquivalent: "")
             let headingSubmenu = NSMenu(title: "Heading")
-            
-            let h1Item = NSMenuItem(title: "H1", action: #selector(didMarkdownHeading(_:)), keyEquivalent: "")
-            h1Item.target = self
-            h1Item.tag = 1
-            headingSubmenu.addItem(h1Item)
-            
-            let h2Item = NSMenuItem(title: "H2", action: #selector(didMarkdownHeading(_:)), keyEquivalent: "")
-            h2Item.target = self
-            h2Item.tag = 2
-            headingSubmenu.addItem(h2Item)
-            
-            let h3Item = NSMenuItem(title: "H3", action: #selector(didMarkdownHeading(_:)), keyEquivalent: "")
-            h3Item.target = self
-            h3Item.tag = 3
-            headingSubmenu.addItem(h3Item)
-            
+            for level in 1...3 {
+                let item = NSMenuItem(title: "H\(level)", action: #selector(didMarkdownHeading(_:)), keyEquivalent: "")
+                item.target = self
+                item.tag = level
+                headingSubmenu.addItem(item)
+            }
             headingItem.submenu = headingSubmenu
-            // insert Heading menu right after Format
             customMenu.insertItem(headingItem, at: fontIndex + 1)
 
-            // Lists top-level menu
             let listItem = NSMenuItem(title: "Lists", action: nil, keyEquivalent: "")
             let listSubmenu = NSMenu(title: "Lists")
-
             let unorderedItem = NSMenuItem(title: "Bullet", action: #selector(didMarkdownUnorderedList(_:)), keyEquivalent: "")
             unorderedItem.target = self
             listSubmenu.addItem(unorderedItem)
-
             let orderedItem = NSMenuItem(title: "Numbered", action: #selector(didMarkdownOrderedList(_:)), keyEquivalent: "")
             orderedItem.target = self
             listSubmenu.addItem(orderedItem)
-
             listItem.submenu = listSubmenu
             customMenu.insertItem(listItem, at: fontIndex + 2)
             customMenu.insertItem(NSMenuItem.separator(), at: fontIndex + 3)
@@ -75,68 +57,50 @@ extension NativeTextViewWrapper.Coordinator {
         return customMenu
     }
 
-    /// Entfernt führende und abschließende Leerzeichen und liefert Kerntext, Start und Länge
-    func trimmedCore(in nsText: NSString, range: NSRange) -> (trimmed: String, coreStart: Int, coreLength: Int) {
-        let text = nsText.substring(with: range)
-        let leadingWS = text.prefix { $0.isWhitespace }.count
-        let trailingWS = text.reversed().prefix { $0.isWhitespace }.count
-        let trimmed = String(text.dropFirst(leadingWS).dropLast(trailingWS))
-        let coreStart = range.location + leadingWS
-        let coreLength = range.length - leadingWS - trailingWS
-        return (trimmed, coreStart, coreLength)
-    }
-    /// Prüft, ob die Auswahl bereits von ** umschlossen ist (sucht sowohl innen als auch außen)
-   func isSelectionBold(in nsText: NSString, range: NSRange) -> Bool {
-        let (trimmed, _, _) = trimmedCore(in: nsText, range: range)
-        // If trimmed selection contains any '*' or '#', treat as already formatted
-        if trimmed.contains("*") || trimmed.contains("#") {
-            return true
+    /// Returns the smallest bold or boldItalic token that fully contains the selection, or nil when the selection isn't enclosed by emphasis with a bold trait.
+    func enclosingBoldToken(for selection: NSRange, in text: String) -> MarkdownToken? {
+        let tokens = parsedDocument(for: text).tokens
+        return tokens.first { token in
+            (token.kind == .bold || token.kind == .boldItalic) && tokenEncloses(token, selection: selection)
         }
-      
-        // Case 2: markers directly outside the selected range
-        let length = range.length
-        if range.location >= 2,
-           nsText.substring(with: NSRange(location: range.location - 2, length: 2)) == "**",
-           range.location + length + 2 <= nsText.length,
-           nsText.substring(with: NSRange(location: range.location + length, length: 2)) == "**" {
-            return true
-        }
-        return false
     }
-    /// Prüft, ob die Auswahl bereits von * umschlossen ist (sucht sowohl innen als auch außen)
+
+    /// Returns the smallest italic or boldItalic token that fully contains the selection, or nil when the selection isn't enclosed by emphasis with an italic trait.
+    func enclosingItalicToken(for selection: NSRange, in text: String) -> MarkdownToken? {
+        let tokens = parsedDocument(for: text).tokens
+        return tokens.first { token in
+            (token.kind == .italic || token.kind == .boldItalic) && tokenEncloses(token, selection: selection)
+        }
+    }
+
+    func isSelectionBold(in nsText: NSString, range: NSRange) -> Bool {
+        return enclosingBoldToken(for: range, in: nsText as String) != nil
+    }
+
     func isSelectionItalic(in nsText: NSString, range: NSRange) -> Bool {
-        let (trimmed, _, _) = trimmedCore(in: nsText, range: range)
-        // If trimmed selection contains any '*' or '#', treat as already formatted
-        if trimmed.contains("*") || trimmed.contains("#") {
-            return true
-        }
-        // Case 1: markers inside selection after trimming whitespace
-        if trimmed.hasPrefix("*") && trimmed.hasSuffix("*") {
-            return true
-        }
-        let length = range.length
-        // Case 3: bold+italic markers directly outside the selected range
-        if range.location >= 3,
-           nsText.substring(with: NSRange(location: range.location - 3, length: 3)) == "***",
-           range.location + length + 3 <= nsText.length,
-           nsText.substring(with: NSRange(location: range.location + length, length: 3)) == "***"
-        {
-            return true
-        }
-        // Case 2: markers directly outside the selected range (ensure not part of bold markers)
-        if range.location >= 1,
-           nsText.substring(with: NSRange(location: range.location - 1, length: 1)) == "*",
-           range.location + length + 1 <= nsText.length,
-           nsText.substring(with: NSRange(location: range.location + length, length: 1)) == "*",
-           // ensure not part of bold markers: no extra "*" before or after
-           (range.location < 2 || nsText.substring(with: NSRange(location: range.location - 2, length: 1)) != "*"),
-           (range.location + length + 2 > nsText.length || nsText.substring(with: NSRange(location: range.location + length + 1, length: 1)) != "*")
-        {
-            return true
-        }
-        return false
+        return enclosingItalicToken(for: range, in: nsText as String) != nil
     }
-    /// Prüft, ob die Auswahl in einer Zeile bereits als Heading der gegebenen Ebene formatiert ist
+
+    private func tokenEncloses(_ token: MarkdownToken, selection: NSRange) -> Bool {
+        return selection.location >= token.range.location
+            && NSMaxRange(selection) <= NSMaxRange(token.range)
+    }
+
+    /// Replaces the marker characters of an emphasis token with `replacement` on each side, preserving the inner content.
+    private func unwrapToken(_ token: MarkdownToken, leftReplacement: String, rightReplacement: String) {
+        guard let tv = textView else { return }
+        let nsText = tv.string as NSString
+        let content = nsText.substring(with: token.contentRange)
+        let newText = leftReplacement + content + rightReplacement
+        if tv.shouldChangeText(in: token.range, replacementString: newText) {
+            tv.replaceCharacters(in: token.range, with: newText)
+            tv.didChangeText()
+            let newSelectionLocation = token.range.location + leftReplacement.count
+            tv.setSelectedRange(NSRange(location: newSelectionLocation, length: content.count))
+            DispatchQueue.main.async { self.text = tv.string }
+        }
+    }
+
     func isSelectionHeading(level: Int, in nsText: NSString, range: NSRange) -> Bool {
         let lineRange = nsText.lineRange(for: range)
         let line = nsText.substring(with: lineRange)
@@ -144,14 +108,12 @@ extension NativeTextViewWrapper.Coordinator {
         return trimmedLine.hasPrefix(String(repeating: "#", count: level) + " ")
     }
 
-    /// Prüft, ob die Auswahl in einer Zeile bereits als Liste formatiert ist
     func isSelectionList(in nsText: NSString, range: NSRange) -> Bool {
         let lineRange = nsText.lineRange(for: range)
         let line = nsText.substring(with: lineRange)
         return line.hasPrefix("\t• ") || line.hasPrefix("1. ")
     }
 
-    /// Applies the given Markdown heading level to the current line
     private func applyHeading(level: Int) {
         guard let tv = textView else { return }
         let nsText = tv.string as NSString
@@ -176,7 +138,6 @@ extension NativeTextViewWrapper.Coordinator {
         applyHeading(level: sender.tag)
     }
 
-    /// Applies a Markdown list prefix to the entire line containing the selection
     private func applyList(prefix: String) {
         guard let tv = textView else { return }
         let nsText = tv.string as NSString
@@ -207,111 +168,81 @@ extension NativeTextViewWrapper.Coordinator {
     @objc func didMarkdownOrderedList(_ sender: Any?) {
         applyList(prefix: "1. ")
     }
+
     @objc func didMarkdownBold(_ sender: Any?) {
         guard let tv = textView else { return }
-        let nsText = tv.string as NSString
         let range = tv.selectedRange()
-        // If nothing is selected, insert empty bold markers and place cursor between them
-        if range.length == 0 {
-            let prefix = "**"
-            let insertion = prefix + prefix
-            if tv.shouldChangeText(in: range, replacementString: insertion) {
-                tv.replaceCharacters(in: range, with: insertion)
-                tv.didChangeText()
-                let cursorRange = NSRange(location: range.location + prefix.count, length: 0)
-                tv.setSelectedRange(cursorRange)
-                DispatchQueue.main.async { self.text = tv.string }
-            }
-            return
-        }
-        // Wenn bereits Fett, nichts tun
-        if isSelectionBold(in: nsText, range: range) {
+
+        if let token = enclosingBoldToken(for: range, in: tv.string) {
+            // Toggle off: bold → plain, boldItalic → italic.
+            let (left, right) = token.kind == .boldItalic ? ("*", "*") : ("", "")
+            unwrapToken(token, leftReplacement: left, rightReplacement: right)
             return
         }
 
-        // Otherwise wrap selection, ignoring leading/trailing whitespace
-        let original = nsText.substring(with: range)
-        // Calculate leading and trailing whitespace counts
-        let wrapLeadingWhitespaceCount = original.prefix { $0.isWhitespace }.count
-        let wrapTrailingWhitespaceCount = original.reversed().prefix { $0.isWhitespace }.count
-        // Determine core text range within original
-        let wrapCoreStart = original.index(original.startIndex, offsetBy: wrapLeadingWhitespaceCount)
-        let wrapCoreEnd = original.index(original.endIndex, offsetBy: -wrapTrailingWhitespaceCount)
-        let core: String
-        if wrapCoreStart <= wrapCoreEnd {
-            core = String(original[wrapCoreStart..<wrapCoreEnd])
-        } else {
-            core = ""
+        if range.length == 0 {
+            insertEmptyMarkers("**")
+            return
         }
-        let leading = String(original[..<wrapCoreStart])
-        let trailing = String(original[wrapCoreEnd...])
-        // Wrap only the core text with bold markers
-        let wrappedCore = "**\(core)**"
-        let newText = leading + wrappedCore + trailing
-        if tv.shouldChangeText(in: range, replacementString: newText) {
-            tv.replaceCharacters(in: range, with: newText)
-            tv.didChangeText()
-            // Select only the bolded core content
-            let newRangeLocation = range.location + wrapLeadingWhitespaceCount + 2
-            let newRangeLength = core.count
-            let newRange = NSRange(location: newRangeLocation, length: newRangeLength)
-            tv.setSelectedRange(newRange)
-            DispatchQueue.main.async { self.text = tv.string }
-        }
+
+        wrapSelection(with: "**")
     }
 
     @objc func didMarkdownItalic(_ sender: Any?) {
         guard let tv = textView else { return }
-        let nsText = tv.string as NSString
         let range = tv.selectedRange()
-        // If nothing is selected, insert empty italic markers and place cursor between them
-        if range.length == 0 {
-            let prefix = "*"
-            let insertion = prefix + prefix
-            if tv.shouldChangeText(in: range, replacementString: insertion) {
-                tv.replaceCharacters(in: range, with: insertion)
-                tv.didChangeText()
-                let cursorRange = NSRange(location: range.location + prefix.count, length: 0)
-                tv.setSelectedRange(cursorRange)
-                DispatchQueue.main.async { self.text = tv.string }
-            }
-            return
-        }
-        // Wenn bereits Kursiv, nichts tun
-        if isSelectionItalic(in: nsText, range: range) {
+
+        if let token = enclosingItalicToken(for: range, in: tv.string) {
+            // Toggle off: italic → plain, boldItalic → bold.
+            let (left, right) = token.kind == .boldItalic ? ("**", "**") : ("", "")
+            unwrapToken(token, leftReplacement: left, rightReplacement: right)
             return
         }
 
-        // Otherwise wrap selection, ignoring leading/trailing whitespace
+        if range.length == 0 {
+            insertEmptyMarkers("*")
+            return
+        }
+
+        wrapSelection(with: "*")
+    }
+
+    private func insertEmptyMarkers(_ marker: String) {
+        guard let tv = textView else { return }
+        let range = tv.selectedRange()
+        let insertion = marker + marker
+        if tv.shouldChangeText(in: range, replacementString: insertion) {
+            tv.replaceCharacters(in: range, with: insertion)
+            tv.didChangeText()
+            tv.setSelectedRange(NSRange(location: range.location + marker.count, length: 0))
+            DispatchQueue.main.async { self.text = tv.string }
+        }
+    }
+
+    private func wrapSelection(with marker: String) {
+        guard let tv = textView else { return }
+        let nsText = tv.string as NSString
+        let range = tv.selectedRange()
         let original = nsText.substring(with: range)
         let leadingWS = original.prefix { $0.isWhitespace }.count
         let trailingWS = original.reversed().prefix { $0.isWhitespace }.count
-        let wrapCoreStart = original.index(original.startIndex, offsetBy: leadingWS)
-        let wrapCoreEnd = original.index(original.endIndex, offsetBy: -trailingWS)
-        let core: String
-        if wrapCoreStart <= wrapCoreEnd {
-            core = String(original[wrapCoreStart..<wrapCoreEnd])
-        } else {
-            core = ""
-        }
-        let leading = String(original[..<wrapCoreStart])
-        let trailing = String(original[wrapCoreEnd...])
-        let wrappedCore = "*\(core)*"
-        let newText = leading + wrappedCore + trailing
-
+        let coreStart = original.index(original.startIndex, offsetBy: leadingWS)
+        let coreEnd = original.index(original.endIndex, offsetBy: -trailingWS)
+        let core = coreStart <= coreEnd ? String(original[coreStart..<coreEnd]) : ""
+        let leading = String(original[..<coreStart])
+        let trailing = String(original[coreEnd...])
+        let newText = leading + marker + core + marker + trailing
         if tv.shouldChangeText(in: range, replacementString: newText) {
             tv.replaceCharacters(in: range, with: newText)
             tv.didChangeText()
-            let newRangeLocation = range.location + leadingWS + 1
-            let newRangeLength = core.count
-            let newRange = NSRange(location: newRangeLocation, length: newRangeLength)
+            let newRange = NSRange(location: range.location + leadingWS + marker.count, length: core.count)
             tv.setSelectedRange(newRange)
             DispatchQueue.main.async { self.text = tv.string }
         }
     }
 }
 
-// MARK: - Menu Item Validation for Format commands
+// MARK: - Menu Item Validation
 extension NativeTextViewWrapper.Coordinator: NSMenuItemValidation {
     public func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         guard let tv = textView else { return true }
@@ -319,12 +250,13 @@ extension NativeTextViewWrapper.Coordinator: NSMenuItemValidation {
         let range = tv.selectedRange()
         switch menuItem.action {
         case #selector(didMarkdownBold(_:)):
-            return !isSelectionBold(in: nsText, range: range)
+            menuItem.state = enclosingBoldToken(for: range, in: tv.string) != nil ? .on : .off
+            return true
         case #selector(didMarkdownItalic(_:)):
-            return !isSelectionItalic(in: nsText, range: range)
+            menuItem.state = enclosingItalicToken(for: range, in: tv.string) != nil ? .on : .off
+            return true
         case #selector(didMarkdownHeading(_:)):
-            let level = menuItem.tag
-            return !isSelectionHeading(level: level, in: nsText, range: range)
+            return !isSelectionHeading(level: menuItem.tag, in: nsText, range: range)
         case #selector(didMarkdownUnorderedList(_:)),
              #selector(didMarkdownOrderedList(_:)):
             return !isSelectionList(in: nsText, range: range)

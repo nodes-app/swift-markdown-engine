@@ -2,6 +2,8 @@
 //  MarkdownEditorConfiguration.swift
 //  MarkdownEngine
 //
+//  Created by Luca Chen on 16.03.26.
+//
 //  Centralized configuration for the Markdown editor engine.
 //
 //  This struct exposes every spacing, sizing, and behavior knob that is

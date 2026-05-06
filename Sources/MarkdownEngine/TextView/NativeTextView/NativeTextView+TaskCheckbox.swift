@@ -2,6 +2,8 @@
 //  NativeTextView+TaskCheckbox.swift
 //  MarkdownEngine
 //
+//  Created by Luca Chen on 16.03.26.
+//
 //  Hit-test for `[ ]` / `[x]` checkbox glyphs and toggle the underlying text
 //  + `.taskCheckbox` attribute, then nudge the coordinator to restyle the
 //  enclosing paragraph.

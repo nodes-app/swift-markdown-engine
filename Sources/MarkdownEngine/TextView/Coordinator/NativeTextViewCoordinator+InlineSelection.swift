@@ -2,6 +2,8 @@
 //  NativeTextViewCoordinator+InlineSelection.swift
 //  MarkdownEngine
 //
+//  Created by Luca Chen on 16.03.26.
+//
 //  Inline selection geometry: figure out which inline token (wiki-link
 //  `[[…]]` or image-embed `![[…]]`) the caret is currently in, compute its
 //  on-screen rect for the host's preview popover, and keep image-embed

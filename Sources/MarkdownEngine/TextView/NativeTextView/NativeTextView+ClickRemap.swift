@@ -2,6 +2,8 @@
 //  NativeTextView+ClickRemap.swift
 //  MarkdownEngine
 //
+//  Created by Luca Chen on 16.03.26.
+//
 //  Single-click hit-testing inside paragraph spacing: pick the closer of the
 //  current fragment's last line vs. the next fragment's first line and place
 //  the caret at a line-relative X within the chosen line.

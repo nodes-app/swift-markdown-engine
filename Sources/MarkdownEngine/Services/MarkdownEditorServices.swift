@@ -2,6 +2,8 @@
 //  MarkdownEditorServices.swift
 //  MarkdownEngine
 //
+//  Created by Luca Chen on 16.03.26.
+//
 //  Protocols and default implementations for engine-side dependencies.
 //
 //  The Markdown editor engine resolves wiki-links, syntax highlighting,

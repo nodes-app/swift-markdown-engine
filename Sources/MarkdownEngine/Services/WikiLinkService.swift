@@ -2,6 +2,8 @@
 //  WikiLinkService.swift
 //  MarkdownEngine
 //
+//  Created by Luca Chen on 16.03.26.
+//
 //  Generic wiki-link transformer used by the editor engine.
 //
 //  Wiki-links live in two forms:

@@ -2,11 +2,9 @@
 //  NativeTextViewCoordinator+WritingTools.swift
 //  MarkdownEngine
 //
-//  macOS 15+ Writing Tools integration: when the user invokes a Writing
-//  Tools session (proofread / rewrite), the engine pauses normal styling
-//  while the suggestion UI is active and re-syncs the result back to the
-//  text binding when the session ends. Also patches the position of the
-//  inline child window that Apple's UI sometimes leaves misaligned.
+//  Created by Luca Chen on 16.03.26.
+//
+//  macOS 15+ Writing Tools integration: pauses styling during the session, re-syncs results on end, fixes child window position, and recovers from Apple's stale-accept-action bug after mid-session Cmd+Z.
 //
 
 import AppKit
@@ -21,6 +19,9 @@ extension NativeTextViewCoordinator {
         wtInitialChildOrigin = nil
         wtInitialSelectionRange = sel.length > 0 ? sel : nil
         wtDetectedMode = .unknown
+        wtUndoneDuringSession = false
+        wtPostUndoSnapshot = nil
+        observeUndoNotifications(for: textView.undoManager)
         scheduleChildWindowFix(textView: textView, attemptsRemaining: 20)
     }
 
@@ -30,25 +31,40 @@ extension NativeTextViewCoordinator {
         isWritingToolsActive = false
         wtChildWindow = nil
         wtInitialChildOrigin = nil
+        stopObservingUndoNotifications()
 
-        // If the user switched files while WT was active, updateNSView already
-        // reset the WT state and loaded the new node — discard these results.
+        // Doc switched mid-session — discard WT results, the new node already loaded.
         if wtStartDocumentId != nil && wtStartDocumentId != documentId {
             wtStartDocumentId = nil
             return
         }
         wtStartDocumentId = nil
 
-        // Still on the same node — sync the rewritten text to the binding.
-        // Defer to next runloop to avoid modifying @Binding during a view update
-        // (textViewWritingToolsDidEnd can fire synchronously from updateNSView).
+        // Cmd+Z mid-session: Apple's stale accept-action corrupts text + contaminates attrs with 0.1pt marker font; the post-undo snapshot is the authoritative state.
+        let sourceText: String
+        let undoDuringSession: Bool
+        if wtUndoneDuringSession, let snapshot = wtPostUndoSnapshot {
+            sourceText = snapshot
+            undoDuringSession = true
+        } else {
+            sourceText = textView.string
+            undoDuringSession = false
+        }
+        wtUndoneDuringSession = false
+        wtPostUndoSnapshot = nil
+
         let storageState = WikiLinkService.makeStorageState(
-            from: textView.string,
+            from: sourceText,
             existingMetadata: wikiLinkMetadata,
             textStorage: textView.textStorage
         )
         wikiLinkMetadata = storageState.metadata
         let storage = storageState.storage
+
+        // Binding is already equal to `storage` after undo so SwiftUI won't re-render — rebuild the textView directly.
+        if undoDuringSession {
+            rebuildTextStorageAndStyle(textView, from: storage)
+        }
         DispatchQueue.main.async { [self] in
             lastSyncedText = storage
             text = storage
@@ -74,6 +90,26 @@ extension NativeTextViewCoordinator {
               let childWin = mainWindow.childWindows?.first(where: { $0.isVisible }) else { return }
         wtChildWindow = childWin
         wtInitialChildOrigin = childWin.frame.origin
+    }
+
+    // MARK: - Undo observer (captures post-undo snapshot for recovery)
+
+    private func observeUndoNotifications(for undoManager: UndoManager?) {
+        stopObservingUndoNotifications()
+        guard let um = undoManager else { return }
+        let center = NotificationCenter.default
+        wtUndoObserverTokens = [
+            center.addObserver(forName: .NSUndoManagerDidUndoChange, object: um, queue: .main) { [weak self] _ in
+                guard let self, let tv = self.textView, self.isWritingToolsActive else { return }
+                self.wtUndoneDuringSession = true
+                self.wtPostUndoSnapshot = tv.string
+            }
+        ]
+    }
+
+    private func stopObservingUndoNotifications() {
+        wtUndoObserverTokens.forEach(NotificationCenter.default.removeObserver(_:))
+        wtUndoObserverTokens.removeAll()
     }
 
     func fixWritingToolsChildWindowIfNeeded(textView: NSTextView) {

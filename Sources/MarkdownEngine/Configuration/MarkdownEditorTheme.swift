@@ -2,6 +2,8 @@
 //  MarkdownEditorTheme.swift
 //  MarkdownEngine
 //
+//  Created by Luca Chen on 16.03.26.
+//
 //  Color palette for the Markdown editor engine.
 //
 //  All user-visible colors used by the engine are routed through this

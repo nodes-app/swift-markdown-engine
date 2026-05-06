@@ -2,6 +2,8 @@
 //  MarkdownStyler+Latex.swift
 //  MarkdownEngine
 //
+//  Created by Luca Chen on 16.03.26.
+//
 //  Block ($$...$$) and inline ($...$) LaTeX formula rendering.
 //
 

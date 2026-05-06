@@ -2,6 +2,8 @@
 //  NativeTextView+FrameAndOverscroll.swift
 //  MarkdownEngine
 //
+//  Created by Luca Chen on 16.03.26.
+//
 //  Frame-size management, content-height measurement (TextKit-2 last-fragment
 //  + end-segment pattern), bottom-overscroll application, and transient-shrink
 //  scroll-position restoration.

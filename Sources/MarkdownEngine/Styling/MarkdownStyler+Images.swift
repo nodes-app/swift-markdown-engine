@@ -2,6 +2,8 @@
 //  MarkdownStyler+Images.swift
 //  MarkdownEngine
 //
+//  Created by Luca Chen on 16.03.26.
+//
 //  Image embed (`![[...]]`) styling and layout.
 //
 

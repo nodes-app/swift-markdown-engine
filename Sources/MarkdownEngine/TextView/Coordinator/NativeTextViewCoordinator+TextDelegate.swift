@@ -2,6 +2,8 @@
 //  NativeTextViewCoordinator+TextDelegate.swift
 //  MarkdownEngine
 //
+//  Created by Luca Chen on 16.03.26.
+//
 //  The hot NSTextViewDelegate path: keystroke handling, selection-change
 //  reaction, link-click forwarding, and the typing-attributes shim that
 //  prevents AppKit from leaking heading paragraphStyle into the trailing
