@@ -9,9 +9,27 @@
 import AppKit
 
 final class ClampedScrollView: NSScrollView {
+    /// Saved at the start of every live-resize (including spurious one-click resizes triggered by edge-cursor clicks) so the position is restored when the resize ends. Without this, NSScrollView's default top-anchor-during-resize would jolt a bottom-anchored user back up by hundreds of points on a single edge click.
+    private var scrollYBeforeLiveResize: CGFloat?
+
     override func scrollWheel(with event: NSEvent) {
         super.scrollWheel(with: event)
         clampToInsets()
+    }
+
+    override func viewWillStartLiveResize() {
+        super.viewWillStartLiveResize()
+        scrollYBeforeLiveResize = contentView.bounds.origin.y
+    }
+
+    override func viewDidEndLiveResize() {
+        super.viewDidEndLiveResize()
+        if let y = scrollYBeforeLiveResize {
+            contentView.scroll(to: NSPoint(x: contentView.bounds.origin.x, y: y))
+            reflectScrolledClipView(contentView)
+            clampToInsets()
+        }
+        scrollYBeforeLiveResize = nil
     }
 
     func clampToInsets() {
