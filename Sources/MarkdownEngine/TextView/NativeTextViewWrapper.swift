@@ -100,15 +100,16 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     public func makeNSView(context: Context) -> NSScrollView {
         let scrollView = ClampedScrollView()
         scrollView.borderType = .noBorder
-        scrollView.hasVerticalScroller = false
-        scrollView.hasHorizontalScroller = false
+        scrollView.hasVerticalScroller = configuration.scrollers.hasVerticalScroller
+        scrollView.hasHorizontalScroller = configuration.scrollers.hasHorizontalScroller
+        scrollView.autohidesScrollers = configuration.scrollers.autohidesScrollers
         scrollView.drawsBackground = false
         scrollView.automaticallyAdjustsContentInsets = false
         scrollView.contentInsets = NSEdgeInsets(
-            top: configuration.contentInsets.top,
-            left: configuration.contentInsets.leading,
-            bottom: configuration.contentInsets.bottom,
-            right: configuration.contentInsets.trailing
+            top: configuration.safeAreaInsets.top,
+            left: configuration.safeAreaInsets.leading,
+            bottom: configuration.safeAreaInsets.bottom,
+            right: configuration.safeAreaInsets.trailing
         )
 
         // Let NSTextView auto-initialize its own TextKit 2 stack via init(frame:).
@@ -121,6 +122,10 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         }
         textContainer.lineFragmentPadding = 0
         textContainer.widthTracksTextView = true
+        textView.textContainerInset = NSSize(
+            width: configuration.textInsets.horizontal,
+            height: configuration.textInsets.vertical
+        )
         textContainer.heightTracksTextView = false
 
         let layoutDelegate = MarkdownLayoutManagerDelegate()
@@ -222,6 +227,22 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
 
         if let bottomTextView = nsView.documentView as? NativeTextView {
             bottomTextView.onPasteImage = onPasteImage
+        }
+        if nsView.hasVerticalScroller != configuration.scrollers.hasVerticalScroller {
+            nsView.hasVerticalScroller = configuration.scrollers.hasVerticalScroller
+        }
+        if nsView.hasHorizontalScroller != configuration.scrollers.hasHorizontalScroller {
+            nsView.hasHorizontalScroller = configuration.scrollers.hasHorizontalScroller
+        }
+        if nsView.autohidesScrollers != configuration.scrollers.autohidesScrollers {
+            nsView.autohidesScrollers = configuration.scrollers.autohidesScrollers
+        }
+        let desiredTextInset = NSSize(
+            width: configuration.textInsets.horizontal,
+            height: configuration.textInsets.vertical
+        )
+        if textView.textContainerInset != desiredTextInset {
+            textView.textContainerInset = desiredTextInset
         }
         // Refresh services/theme when the embedder hands us a new configuration
         // (e.g. when the available wiki-link targets change). Cheap pointer-/
