@@ -27,6 +27,7 @@ enum MarkdownTokenKind {
     case blockLatex
     case inlineLatex
     case imageEmbed
+    case strikethrough
 }
 
 struct MarkdownToken {

@@ -66,6 +66,15 @@ extension MarkdownStyler {
             attrs.append((token.contentRange, [.font: boldFont]))
         }
 
+        // Strikethrough ~~text~~
+        for token in ctx.tokens where token.kind == .strikethrough {
+            if MarkdownDetection.isInsideCodeBlock(range: token.range, codeTokens: ctx.codeTokens) { continue }
+            attrs.append((token.contentRange, [
+                .strikethroughStyle: NSUnderlineStyle.single.rawValue,
+                .strikethroughColor: ctx.configuration.theme.strikethroughColor
+            ]))
+        }
+
         // Italic
         for token in ctx.tokens where token.kind == .italic {
             if MarkdownDetection.isInsideCodeBlock(range: token.range, codeTokens: ctx.codeTokens) { continue }

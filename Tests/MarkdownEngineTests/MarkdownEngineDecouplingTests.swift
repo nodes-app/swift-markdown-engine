@@ -69,6 +69,20 @@ struct MarkdownEngineDecouplingTests {
         #expect(kinds.contains(.inlineCode))
     }
 
+    @Test func tokenizerParsesStrikethrough() {
+        let tokens = MarkdownTokenizer.parseTokens(in: "before ~~deleted~~ after")
+        let strike = tokens.first { $0.kind == .strikethrough }
+        #expect(strike != nil)
+        #expect(strike?.markerRanges.count == 2)
+        #expect(strike?.markerRanges.first?.length == 2)
+        #expect(strike?.markerRanges.last?.length == 2)
+    }
+
+    @Test func tokenizerDoesNotMatchTripleTilde() {
+        let tokens = MarkdownTokenizer.parseTokens(in: "~~~not strikethrough~~~")
+        #expect(!tokens.contains { $0.kind == .strikethrough })
+    }
+
     // MARK: Default services container is fully wired with no-ops
 
     @Test func defaultServicesAreAllNoOps() {

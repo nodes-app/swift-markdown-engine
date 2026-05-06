@@ -20,6 +20,9 @@ private extension MarkdownTokenizer {
     static let italicRegex = try! NSRegularExpression(
         pattern: "(?<!\\*)\\*([^*\\r\\n]+?)(?<!\\*)\\*(?!\\*)"
     )
+    static let strikethroughRegex = try! NSRegularExpression(
+        pattern: "(?<!~)~~([^~\\r\\n]+?)(?<!~)~~(?!~)"
+    )
     static let imageEmbedRegex = try! NSRegularExpression(
         pattern: "!\\[\\[([^\\]\\r\\n]*)\\]\\]"
     )
@@ -94,6 +97,18 @@ enum MarkdownTokenizer {
             let startMarker = NSRange(location: full.location, length: 1)
             let endMarker = NSRange(location: full.location + full.length - 1, length: 1)
             tokens.append(MarkdownToken(kind: .italic,
+                                        range: full,
+                                        contentRange: content,
+                                        markerRanges: [startMarker, endMarker]))
+        }
+
+        // Strikethrough ~~text~~ (GFM)
+        for match in strikethroughRegex.matches(in: text, options: [], range: fullRange) {
+            let full = match.range
+            let content = match.range(at: 1)
+            let startMarker = NSRange(location: full.location, length: 2)
+            let endMarker = NSRange(location: full.location + full.length - 2, length: 2)
+            tokens.append(MarkdownToken(kind: .strikethrough,
                                         range: full,
                                         contentRange: content,
                                         markerRanges: [startMarker, endMarker]))
