@@ -89,6 +89,18 @@ struct EditorScreen: View {
 That's it. The default configuration ships with no-op services, so the
 editor renders Markdown and accepts edits immediately.
 
+## Demo
+
+A runnable SwiftUI demo lives in [`Demo/`](Demo/MarkdownEngineDemo.xcodeproj).
+Open [`Demo/MarkdownEngineDemo.xcodeproj`](Demo/MarkdownEngineDemo.xcodeproj)
+in Xcode and hit **Run** — the demo references the package via a local
+path, so Xcode resolves it on first open and any engine edit rebuilds
+into the demo on the next run.
+
+> If you're seeing a "missing package product" error, it's almost always
+> stale package cache from a previous Xcode session. Use **File →
+> Packages → Reset Package Caches** once and rebuild.
+
 ## Customizing the Theme
 
 Every color the editor puts on screen is read from `MarkdownEditorTheme`:
