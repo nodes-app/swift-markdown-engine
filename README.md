@@ -92,11 +92,14 @@ editor renders Markdown and accepts edits immediately.
 ## Demo
 
 A runnable SwiftUI demo lives in [`Demo/`](Demo/MarkdownEngineDemo.xcodeproj).
-Open [`swift-markdown-engine.xcworkspace`](swift-markdown-engine.xcworkspace)
-at the repo root and hit **Run**. The workspace bundles `Package.swift`
-and the demo project together, so the demo links directly against the
-package source and any engine edit rebuilds into the demo on the next
-run.
+Open [`Demo/MarkdownEngineDemo.xcodeproj`](Demo/MarkdownEngineDemo.xcodeproj)
+in Xcode and hit **Run** — the demo references the package via a local
+path, so Xcode resolves it on first open and any engine edit rebuilds
+into the demo on the next run.
+
+> If you're seeing a "missing package product" error, it's almost always
+> stale package cache from a previous Xcode session. Use **File →
+> Packages → Reset Package Caches** once and rebuild.
 
 ## Customizing the Theme
 
