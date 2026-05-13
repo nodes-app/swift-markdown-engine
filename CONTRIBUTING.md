@@ -21,15 +21,27 @@ documentation tweaks are welcome as PRs directly.
 
 ## Development Setup
 
+Start by forking the repository on GitHub, then clone your fork locally:
+
 ```bash
-git clone https://github.com/luca-chen198/MarkdownEngine.git
-cd MarkdownEngine
+git clone https://github.com/YOUR-USERNAME/swift-markdown-engine.git
+cd swift-markdown-engine
+git remote add upstream https://github.com/nodes-app/swift-markdown-engine.git
+git fetch upstream
 swift build
 swift test
 ```
 
 Open `Package.swift` in Xcode for a graphical environment, or use the
 command line — both work.
+
+Before starting work, create a branch from the latest upstream `main`:
+
+```bash
+git checkout main
+git pull upstream main
+git checkout -b your-change-name
+```
 
 ### Generating documentation locally
 
