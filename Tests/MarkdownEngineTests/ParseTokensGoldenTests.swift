@@ -144,4 +144,43 @@ struct ParseTokensGoldenTests {
         let tokens = MarkdownTokenizer.parseTokens(in: text)
         #expect(tokens.filter { $0.kind == .codeBlock }.isEmpty)
     }
+
+    // MARK: Phase-1 integration regressions
+
+    @Test func parseTokensInternallyUsesBlockScanner() {
+        // After Phase 1, parseTokens still returns flat MarkdownToken array
+        // but produces .heading / .codeBlock tokens via the block scanner.
+        let text = "# Title\n\n```swift\nlet x = 1\n```\n\nBody **bold**."
+        let tokens = MarkdownTokenizer.parseTokens(in: text)
+        #expect(tokens.contains { $0.kind == .heading })
+        #expect(tokens.contains { $0.kind == .codeBlock })
+        #expect(tokens.contains { $0.kind == .bold })
+    }
+
+    @Test func wikiLinkInsideFencedCodeIsNotEmittedAfterRefactor() {
+        let text = "```\n[[NotALink]]\n```"
+        let tokens = MarkdownTokenizer.parseTokens(in: text)
+        let wiki = tokens.filter { $0.kind == .wikiLink }
+        #expect(wiki.isEmpty)
+    }
+
+    @Test func imageEmbedInsideFencedCodeIsNotEmittedAfterRefactor() {
+        let text = "```\n![[picture.png]]\n```"
+        let tokens = MarkdownTokenizer.parseTokens(in: text)
+        let img = tokens.filter { $0.kind == .imageEmbed }
+        #expect(img.isEmpty)
+    }
+
+    @Test func inlineCodeInsideFencedCodeIsNotEmittedAfterRefactor() {
+        let text = "```\nlet a = `b`\n```"
+        let tokens = MarkdownTokenizer.parseTokens(in: text)
+        let inlineCode = tokens.filter { $0.kind == .inlineCode }
+        #expect(inlineCode.isEmpty)
+    }
+
+    @Test func emphasisInsideFencedCodeIsNotEmittedAfterRefactor() {
+        let text = "```\n**bold-looking**\n```"
+        let tokens = MarkdownTokenizer.parseTokens(in: text)
+        #expect(tokens.filter { $0.kind == .bold }.isEmpty)
+    }
 }
