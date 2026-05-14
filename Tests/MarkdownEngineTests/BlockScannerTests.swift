@@ -152,4 +152,44 @@ struct BlockScannerTests {
         let result = BlockScanner.scan(text)
         #expect(result.blocks.allSatisfy { $0.kind == .paragraph })
     }
+
+    // MARK: Setext heading
+
+    @Test func setextH1WithEqualsUnderline() {
+        let text = "Title\n====="
+        let result = BlockScanner.scan(text)
+        #expect(result.blocks.count == 1)
+        if case .heading(let level) = result.blocks.first?.kind {
+            #expect(level == 1)
+        } else {
+            Issue.record("Expected heading kind")
+        }
+    }
+
+    @Test func setextH2WithDashUnderline() {
+        let text = "Title\n-----"
+        let result = BlockScanner.scan(text)
+        if case .heading(let level) = result.blocks.first?.kind {
+            #expect(level == 2)
+        } else {
+            Issue.record("Expected heading kind")
+        }
+    }
+
+    @Test func setextSpansMultipleParagraphLines() {
+        let text = "Line one\nLine two\n==="
+        let result = BlockScanner.scan(text)
+        #expect(result.blocks.count == 1)
+        if case .heading = result.blocks.first?.kind { /* ok */ } else { Issue.record("Expected heading") }
+    }
+
+    @Test func dashesAloneWithoutParagraphAreNotConsumedAsHeading() {
+        // Without a preceding paragraph, `---` does not become a heading via Setext.
+        // (Thematic-break recognition arrives in Task 6.)
+        let text = "\n---"
+        let result = BlockScanner.scan(text)
+        #expect(!result.blocks.contains(where: {
+            if case .heading = $0.kind { return true } else { return false }
+        }))
+    }
 }

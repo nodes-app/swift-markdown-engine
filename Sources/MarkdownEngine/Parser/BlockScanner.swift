@@ -61,6 +61,16 @@ enum BlockScanner {
                 continue
             }
 
+            // Setext underline rewrites buffered paragraph into a heading.
+            if !state.paragraphBuffer.isEmpty,
+               let level = setextUnderlineLevel(contentRange: contentRange, in: nsText) {
+                state.rewriteBufferAsHeading(level: level,
+                                             underlineLineRange: lineRange,
+                                             underlineContentRange: contentRange)
+                lineStart = lineEnd
+                continue
+            }
+
             // 4) Default: buffer as paragraph line.
             state.appendParagraphLine(lineRange)
             lineStart = lineEnd
@@ -92,6 +102,23 @@ enum BlockScanner {
                 range: range,
                 contentRange: range,
                 markerRanges: []
+            ))
+            paragraphBuffer.removeAll(keepingCapacity: true)
+        }
+
+        mutating func rewriteBufferAsHeading(level: Int,
+                                             underlineLineRange: NSRange,
+                                             underlineContentRange: NSRange) {
+            guard let first = paragraphBuffer.first, let last = paragraphBuffer.last else { return }
+            let bufferRange = NSRange(location: first.location,
+                                      length: NSMaxRange(last) - first.location)
+            let fullRange = NSRange(location: bufferRange.location,
+                                    length: NSMaxRange(underlineLineRange) - bufferRange.location)
+            blocks.append(BlockSpan(
+                kind: .heading(level: level),
+                range: fullRange,
+                contentRange: bufferRange,
+                markerRanges: [underlineContentRange]
             ))
             paragraphBuffer.removeAll(keepingCapacity: true)
         }
@@ -188,6 +215,35 @@ enum BlockScanner {
             contentRange: cRange,
             markerRanges: [hashRange]
         )
+    }
+
+    // MARK: Setext
+
+    /// Returns 1 for `===…`, 2 for `---…`, nil otherwise. CommonMark allows
+    /// up to 3 leading spaces and any trailing whitespace.
+    private static func setextUnderlineLevel(contentRange: NSRange, in nsText: NSString) -> Int? {
+        let lineEnd = NSMaxRange(contentRange)
+        var i = contentRange.location
+        var leading = 0
+        while i < lineEnd, nsText.character(at: i) == 0x20, leading < 4 {
+            i += 1; leading += 1
+        }
+        if leading >= 4 { return nil }
+        guard i < lineEnd else { return nil }
+        let ch = nsText.character(at: i)
+        guard ch == 0x3D /* = */ || ch == 0x2D /* - */ else { return nil }
+        var count = 0
+        while i < lineEnd, nsText.character(at: i) == ch {
+            i += 1; count += 1
+        }
+        guard count >= 1 else { return nil }
+        // Only trailing whitespace allowed.
+        while i < lineEnd {
+            let c = nsText.character(at: i)
+            if c != 0x20 && c != 0x09 { return nil }
+            i += 1
+        }
+        return ch == 0x3D ? 1 : 2
     }
 
     // MARK: Fenced code
