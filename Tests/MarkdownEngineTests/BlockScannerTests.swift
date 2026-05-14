@@ -97,4 +97,59 @@ struct BlockScannerTests {
         if case .heading = result.blocks[0].kind { /* ok */ } else { Issue.record("first should be heading") }
         #expect(result.blocks[1].kind == .paragraph)
     }
+
+    // MARK: Fenced code
+
+    @Test func fencedCodeBlockNoLanguage() {
+        let text = "```\nlet x = 1\n```"
+        let result = BlockScanner.scan(text)
+        #expect(result.blocks.count == 1)
+        if case .fencedCode(let lang) = result.blocks.first?.kind {
+            #expect(lang == nil)
+        } else {
+            Issue.record("Expected fencedCode kind")
+        }
+    }
+
+    @Test func fencedCodeBlockWithLanguage() {
+        let text = "```swift\nlet x = 1\n```"
+        let result = BlockScanner.scan(text)
+        if case .fencedCode(let lang) = result.blocks.first?.kind {
+            #expect(lang == "swift")
+        } else {
+            Issue.record("Expected fencedCode kind")
+        }
+    }
+
+    @Test func fencedCodeContentRangeCoversOnlyBody() {
+        let text = "```\nbody\n```"
+        let result = BlockScanner.scan(text)
+        let block = result.blocks.first!
+        let body = (text as NSString).substring(with: block.contentRange)
+        #expect(body == "body\n")
+    }
+
+    @Test func fencedCodeBlockMarkerRangesCoverBothFences() {
+        let text = "```\nbody\n```"
+        let result = BlockScanner.scan(text)
+        #expect(result.blocks.first?.markerRanges.count == 2)
+    }
+
+    @Test func emphasisLikeContentInsideFencedCodeIsIgnoredByBlockKind() {
+        // Block scanner is responsible for marking content as "not inline" —
+        // the pipeline filter is exercised in the integration tests.
+        let text = "```\n**not bold**\n```"
+        let result = BlockScanner.scan(text)
+        let block = result.blocks.first!
+        #expect(!block.kind.allowsInlineContent)
+    }
+
+    @Test func unclosedFencedCodeBlockFallsBackToParagraph() {
+        // No closing fence => current parseTokens treats it as plain text.
+        // Block scanner falls back to a single paragraph spanning the opening
+        // fence through the rest of the input.
+        let text = "```swift\nlet x = 1"
+        let result = BlockScanner.scan(text)
+        #expect(result.blocks.allSatisfy { $0.kind == .paragraph })
+    }
 }

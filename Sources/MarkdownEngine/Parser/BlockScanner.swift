@@ -28,7 +28,41 @@ enum BlockScanner {
         while lineStart < length {
             let lineEnd = nextLineEnd(in: nsText, from: lineStart, length: length)
             let lineRange = NSRange(location: lineStart, length: lineEnd - lineStart)
-            classifyLine(lineRange: lineRange, state: &state)
+            let contentRange = trimTrailingNewline(lineRange, in: nsText)
+
+            // 1) Blank line ends paragraph buffering.
+            if isBlankLine(contentRange, in: nsText) {
+                state.flushBufferedParagraph()
+                lineStart = lineEnd
+                continue
+            }
+
+            // 2) Fenced code block (multi-line — consumes until closing fence).
+            if let opener = fencedCodeOpener(contentRange: contentRange, in: nsText) {
+                state.flushBufferedParagraph()
+                if let consumed = consumeFencedCode(
+                    opener: opener,
+                    openerLineRange: lineRange,
+                    nsText: nsText,
+                    length: length,
+                    state: &state
+                ) {
+                    lineStart = consumed
+                    continue
+                }
+                // Unclosed fence: fall through to paragraph treatment.
+            }
+
+            // 3) ATX heading (single line).
+            if let heading = atxHeading(lineRange: lineRange, contentRange: contentRange, in: nsText) {
+                state.flushBufferedParagraph()
+                state.blocks.append(heading)
+                lineStart = lineEnd
+                continue
+            }
+
+            // 4) Default: buffer as paragraph line.
+            state.appendParagraphLine(lineRange)
             lineStart = lineEnd
         }
 
@@ -84,27 +118,7 @@ enum BlockScanner {
         return length
     }
 
-    // MARK: - Classification
-
-    private static func classifyLine(lineRange: NSRange, state: inout ScannerState) {
-        let contentRange = trimTrailingNewline(lineRange, in: state.nsText)
-
-        // Blank line ends paragraph buffering.
-        if isBlankLine(contentRange, in: state.nsText) {
-            state.flushBufferedParagraph()
-            return
-        }
-
-        // ATX heading: ^#{1,6} + ' '
-        if let heading = atxHeading(lineRange: lineRange, contentRange: contentRange, in: state.nsText) {
-            state.flushBufferedParagraph()
-            state.blocks.append(heading)
-            return
-        }
-
-        // Default: buffer as paragraph line. Setext / other lookahead handled in later tasks.
-        state.appendParagraphLine(lineRange)
-    }
+    // MARK: - Classification helpers
 
     private static func trimTrailingNewline(_ range: NSRange, in nsText: NSString) -> NSRange {
         var length = range.length
@@ -174,5 +188,143 @@ enum BlockScanner {
             contentRange: cRange,
             markerRanges: [hashRange]
         )
+    }
+
+    // MARK: Fenced code
+
+    private struct FencedCodeOpener {
+        let fenceRange: NSRange
+        let fenceLength: Int
+        let fenceChar: UInt16   // ` or ~
+        let language: String?
+    }
+
+    /// Detects a fenced code block opener on `contentRange`. CommonMark allows
+    /// up to 3 leading spaces and a fence of 3+ backticks or 3+ tildes.
+    private static func fencedCodeOpener(contentRange: NSRange, in nsText: NSString) -> FencedCodeOpener? {
+        let lineEnd = NSMaxRange(contentRange)
+        var i = contentRange.location
+        var leading = 0
+        while i < lineEnd, nsText.character(at: i) == 0x20, leading < 4 {
+            i += 1; leading += 1
+        }
+        if leading >= 4 { return nil }
+
+        guard i < lineEnd else { return nil }
+        let fenceChar = nsText.character(at: i)
+        guard fenceChar == 0x60 /* ` */ || fenceChar == 0x7E /* ~ */ else { return nil }
+
+        let fenceStart = i
+        var count = 0
+        while i < lineEnd, nsText.character(at: i) == fenceChar {
+            i += 1; count += 1
+        }
+        guard count >= 3 else { return nil }
+
+        // Backtick fences disallow ` anywhere on the opener line after the fence.
+        if fenceChar == 0x60 {
+            var j = i
+            while j < lineEnd {
+                if nsText.character(at: j) == 0x60 { return nil }
+                j += 1
+            }
+        }
+
+        // Language tag: rest of the line after fence, trimmed of whitespace.
+        var langStart = i
+        while langStart < lineEnd,
+              (nsText.character(at: langStart) == 0x20 || nsText.character(at: langStart) == 0x09) {
+            langStart += 1
+        }
+        var langEnd = lineEnd
+        while langEnd > langStart,
+              (nsText.character(at: langEnd - 1) == 0x20 || nsText.character(at: langEnd - 1) == 0x09) {
+            langEnd -= 1
+        }
+        let language: String?
+        if langStart < langEnd {
+            language = nsText.substring(with: NSRange(location: langStart, length: langEnd - langStart))
+        } else {
+            language = nil
+        }
+
+        return FencedCodeOpener(
+            fenceRange: NSRange(location: fenceStart, length: count),
+            fenceLength: count,
+            fenceChar: fenceChar,
+            language: language
+        )
+    }
+
+    /// Consume lines starting after `openerLineRange` until a matching closing
+    /// fence (same char, at least as many) or EOF. Returns the index past the
+    /// last consumed character, or `nil` if no closing fence was found.
+    private static func consumeFencedCode(
+        opener: FencedCodeOpener,
+        openerLineRange: NSRange,
+        nsText: NSString,
+        length: Int,
+        state: inout ScannerState
+    ) -> Int? {
+        let contentStart = NSMaxRange(openerLineRange)
+        var cursor = contentStart
+        var closingFenceRange: NSRange? = nil
+        var blockEnd: Int = contentStart
+
+        while cursor < length {
+            let lineEnd = nextLineEnd(in: nsText, from: cursor, length: length)
+            let lineRange = NSRange(location: cursor, length: lineEnd - cursor)
+            let contentRange = trimTrailingNewline(lineRange, in: nsText)
+
+            if isClosingFence(contentRange: contentRange,
+                              opener: opener,
+                              in: nsText) {
+                closingFenceRange = NSRange(location: contentRange.location, length: contentRange.length)
+                blockEnd = lineEnd
+                cursor = lineEnd
+                break
+            }
+
+            cursor = lineEnd
+            blockEnd = lineEnd
+        }
+
+        guard let closingFence = closingFenceRange else {
+            return nil  // unclosed
+        }
+
+        let blockRange = NSRange(location: openerLineRange.location, length: blockEnd - openerLineRange.location)
+        let codeContentRange = NSRange(location: contentStart, length: closingFence.location - contentStart)
+
+        let block = BlockSpan(
+            kind: .fencedCode(language: opener.language),
+            range: blockRange,
+            contentRange: codeContentRange,
+            markerRanges: [opener.fenceRange, closingFence]
+        )
+        state.blocks.append(block)
+        return cursor
+    }
+
+    private static func isClosingFence(contentRange: NSRange, opener: FencedCodeOpener, in nsText: NSString) -> Bool {
+        let lineEnd = NSMaxRange(contentRange)
+        var i = contentRange.location
+        var leading = 0
+        while i < lineEnd, nsText.character(at: i) == 0x20, leading < 4 {
+            i += 1; leading += 1
+        }
+        if leading >= 4 { return false }
+        var count = 0
+        while i < lineEnd, nsText.character(at: i) == opener.fenceChar {
+            i += 1; count += 1
+        }
+        guard count >= opener.fenceLength else { return false }
+        // Only whitespace allowed after the closing fence.
+        while i < lineEnd {
+            let c = nsText.character(at: i)
+            if c != 0x20 && c != 0x09 { return false }
+            i += 1
+        }
+        return true
     }
 }
