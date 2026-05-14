@@ -194,7 +194,6 @@ enum BlockScanner {
 
     private struct FencedCodeOpener {
         let fenceRange: NSRange
-        let fenceLength: Int
         let fenceChar: UInt16   // ` or ~
         let language: String?
     }
@@ -250,7 +249,6 @@ enum BlockScanner {
 
         return FencedCodeOpener(
             fenceRange: NSRange(location: fenceStart, length: count),
-            fenceLength: count,
             fenceChar: fenceChar,
             language: language
         )
@@ -268,18 +266,17 @@ enum BlockScanner {
     ) -> Int? {
         let contentStart = NSMaxRange(openerLineRange)
         var cursor = contentStart
-        var closingFenceRange: NSRange? = nil
+        var closingFenceRangeStorage: NSRange? = nil
         var blockEnd: Int = contentStart
 
         while cursor < length {
             let lineEnd = nextLineEnd(in: nsText, from: cursor, length: length)
-            let lineRange = NSRange(location: cursor, length: lineEnd - cursor)
-            let contentRange = trimTrailingNewline(lineRange, in: nsText)
+            let contentRange = trimTrailingNewline(NSRange(location: cursor, length: lineEnd - cursor), in: nsText)
 
-            if isClosingFence(contentRange: contentRange,
-                              opener: opener,
-                              in: nsText) {
-                closingFenceRange = NSRange(location: contentRange.location, length: contentRange.length)
+            if let closer = closingFenceRange(contentRange: contentRange,
+                                              opener: opener,
+                                              in: nsText) {
+                closingFenceRangeStorage = closer
                 blockEnd = lineEnd
                 cursor = lineEnd
                 break
@@ -289,7 +286,7 @@ enum BlockScanner {
             blockEnd = lineEnd
         }
 
-        guard let closingFence = closingFenceRange else {
+        guard let closingFence = closingFenceRangeStorage else {
             return nil  // unclosed
         }
 
@@ -306,25 +303,29 @@ enum BlockScanner {
         return cursor
     }
 
-    private static func isClosingFence(contentRange: NSRange, opener: FencedCodeOpener, in nsText: NSString) -> Bool {
+    /// If `contentRange` is a closing fence for `opener`, returns the range of
+    /// the fence characters themselves (not including leading/trailing whitespace).
+    /// Otherwise returns nil.
+    private static func closingFenceRange(contentRange: NSRange, opener: FencedCodeOpener, in nsText: NSString) -> NSRange? {
         let lineEnd = NSMaxRange(contentRange)
         var i = contentRange.location
         var leading = 0
         while i < lineEnd, nsText.character(at: i) == 0x20, leading < 4 {
             i += 1; leading += 1
         }
-        if leading >= 4 { return false }
+        if leading >= 4 { return nil }
+        let fenceStart = i
         var count = 0
         while i < lineEnd, nsText.character(at: i) == opener.fenceChar {
             i += 1; count += 1
         }
-        guard count >= opener.fenceLength else { return false }
+        guard count >= opener.fenceRange.length else { return nil }
         // Only whitespace allowed after the closing fence.
         while i < lineEnd {
             let c = nsText.character(at: i)
-            if c != 0x20 && c != 0x09 { return false }
+            if c != 0x20 && c != 0x09 { return nil }
             i += 1
         }
-        return true
+        return NSRange(location: fenceStart, length: count)
     }
 }
