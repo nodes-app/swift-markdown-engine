@@ -183,4 +183,30 @@ struct ParseTokensGoldenTests {
         let tokens = MarkdownTokenizer.parseTokens(in: text)
         #expect(tokens.filter { $0.kind == .bold }.isEmpty)
     }
+
+    @Test func extractLanguageStillWorksForFencedCodeAfterRefactor() {
+        let text = """
+        ```swift
+        let x = 1
+        ```
+        """
+        let tokens = MarkdownTokenizer.parseTokens(in: text)
+        guard let codeToken = tokens.first(where: { $0.kind == .codeBlock }) else {
+            Issue.record("Expected a codeBlock token"); return
+        }
+        #expect(MarkdownTokenizer.extractLanguage(from: codeToken, in: text) == "swift")
+    }
+
+    @Test func extractLanguageReturnsNilWhenNoLanguageTag() {
+        let text = """
+        ```
+        let x = 1
+        ```
+        """
+        let tokens = MarkdownTokenizer.parseTokens(in: text)
+        guard let codeToken = tokens.first(where: { $0.kind == .codeBlock }) else {
+            Issue.record("Expected a codeBlock token"); return
+        }
+        #expect(MarkdownTokenizer.extractLanguage(from: codeToken, in: text) == nil)
+    }
 }

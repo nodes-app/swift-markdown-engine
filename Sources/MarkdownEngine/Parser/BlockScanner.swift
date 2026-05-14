@@ -145,11 +145,17 @@ enum BlockScanner {
                                       length: NSMaxRange(last) - first.location)
             let fullRange = NSRange(location: bufferRange.location,
                                     length: NSMaxRange(underlineLineRange) - bufferRange.location)
+            // First marker encodes heading level via length (matches the ATX
+            // convention `markerRanges[0].length == hashCount`), so existing
+            // stylers that derive level from this length keep working for
+            // Setext. The full underline range is kept as a secondary marker.
+            let levelMarker = NSRange(location: underlineContentRange.location,
+                                      length: min(level, underlineContentRange.length))
             blocks.append(BlockSpan(
                 kind: .heading(level: level),
                 range: fullRange,
                 contentRange: bufferRange,
-                markerRanges: [underlineContentRange]
+                markerRanges: [levelMarker, underlineContentRange]
             ))
             paragraphBuffer.removeAll(keepingCapacity: true)
         }
@@ -384,7 +390,7 @@ enum BlockScanner {
             kind: .fencedCode(language: opener.language),
             range: blockRange,
             contentRange: codeContentRange,
-            markerRanges: [opener.fenceRange, closingFence]
+            markerRanges: [openerLineRange, closingFence]
         )
         state.blocks.append(block)
         return cursor
