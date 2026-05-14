@@ -192,4 +192,64 @@ struct BlockScannerTests {
             if case .heading = $0.kind { return true } else { return false }
         }))
     }
+
+    // MARK: Thematic break
+
+    @Test func thematicBreakWithDashes() {
+        let result = BlockScanner.scan("---")
+        #expect(result.blocks.first?.kind == .thematicBreak)
+    }
+
+    @Test func thematicBreakWithAsterisks() {
+        let result = BlockScanner.scan("***")
+        #expect(result.blocks.first?.kind == .thematicBreak)
+    }
+
+    @Test func thematicBreakWithUnderscores() {
+        let result = BlockScanner.scan("___")
+        #expect(result.blocks.first?.kind == .thematicBreak)
+    }
+
+    @Test func thematicBreakDoesNotConsumeFollowingParagraph() {
+        let result = BlockScanner.scan("---\n\nbody")
+        #expect(result.blocks.count == 2)
+        #expect(result.blocks[0].kind == .thematicBreak)
+        #expect(result.blocks[1].kind == .paragraph)
+    }
+
+    @Test func dashUnderlineAfterParagraphPrefersSetext() {
+        // Setext H2 must win over thematic break when there's a buffered paragraph.
+        let result = BlockScanner.scan("Title\n---")
+        if case .heading(let lvl) = result.blocks.first?.kind {
+            #expect(lvl == 2)
+        } else {
+            Issue.record("Expected Setext H2")
+        }
+    }
+
+    // MARK: Link reference definitions
+
+    @Test func linkReferenceDefinitionBasic() {
+        let text = "[foo]: https://example.com"
+        let result = BlockScanner.scan(text)
+        #expect(result.linkReferences["foo"]?.url == "https://example.com")
+    }
+
+    @Test func linkReferenceDefinitionWithTitle() {
+        let text = "[foo]: https://example.com \"Example\""
+        let result = BlockScanner.scan(text)
+        #expect(result.linkReferences["foo"]?.title == "Example")
+    }
+
+    @Test func linkReferenceDefinitionCaseInsensitiveLabel() {
+        let text = "[FOO Bar]: https://example.com"
+        let result = BlockScanner.scan(text)
+        #expect(result.linkReferences["foo bar"] != nil)
+    }
+
+    @Test func duplicateLinkReferenceFirstWins() {
+        let text = "[foo]: https://first.com\n[foo]: https://second.com"
+        let result = BlockScanner.scan(text)
+        #expect(result.linkReferences["foo"]?.url == "https://first.com")
+    }
 }

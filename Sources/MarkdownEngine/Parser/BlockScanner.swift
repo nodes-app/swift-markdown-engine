@@ -71,6 +71,37 @@ enum BlockScanner {
                 continue
             }
 
+            // Thematic break (only when no paragraph is being buffered — otherwise
+            // a `---` line would have already been claimed by Setext above).
+            if state.paragraphBuffer.isEmpty,
+               isThematicBreak(contentRange: contentRange, in: nsText) {
+                state.blocks.append(BlockSpan(
+                    kind: .thematicBreak,
+                    range: lineRange,
+                    contentRange: lineRange,
+                    markerRanges: [contentRange]
+                ))
+                lineStart = lineEnd
+                continue
+            }
+
+            // Link reference definition.
+            if state.paragraphBuffer.isEmpty,
+               let def = linkReferenceDefinition(contentRange: contentRange, in: nsText) {
+                let key = def.reference.normalizedLabel
+                if state.linkReferences[key] == nil {
+                    state.linkReferences[key] = def.reference
+                }
+                state.blocks.append(BlockSpan(
+                    kind: .linkReferenceDefinition(label: def.reference.label),
+                    range: lineRange,
+                    contentRange: NSRange(location: def.urlRange.location, length: def.urlRange.length),
+                    markerRanges: [def.labelRange]
+                ))
+                lineStart = lineEnd
+                continue
+            }
+
             // 4) Default: buffer as paragraph line.
             state.appendParagraphLine(lineRange)
             lineStart = lineEnd
@@ -383,5 +414,72 @@ enum BlockScanner {
             i += 1
         }
         return NSRange(location: fenceStart, length: count)
+    }
+
+    // MARK: Thematic break
+
+    private static func isThematicBreak(contentRange: NSRange, in nsText: NSString) -> Bool {
+        let lineEnd = NSMaxRange(contentRange)
+        var i = contentRange.location
+        var leading = 0
+        while i < lineEnd, nsText.character(at: i) == 0x20, leading < 4 {
+            i += 1; leading += 1
+        }
+        if leading >= 4 { return false }
+        guard i < lineEnd else { return false }
+        let marker = nsText.character(at: i)
+        guard marker == 0x2D /* - */ || marker == 0x5F /* _ */ || marker == 0x2A /* * */ else { return false }
+        var count = 0
+        while i < lineEnd {
+            let c = nsText.character(at: i)
+            if c == marker { count += 1; i += 1; continue }
+            if c == 0x20 || c == 0x09 { i += 1; continue }
+            return false
+        }
+        return count >= 3
+    }
+
+    // MARK: Link reference definitions
+
+    private struct LinkRefDefHit {
+        let reference: LinkReference
+        let labelRange: NSRange   // includes the surrounding `[…]:`
+        let urlRange: NSRange
+    }
+
+    private static let linkRefDefRegex: NSRegularExpression = {
+        // ^ \s{0,3} \[ label \] : \s* url \s* ( "title" | 'title' | (title) )? \s* $
+        let pattern = #"^[ ]{0,3}\[([^\[\]\r\n]+)\]:[ \t]*([^\s]+)(?:[ \t]+(?:"([^"\r\n]*)"|'([^'\r\n]*)'|\(([^)\r\n]*)\)))?[ \t]*$"#
+        return try! NSRegularExpression(pattern: pattern, options: [])
+    }()
+
+    private static func linkReferenceDefinition(contentRange: NSRange, in nsText: NSString) -> LinkRefDefHit? {
+        let match = linkRefDefRegex.firstMatch(
+            in: nsText as String,
+            options: [],
+            range: contentRange
+        )
+        guard let m = match, m.range == contentRange else { return nil }
+
+        let labelRange = m.range(at: 1)
+        let urlRange = m.range(at: 2)
+        guard labelRange.location != NSNotFound, urlRange.location != NSNotFound else { return nil }
+        let label = nsText.substring(with: labelRange)
+        let url = nsText.substring(with: urlRange)
+
+        var title: String? = nil
+        for groupIdx in 3...5 {
+            let r = m.range(at: groupIdx)
+            if r.location != NSNotFound {
+                title = nsText.substring(with: r)
+                break
+            }
+        }
+
+        return LinkRefDefHit(
+            reference: LinkReference(label: label, url: url, title: title),
+            labelRange: labelRange,
+            urlRange: urlRange
+        )
     }
 }
