@@ -7,9 +7,13 @@
 //  map. The inline parser (MarkdownTokenizer.parseTokens) runs over the
 //  content substring of each inline-allowing block.
 //
-//  Paragraph emission is buffered so Setext heading lookahead can rewrite
-//  the buffered paragraph into a heading when the next line is an
-//  underline (===, ---).
+//  Paragraph emission is buffered so consecutive paragraph lines collapse
+//  into a single `.paragraph` block, and so interrupting constructs
+//  (thematic break, blank line) can flush the buffer cleanly.
+//
+//  Setext headings (`Title\n====` / `Title\n----`) are intentionally NOT
+//  supported — they're a CommonMark feature but Nodes prefers the ATX
+//  style (`# Title`) for unambiguous editing.
 //
 
 import Foundation
@@ -61,20 +65,9 @@ enum BlockScanner {
                 continue
             }
 
-            // Setext underline rewrites buffered paragraph into a heading.
-            if !state.paragraphBuffer.isEmpty,
-               let level = setextUnderlineLevel(contentRange: contentRange, in: nsText) {
-                state.rewriteBufferAsHeading(level: level,
-                                             underlineLineRange: lineRange,
-                                             underlineContentRange: contentRange)
-                lineStart = lineEnd
-                continue
-            }
-
-            // Thematic break (only when no paragraph is being buffered — otherwise
-            // a `---` line would have already been claimed by Setext above).
-            if state.paragraphBuffer.isEmpty,
-               isThematicBreak(contentRange: contentRange, in: nsText) {
+            // Thematic break — interrupts any buffered paragraph (CommonMark §4.1).
+            if isThematicBreak(contentRange: contentRange, in: nsText) {
+                state.flushBufferedParagraph()
                 state.blocks.append(BlockSpan(
                     kind: .thematicBreak,
                     range: lineRange,
@@ -117,7 +110,8 @@ enum BlockScanner {
         let nsText: NSString
         var blocks: [BlockSpan] = []
         var linkReferences: [String: LinkReference] = [:]
-        /// Buffered paragraph lines awaiting commit (Setext-heading lookahead).
+        /// Buffered paragraph lines awaiting commit (blank line or
+        /// interrupting block — thematic break — flushes them).
         var paragraphBuffer: [NSRange] = []
 
         mutating func appendParagraphLine(_ lineRange: NSRange) {
@@ -137,28 +131,6 @@ enum BlockScanner {
             paragraphBuffer.removeAll(keepingCapacity: true)
         }
 
-        mutating func rewriteBufferAsHeading(level: Int,
-                                             underlineLineRange: NSRange,
-                                             underlineContentRange: NSRange) {
-            guard let first = paragraphBuffer.first, let last = paragraphBuffer.last else { return }
-            let bufferRange = NSRange(location: first.location,
-                                      length: NSMaxRange(last) - first.location)
-            let fullRange = NSRange(location: bufferRange.location,
-                                    length: NSMaxRange(underlineLineRange) - bufferRange.location)
-            // First marker encodes heading level via length (matches the ATX
-            // convention `markerRanges[0].length == hashCount`), so existing
-            // stylers that derive level from this length keep working for
-            // Setext. The full underline range is kept as a secondary marker.
-            let levelMarker = NSRange(location: underlineContentRange.location,
-                                      length: min(level, underlineContentRange.length))
-            blocks.append(BlockSpan(
-                kind: .heading(level: level),
-                range: fullRange,
-                contentRange: bufferRange,
-                markerRanges: [levelMarker, underlineContentRange]
-            ))
-            paragraphBuffer.removeAll(keepingCapacity: true)
-        }
     }
 
     // MARK: - Line iteration
@@ -252,35 +224,6 @@ enum BlockScanner {
             contentRange: cRange,
             markerRanges: [hashRange]
         )
-    }
-
-    // MARK: Setext
-
-    /// Returns 1 for `===…`, 2 for `---…`, nil otherwise. CommonMark allows
-    /// up to 3 leading spaces and any trailing whitespace.
-    private static func setextUnderlineLevel(contentRange: NSRange, in nsText: NSString) -> Int? {
-        let lineEnd = NSMaxRange(contentRange)
-        var i = contentRange.location
-        var leading = 0
-        while i < lineEnd, nsText.character(at: i) == 0x20, leading < 4 {
-            i += 1; leading += 1
-        }
-        if leading >= 4 { return nil }
-        guard i < lineEnd else { return nil }
-        let ch = nsText.character(at: i)
-        guard ch == 0x3D /* = */ || ch == 0x2D /* - */ else { return nil }
-        var count = 0
-        while i < lineEnd, nsText.character(at: i) == ch {
-            i += 1; count += 1
-        }
-        guard count >= 1 else { return nil }
-        // Only trailing whitespace allowed.
-        while i < lineEnd {
-            let c = nsText.character(at: i)
-            if c != 0x20 && c != 0x09 { return nil }
-            i += 1
-        }
-        return ch == 0x3D ? 1 : 2
     }
 
     // MARK: Fenced code

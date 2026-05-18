@@ -153,46 +153,6 @@ struct BlockScannerTests {
         #expect(result.blocks.allSatisfy { $0.kind == .paragraph })
     }
 
-    // MARK: Setext heading
-
-    @Test func setextH1WithEqualsUnderline() {
-        let text = "Title\n====="
-        let result = BlockScanner.scan(text)
-        #expect(result.blocks.count == 1)
-        if case .heading(let level) = result.blocks.first?.kind {
-            #expect(level == 1)
-        } else {
-            Issue.record("Expected heading kind")
-        }
-    }
-
-    @Test func setextH2WithDashUnderline() {
-        let text = "Title\n-----"
-        let result = BlockScanner.scan(text)
-        if case .heading(let level) = result.blocks.first?.kind {
-            #expect(level == 2)
-        } else {
-            Issue.record("Expected heading kind")
-        }
-    }
-
-    @Test func setextSpansMultipleParagraphLines() {
-        let text = "Line one\nLine two\n==="
-        let result = BlockScanner.scan(text)
-        #expect(result.blocks.count == 1)
-        if case .heading = result.blocks.first?.kind { /* ok */ } else { Issue.record("Expected heading") }
-    }
-
-    @Test func dashesAloneWithoutParagraphAreNotConsumedAsHeading() {
-        // Without a preceding paragraph, `---` does not become a heading via Setext.
-        // (Thematic-break recognition arrives in Task 6.)
-        let text = "\n---"
-        let result = BlockScanner.scan(text)
-        #expect(!result.blocks.contains(where: {
-            if case .heading = $0.kind { return true } else { return false }
-        }))
-    }
-
     // MARK: Thematic break
 
     @Test func thematicBreakWithDashes() {
@@ -217,14 +177,21 @@ struct BlockScannerTests {
         #expect(result.blocks[1].kind == .paragraph)
     }
 
-    @Test func dashUnderlineAfterParagraphPrefersSetext() {
-        // Setext H2 must win over thematic break when there's a buffered paragraph.
+    @Test func dashUnderlineAfterParagraphInterruptsAsThematicBreak() {
+        // Setext is intentionally disabled: `Title\n---` does NOT become a
+        // heading — it's a paragraph "Title" plus a thematic break.
         let result = BlockScanner.scan("Title\n---")
-        if case .heading(let lvl) = result.blocks.first?.kind {
-            #expect(lvl == 2)
-        } else {
-            Issue.record("Expected Setext H2")
-        }
+        #expect(result.blocks.count == 2)
+        #expect(result.blocks[0].kind == .paragraph)
+        #expect(result.blocks[1].kind == .thematicBreak)
+    }
+
+    @Test func equalsUnderlineAfterParagraphIsNotAHeading() {
+        // Setext is intentionally disabled: `Title\n===` is one paragraph
+        // spanning two lines, not an H1.
+        let result = BlockScanner.scan("Title\n===")
+        #expect(result.blocks.count == 1)
+        #expect(result.blocks[0].kind == .paragraph)
     }
 
     // MARK: Link reference definitions
