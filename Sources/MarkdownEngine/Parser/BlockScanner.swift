@@ -208,7 +208,6 @@ enum BlockScanner {
 
         // Skip spaces between hashes and content
         let hashEnd = i
-        _ = hashEnd
         while i < lineEnd {
             let c = nsText.character(at: i)
             if c == 0x20 || c == 0x09 { i += 1 } else { break }
@@ -218,11 +217,20 @@ enum BlockScanner {
         let cRange = NSRange(location: contentStart, length: max(0, contentEnd - contentStart))
         let hashRange = NSRange(location: hashStart, length: hashCount)
 
+        // markerRanges[0] is the hashes (length == level, relied on by stylers).
+        // markerRanges[1], when present, is the whitespace between hashes and
+        // content — included as a marker so it shrinks together with the
+        // hashes when the heading is inactive (no visible gap before text).
+        var markerRanges: [NSRange] = [hashRange]
+        if contentStart > hashEnd {
+            markerRanges.append(NSRange(location: hashEnd, length: contentStart - hashEnd))
+        }
+
         return BlockSpan(
             kind: .heading(level: hashCount),
             range: lineRange,
             contentRange: cRange,
-            markerRanges: [hashRange]
+            markerRanges: markerRanges
         )
     }
 
