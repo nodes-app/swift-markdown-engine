@@ -30,6 +30,10 @@ enum MarkdownTokenKind {
     case imageLink
     case strikethrough
     case table
+    /// A CommonMark backslash escape (`\*`, `` \` ``, `\\`, …). The marker
+    /// is the backslash (hidden when inactive); the content is the single
+    /// escaped, now-literal punctuation character.
+    case backslashEscape
 }
 
 struct MarkdownToken {

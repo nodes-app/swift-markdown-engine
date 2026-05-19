@@ -361,6 +361,66 @@ enum MarkdownTokenizer {
                                         markerRanges: [openDollar, closeDollar]))
         }
 
+        // MARK: Backslash escapes (CommonMark §2.4)
+        //
+        // A backslash before any ASCII punctuation character makes that
+        // character literal — it loses its Markdown meaning. We scan left
+        // to right so that `\\` consumes itself (the even/odd-backslash
+        // rule): the char after an escaping backslash can never itself
+        // start a new escape. Escapes do not apply inside fenced code or
+        // block LaTeX, where a backslash is already literal.
+        let asciiPunctuation: Set<unichar> = {
+            let chars = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
+            return Set(chars.utf16)
+        }()
+        let escapeFreeRanges: [NSRange] = tokens
+            .filter { $0.kind == .codeBlock || $0.kind == .blockLatex }
+            .map { $0.range }
+        func isEscapeFree(_ loc: Int) -> Bool {
+            for r in escapeFreeRanges where loc >= r.location && loc < NSMaxRange(r) {
+                return true
+            }
+            return false
+        }
+
+        var escapedCharOffsets: Set<Int> = []
+        var escapeTokens: [MarkdownToken] = []
+        var i = 0
+        let textLength = nsText.length
+        while i < textLength - 1 {
+            if nsText.character(at: i) == 0x5C /* backslash */, !isEscapeFree(i) {
+                let next = nsText.character(at: i + 1)
+                if asciiPunctuation.contains(next) {
+                    escapedCharOffsets.insert(i + 1)
+                    escapeTokens.append(MarkdownToken(
+                        kind: .backslashEscape,
+                        range: NSRange(location: i, length: 2),
+                        contentRange: NSRange(location: i + 1, length: 1),
+                        markerRanges: [NSRange(location: i, length: 1)]
+                    ))
+                    i += 2   // the escaped char cannot start another escape
+                    continue
+                }
+            }
+            i += 1
+        }
+
+        if !escapedCharOffsets.isEmpty {
+            // An inline span whose opening or closing delimiter sits on an
+            // escaped (now-literal) character is not a real span — drop it
+            // so `\*not italic\*` / `` \` not code \` `` stay literal.
+            let escapableKinds: Set<MarkdownTokenKind> = [
+                .italic, .bold, .boldItalic, .strikethrough,
+                .inlineCode, .inlineLatex, .blockLatex,
+                .link, .wikiLink, .imageLink, .imageEmbed
+            ]
+            tokens.removeAll { token in
+                guard escapableKinds.contains(token.kind) else { return false }
+                return token.markerRanges.contains { escapedCharOffsets.contains($0.location) }
+            }
+        }
+        tokens.append(contentsOf: escapeTokens)
+
         return tokens
     }
 
