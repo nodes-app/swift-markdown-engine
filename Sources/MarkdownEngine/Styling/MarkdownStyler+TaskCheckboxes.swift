@@ -12,6 +12,38 @@ import Foundation
 
 extension MarkdownStyler {
 
+    // MARK: Task Syntax Membership
+
+    /// Returns the full `<marker><spacer>[ ]` range on `location`'s line if
+    /// `location` sits inside (or right at the trailing edge of) a task-list
+    /// syntax region, else `nil`. The styler intentionally suppresses the
+    /// checkbox glyph while the caret is inside this region so the user can
+    /// edit raw chars; the coordinator uses this to detect crossings and
+    /// trigger a restyle when the caret enters/leaves.
+    static func taskSyntaxRange(at location: Int, in text: String) -> NSRange? {
+        let nsText = text as NSString
+        let safeLoc = max(0, min(location, nsText.length))
+        let lineRange = nsText.lineRange(for: NSRange(location: safeLoc, length: 0))
+        let line = nsText.substring(with: lineRange)
+        let match = taskListRegex.firstMatch(
+            in: line,
+            options: [],
+            range: NSRange(location: 0, length: line.utf16.count)
+        )
+        guard let match else { return nil }
+        let markerLineRange = match.range(at: 2)
+        let checkboxLineRange = match.range(at: 4)
+        guard markerLineRange.location != NSNotFound,
+              checkboxLineRange.location != NSNotFound else { return nil }
+        let syntaxStart = lineRange.location + markerLineRange.location
+        let syntaxEnd = lineRange.location + checkboxLineRange.location + checkboxLineRange.length
+        let syntaxRange = NSRange(location: syntaxStart, length: syntaxEnd - syntaxStart)
+        if NSLocationInRange(location, syntaxRange) || location == syntaxEnd {
+            return syntaxRange
+        }
+        return nil
+    }
+
     // MARK: Task List Checkboxes
 
     static func styleTaskCheckboxes(_ ctx: StylingContext) -> [StyledRange] {

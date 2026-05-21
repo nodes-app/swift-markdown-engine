@@ -215,9 +215,32 @@ extension NativeTextViewCoordinator {
 
         let shouldSkipSelectionRestyle = pendingEditedRange != nil
         let tokensChanged = activeTokenIndices != prevActive
+        // Caret crossings in/out of `- [ ]` syntax need a restyle too: task
+        // checkboxes aren't tracked as tokens, so `tokensChanged` won't
+        // notice them, but the styler suppresses the checkbox glyph while
+        // the caret sits inside the syntax. Without this signal a
+        // cursor-out (after editing the brackets) leaves the line stuck on
+        // raw chars.
+        let prevTaskSyntax = previousCaretLocation.flatMap {
+            MarkdownStyler.taskSyntaxRange(at: $0, in: tv.string)
+        }
+        let currentTaskSyntax = MarkdownStyler.taskSyntaxRange(at: selLoc, in: tv.string)
+        let taskSyntaxChanged = prevTaskSyntax?.location != currentTaskSyntax?.location
+            || prevTaskSyntax?.length != currentTaskSyntax?.length
+        // Caret crossings in/out of a thematic-break (HR) line also need a
+        // restyle: HR rendering is a pure attribute (no MarkdownToken), so
+        // `tokensChanged` won't notice when the caret enters/leaves an
+        // `---` / `***` / `___` line. Without this, clicking on a rendered
+        // HR wouldn't reveal the source dashes for editing.
+        let prevHRLine = previousCaretLocation.flatMap {
+            MarkdownStyler.hrLineRange(at: $0, in: tv.string)
+        }
+        let currentHRLine = MarkdownStyler.hrLineRange(at: selLoc, in: tv.string)
+        let hrLineChanged = prevHRLine?.location != currentHRLine?.location
+            || prevHRLine?.length != currentHRLine?.length
         if shouldSkipSelectionRestyle {
             // textDidChange performs the pending restyle for this edit cycle.
-        } else if tokensChanged {
+        } else if tokensChanged || taskSyntaxChanged || hrLineChanged {
             restyleTextView(tv, paragraphCandidates: paragraphCandidates, tokens: tokens)
         }
 

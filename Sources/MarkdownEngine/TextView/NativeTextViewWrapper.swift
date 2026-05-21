@@ -148,7 +148,8 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         textView.isEditable = isEditable
         textView.isSelectable = isEditable
         textView.isRichText = true
-        let initialState = WikiLinkService.makeDisplayState(from: text)
+        let normalizedInput = MarkdownLists.normalizeBulletMarkers(text)
+        let initialState = WikiLinkService.makeDisplayState(from: normalizedInput)
         textView.string = initialState.display
         textView.delegate = context.coordinator
         textView.isVerticallyResizable = true
@@ -264,10 +265,20 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         // (e.g. when the available wiki-link targets change). Cheap pointer-/
         // value-based comparison; full equality isn't required because the
         // embedder is the source of truth.
-        if context.coordinator.configuration.services.images.fingerprint()
-            != configuration.services.images.fingerprint() {
+        let newImageFingerprint = configuration.services.images.fingerprint()
+        if newImageFingerprint != context.coordinator.lastImageFingerprint {
+            context.coordinator.lastImageFingerprint = newImageFingerprint
             context.coordinator.configuration.services = configuration.services
             (nsView.documentView as? NativeTextView)?.configuration.services = configuration.services
+            // Invalidate layout so custom image attributes re-measure.
+            if let tlm = textView.textLayoutManager {
+                tlm.invalidateLayout(for: tlm.documentRange)
+            }
+            // Restyle live tv content — full rebuild would clobber paste-fresh embeds when `text` binding hasn't caught up.
+            let fullRange = NSRange(location: 0, length: (textView.string as NSString).length)
+            if fullRange.length > 0 {
+                context.coordinator.restyleParagraphs([fullRange], in: textView)
+            }
         }
         textView.isEditable = isEditable
         textView.isSelectable = isEditable
@@ -350,6 +361,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         )
         coordinator.documentId = documentId
         coordinator.configuration = configuration
+        coordinator.lastImageFingerprint = configuration.services.images.fingerprint()
         coordinator.onCodeBlockSelectionChange = onCodeBlockSelectionChange
         coordinator.userPrefersContinuousSpellChecking = configuration.spellChecking.continuousSpellChecking
         coordinator.userPrefersGrammarChecking = configuration.spellChecking.grammarChecking

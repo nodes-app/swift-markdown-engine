@@ -22,11 +22,22 @@ enum MarkdownTokenKind {
     case link
     case wikiLink
     case heading
+    /// One line of a blockquote. `markerRanges[0]` is the `>`/`>>`… run
+    /// (hidden when inactive); `contentRange` is the quoted text. The
+    /// nesting level is the count of `>` in the marker.
+    case blockquote
     case codeBlock
     case inlineCode
     case blockLatex
     case inlineLatex
     case imageEmbed
+    case imageLink
+    case strikethrough
+    case table
+    /// A CommonMark backslash escape (`\*`, `` \` ``, `\\`, …). The marker
+    /// is the backslash (hidden when inactive); the content is the single
+    /// escaped, now-literal punctuation character.
+    case backslashEscape
 }
 
 struct MarkdownToken {

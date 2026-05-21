@@ -45,12 +45,73 @@ extension MarkdownStyler {
         return attrs
     }
 
+    // MARK: Blockquotes
+
+    static func styleBlockquotes(_ ctx: StylingContext) -> [StyledRange] {
+        var attrs: [StyledRange] = []
+        let indentPerLevel = MarkdownTextLayoutFragment.blockquoteIndentPerLevel
+        for (idx, token) in ctx.tokens.enumerated() where token.kind == .blockquote {
+            guard let markerRange = token.markerRanges.first else { continue }
+            let markerSub = ctx.nsText.substring(with: markerRange)
+            let level = max(1, markerSub.filter { $0 == ">" }.count)
+
+            // Indent the line so the text clears the drawn bar(s).
+            let textIndent = CGFloat(level) * indentPerLevel + indentPerLevel * 0.5
+            let para = NSMutableParagraphStyle()
+            para.firstLineHeadIndent = textIndent
+            para.headIndent = textIndent
+            para.minimumLineHeight = ctx.baseDefaultLineHeight
+            para.maximumLineHeight = ctx.baseDefaultLineHeight
+            para.paragraphSpacing = 0
+            para.paragraphSpacingBefore = 0
+            attrs.append((ctx.nsText.paragraphRange(for: token.range), [.paragraphStyle: para]))
+
+            // Quoted text reads muted; bold/code inside keep their own font.
+            if token.contentRange.length > 0 {
+                attrs.append((token.contentRange, [.foregroundColor: ctx.configuration.theme.mutedText]))
+            }
+
+            // Markers: revealed (muted) while editing this line, otherwise
+            // collapsed so only the painted bar shows.
+            let isActive = ctx.activeTokenIndices.contains(idx)
+            if isActive {
+                attrs.append((markerRange, [.foregroundColor: ctx.configuration.theme.mutedText]))
+            } else {
+                attrs.append((markerRange, [
+                    .foregroundColor: NSColor.clear,
+                    .font: ctx.inlineMarkerFont
+                ]))
+            }
+
+            // Tell the layout fragment how many bars to paint on this line.
+            attrs.append((NSRange(location: token.range.location, length: 1), [
+                .blockquoteLevel: level
+            ]))
+        }
+        return attrs
+    }
+
     // MARK: Bold / Italic / Bold+Italic
 
     static func styleEmphasis(_ ctx: StylingContext) -> [StyledRange] {
         // Per-char trait map collapsed into contiguous font runs so nested emphasis combines instead of overwriting.
         let len = ctx.nsText.length
         guard len > 0 else { return [] }
+
+        // Skip emphasis only when it is FULLY contained in a code token
+        // (fenced block or `…` span). Mere overlap must NOT suppress it,
+        // so a span that CONTAINS inline code (e.g. `**bold `c`**`,
+        // `~~strike `c`~~`) still styles. Replaces upstream's overlap
+        // `isInsideCodeBlock` check (our fix d8644fa).
+        func isFullyInsideAnyCode(_ range: NSRange) -> Bool {
+            for codeToken in ctx.codeTokens {
+                if range.location >= codeToken.range.location
+                    && NSMaxRange(range) <= NSMaxRange(codeToken.range) {
+                    return true
+                }
+            }
+            return false
+        }
 
         var traits = [UInt8](repeating: 0, count: len)
         let boldBit: UInt8 = 1
@@ -64,7 +125,7 @@ extension MarkdownStyler {
             case .boldItalic: mask = boldBit | italicBit
             default: continue
             }
-            if MarkdownDetection.isInsideCodeBlock(range: token.range, codeTokens: ctx.codeTokens) { continue }
+            if isFullyInsideAnyCode(token.range) { continue }
             let r = token.contentRange
             let upper = min(r.location + r.length, len)
             for i in max(r.location, 0)..<upper {
@@ -94,6 +155,17 @@ extension MarkdownStyler {
             }
             attrs.append((range, [.font: font]))
             i = j
+        }
+
+        // Strikethrough (~~text~~) is ours — upstream's emphasis parser
+        // doesn't emit it and its traits loop ignores it. It's a decoration
+        // orthogonal to the font traits, so just append it here.
+        for token in ctx.tokens where token.kind == .strikethrough {
+            if isFullyInsideAnyCode(token.range) { continue }
+            attrs.append((token.contentRange, [
+                .strikethroughStyle: NSUnderlineStyle.single.rawValue,
+                .strikethroughColor: ctx.configuration.theme.strikethroughColor
+            ]))
         }
         return attrs
     }

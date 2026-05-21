@@ -61,8 +61,19 @@ extension MarkdownStyler {
 
     static func styleInlineLatex(_ ctx: StylingContext) -> [StyledRange] {
         var attrs: [StyledRange] = []
+        // Tables render their own cell contents (including `$…$`) into a single
+        // image via `formattedCellString` + `collapsedSource`. If we also tag
+        // the source-text `$x^2$` with a `.latexImage` attribute, the renderer
+        // draws that tiny inline image on the collapsed 1pt source line under
+        // the table — visible as a stray dot. Skip inline LaTeX inside a
+        // table; the table image already covers it.
+        let tableRanges = ctx.tokens.filter { $0.kind == .table }.map(\.range)
         for (idx, token) in ctx.tokens.enumerated() where token.kind == .inlineLatex {
             if MarkdownDetection.isInsideCodeBlock(range: token.range, codeTokens: ctx.codeTokens) { continue }
+            if tableRanges.contains(where: { tableRange in
+                token.range.location >= tableRange.location
+                    && NSMaxRange(token.range) <= NSMaxRange(tableRange)
+            }) { continue }
 
             attrs.append((token.range, [NSAttributedString.Key.spellingState: 0]))
 

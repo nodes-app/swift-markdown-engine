@@ -29,6 +29,13 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
             subscribeToAppearanceNotification()
         }
     }
+    /// Last `EmbeddedImageProvider.fingerprint()` value we've reflected in
+    /// the textView's attributes. We cache it here because embedders that
+    /// MUTATE the same provider over time (async URL fetches, etc.) would
+    /// otherwise fool the wrapper's "did the embedder hand us a new
+    /// fingerprint" check — re-reading the same object twice always
+    /// returns the current value, regardless of when state changed.
+    var lastImageFingerprint: AnyHashable?
     private var busObservers: [NSObjectProtocol] = []
     private var registeredAppearanceObserverName: Notification.Name?
     weak var textView: NSTextView?

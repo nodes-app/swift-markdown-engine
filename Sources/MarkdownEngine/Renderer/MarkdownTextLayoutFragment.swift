@@ -17,9 +17,18 @@ extension NSAttributedString.Key {
     static let latexBounds = NSAttributedString.Key("LatexImageBounds")
     static let latexIsBlock = NSAttributedString.Key("LatexIsBlock")
     static let latexBlockOffsetY = NSAttributedString.Key("LatexBlockOffsetY")
+    static let thematicBreak = NSAttributedString.Key("ThematicBreak")
+    /// Int nesting level (1-based) of a blockquote line; the fragment
+    /// paints that many vertical bars in the left gutter.
+    static let blockquoteLevel = NSAttributedString.Key("BlockquoteLevel")
 }
 
 final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
+
+    /// Horizontal space (points) each blockquote nesting level occupies —
+    /// shared so the styler's text indent and the painted bars line up.
+    static let blockquoteIndentPerLevel: CGFloat = 18
+    static let blockquoteBarWidth: CGFloat = 3
 
     // MARK: - FB15131180
 
@@ -33,7 +42,7 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
     /// and block images drawn below text via paragraphSpacing.
     override var renderingSurfaceBounds: CGRect {
         var bounds = super.renderingSurfaceBounds
-        if hasCodeBlockBackground {
+        if hasCodeBlockBackground || hasThematicBreak || hasBlockquote {
             let containerWidth = textLayoutManager?.textContainer?.size.width ?? bounds.width
             // Extend left to container edge
             bounds.origin.x = -layoutFragmentFrame.origin.x
@@ -61,6 +70,13 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
 
         // 4. Task checkboxes (on top of hidden [ ]/[x] markers)
         drawTaskCheckboxes(at: point, in: context)
+
+        // 5. Thematic breaks (full-width line, painted last so it doesn't
+        //    fight with anything that already drew at the line's center)
+        drawThematicBreaks(at: point, in: context)
+
+        // 6. Blockquote bars (left gutter, behind nothing — text is indented)
+        drawBlockquoteBars(at: point, in: context)
     }
 
     // MARK: - Helpers
@@ -126,6 +142,30 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
         let bgColor = ts.attribute(.backgroundColor, at: range.location, effectiveRange: nil) as? NSColor
         guard let bgColor else { return false }
         return isCodeBlockBackgroundColor(bgColor)
+    }
+
+    private var hasThematicBreak: Bool {
+        guard let ts = textStorage, let range = fragmentNSRange, range.length > 0 else { return false }
+        var found = false
+        ts.enumerateAttribute(.thematicBreak, in: range, options: []) { value, _, stop in
+            if value as? Bool == true {
+                found = true
+                stop.pointee = true
+            }
+        }
+        return found
+    }
+
+    private var hasBlockquote: Bool {
+        guard let ts = textStorage, let range = fragmentNSRange, range.length > 0 else { return false }
+        var found = false
+        ts.enumerateAttribute(.blockquoteLevel, in: range, options: []) { value, _, stop in
+            if value is Int {
+                found = true
+                stop.pointee = true
+            }
+        }
+        return found
     }
 
     private func drawCodeBlockBackground(at point: CGPoint, in context: CGContext) {
@@ -240,16 +280,29 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
         point: CGPoint
     ) -> CGRect? {
         guard let pos = drawPosition(forDocumentCharAt: attrRange.location, point: point) else { return nil }
-        let localIndex = attrRange.location - (fragmentNSRange?.location ?? 0)
-        let lb = lineBounds(forLocalIndex: localIndex, point: point)
-        let lineHeight = lb?.height ?? pos.lineHeight
-        let lineMinY = lb?.origin.y ?? (pos.baselineY - lineHeight)
+        let fragLocation = fragmentNSRange?.location ?? 0
+        let localStart = attrRange.location - fragLocation
+        let localLast = max(localStart, localStart + attrRange.length - 1)
+        let firstLb = lineBounds(forLocalIndex: localStart, point: point)
+        // For a wrapped source span (e.g. a long `![alt](url)` that wraps in
+        // a narrow window), anchor to the LAST line's maxY so the image
+        // doesn't paint over subsequent wrapped lines of its own source.
+        let lastLb = lineBounds(forLocalIndex: localLast, point: point) ?? firstLb
+        let lineHeight = firstLb?.height ?? pos.lineHeight
+        let firstLineMinY = firstLb?.origin.y ?? (pos.baselineY - lineHeight)
+        let lastLineMaxY = (lastLb?.origin.y ?? firstLineMinY) + (lastLb?.height ?? lineHeight)
 
         let yPosition: CGFloat
         if let blockOffsetY {
-            yPosition = lineMinY + blockOffsetY
+            // Backward-compatible interpretation: `blockOffsetY` is the gap
+            // from the FIRST line's top to the image's top (= baseLineHeight
+            // + imageGap on a single-line source). Re-anchor to the last
+            // line by subtracting one line height, leaving the same single-
+            // line geometry intact while pushing the image down by one
+            // extra line per wrap.
+            yPosition = lastLineMaxY + blockOffsetY - lineHeight
         } else {
-            yPosition = lineMinY + (lineHeight - imageBounds.height) / 2
+            yPosition = firstLineMinY + (lineHeight - imageBounds.height) / 2
         }
         return CGRect(x: pos.x, y: yPosition,
                        width: imageBounds.width, height: imageBounds.height)
@@ -309,14 +362,117 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
         }
     }
 
+    // MARK: - Thematic Breaks (---, ***, ___)
+
+    /// Draw a 1pt horizontal rule across the full container width for any
+    /// line fragment whose backing text carries the `.thematicBreak`
+    /// attribute. This decouples HR rendering from the source-text length,
+    /// so a 3-char `---` looks the same as a 80-char auto-expanded line.
+    private func drawThematicBreaks(at point: CGPoint, in context: CGContext) {
+        guard let ts = textStorage, let range = fragmentNSRange, range.length > 0 else { return }
+        var hasThematic = false
+        ts.enumerateAttribute(.thematicBreak, in: range, options: []) { value, _, stop in
+            if value as? Bool == true {
+                hasThematic = true
+                stop.pointee = true
+            }
+        }
+        guard hasThematic else { return }
+
+        let containerWidth = textLayoutManager?.textContainer?.size.width ?? layoutFragmentFrame.width
+        let theme = (textLayoutManager?.textContainer?.textView as? NativeTextView)?
+            .configuration.theme ?? .default
+
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        let nsContext = NSGraphicsContext(cgContext: context, flipped: true)
+        NSGraphicsContext.current = nsContext
+
+        let strokeColor = theme.strikethroughColor.withAlphaComponent(0.4)
+        strokeColor.setFill()
+
+        // Walk each line fragment in this layout fragment and paint a
+        // band on those whose first character carries the marker. (HR
+        // tokens are always single-line, but the loop is robust if a
+        // future caller ever stacks several rules in one paragraph.)
+        let fragLocation = fragmentNSRange?.location ?? 0
+        for lineFragment in textLineFragments {
+            let lr = lineFragment.characterRange
+            let docStart = fragLocation + lr.location
+            // TextKit 2 appends a synthetic trailing empty line fragment whose
+            // characterRange lands at exactly `tsLen` — `attribute(at:)` needs
+            // a strictly in-bounds index, so skip the sentinel.
+            guard docStart < ts.length else { continue }
+            let isHR = ts.attribute(.thematicBreak, at: docStart, effectiveRange: nil) as? Bool == true
+            let tb = lineFragment.typographicBounds
+            if isHR {
+                // tb.origin.y is already relative to this layout fragment.
+                let centerY = point.y + tb.origin.y + tb.height / 2
+                let bandRect = CGRect(
+                    x: point.x - layoutFragmentFrame.origin.x,
+                    y: centerY - 0.5,
+                    width: containerWidth,
+                    height: 1
+                )
+                NSBezierPath(rect: bandRect).fill()
+            }
+        }
+    }
+
+    // MARK: - Blockquote Bars
+
+    /// Paint `level` vertical bars in the left gutter of every line that
+    /// carries `.blockquoteLevel`. Each line paints its own segment, so a
+    /// run of quote lines reads as one continuous bar.
+    private func drawBlockquoteBars(at point: CGPoint, in context: CGContext) {
+        guard let ts = textStorage, let range = fragmentNSRange, range.length > 0 else { return }
+        var anyLevel = false
+        ts.enumerateAttribute(.blockquoteLevel, in: range, options: []) { value, _, stop in
+            if value is Int { anyLevel = true; stop.pointee = true }
+        }
+        guard anyLevel else { return }
+
+        let theme = (textLayoutManager?.textContainer?.textView as? NativeTextView)?
+            .configuration.theme ?? .default
+        let indentPerLevel = Self.blockquoteIndentPerLevel
+        let barWidth = Self.blockquoteBarWidth
+
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        let nsContext = NSGraphicsContext(cgContext: context, flipped: true)
+        NSGraphicsContext.current = nsContext
+        theme.mutedText.withAlphaComponent(0.5).setFill()
+
+        let fragLocation = fragmentNSRange?.location ?? 0
+        let leftEdge = point.x - layoutFragmentFrame.origin.x
+        for lineFragment in textLineFragments {
+            let lr = lineFragment.characterRange
+            let docStart = fragLocation + lr.location
+            // TextKit 2 appends a synthetic trailing empty line fragment whose
+            // characterRange lands at exactly `tsLen` — `attribute(at:)` needs
+            // a strictly in-bounds index, so skip the sentinel.
+            guard docStart < ts.length else { continue }
+            let tb = lineFragment.typographicBounds
+            if let level = ts.attribute(.blockquoteLevel, at: docStart, effectiveRange: nil) as? Int {
+                // tb.origin.y is already relative to this layout fragment.
+                let barY = point.y + tb.origin.y
+                for i in 0..<level {
+                    let barX = leftEdge + CGFloat(i) * indentPerLevel + indentPerLevel * 0.25
+                    NSBezierPath(rect: CGRect(
+                        x: barX, y: barY, width: barWidth, height: tb.height
+                    )).fill()
+                }
+            }
+        }
+    }
+
     // MARK: - Task List Checkboxes
 
     private func drawTaskCheckboxes(at point: CGPoint, in context: CGContext) {
         guard let ts = textStorage, let range = fragmentNSRange, range.length > 0 else { return }
         let selectionRanges: [NSRange] = {
             guard let tv = textLayoutManager?.textContainer?.textView else { return [] }
-            let values = tv.selectedRanges as? [NSValue] ?? []
-            return values.map { $0.rangeValue }.filter { $0.length > 0 }
+            return tv.selectedRanges.map { $0.rangeValue }.filter { $0.length > 0 }
         }()
 
         NSGraphicsContext.saveGraphicsState()

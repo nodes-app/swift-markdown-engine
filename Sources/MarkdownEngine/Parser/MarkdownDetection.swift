@@ -41,6 +41,28 @@ enum MarkdownDetection {
                 }
             }
         }
+
+        // When a "container" token like a table is active (caret inside),
+        // every inline token fully contained within it should also be
+        // active. Otherwise inline-latex/inline-code/emphasis/etc. inside
+        // the table still try to render their decorated form (LaTeX
+        // images, hidden backticks, …) on top of the visible source the
+        // table editor mode is showing.
+        let activeContainers: [MarkdownToken] = indices.compactMap { idx in
+            let token = tokens[idx]
+            return token.kind == .table ? token : nil
+        }
+        if !activeContainers.isEmpty {
+            for (i, token) in tokens.enumerated() where !indices.contains(i) {
+                let tStart = token.range.location
+                let tEnd = NSMaxRange(token.range)
+                if activeContainers.contains(where: {
+                    tStart >= $0.range.location && tEnd <= NSMaxRange($0.range)
+                }) {
+                    indices.insert(i)
+                }
+            }
+        }
         return indices
     }
 

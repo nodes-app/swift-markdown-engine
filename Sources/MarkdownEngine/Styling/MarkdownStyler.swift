@@ -158,16 +158,19 @@ enum MarkdownStyler {
             configuration: configuration
         )
         result += styleHeadings(ctx)
+        result += styleBlockquotes(ctx)
         result += styleEmphasis(ctx)
         result += styleAutoLinks(ctx)
         result += styleWikiLinks(ctx, wikiLinkIDProvider: wikiLinkIDProvider)
         result += styleImageEmbeds(ctx)
+        result += styleImageLinks(ctx)
         result += styleMarkdownLinks(ctx)
         result += styleCodeBlocks(ctx)
         result += styleInlineCode(ctx)
         result += styleBlockLatex(ctx)
         result += styleInlineLatex(ctx)
         result += styleHorizontalRules(ctx)
+        result += styleTables(ctx)
         result += styleIncompleteLinkBrackets(ctx)
         result += styleTaskCheckboxes(ctx)
         result += shrinkInactiveMarkers(ctx)
@@ -219,7 +222,9 @@ extension MarkdownStyler {
             para.minimumLineHeight = neededHeight
             para.maximumLineHeight = max(para.maximumLineHeight, neededHeight)
             para.paragraphSpacing = max(para.paragraphSpacing, paragraphSpacing)
-
+            // The anchor character is given an explicit advance equal to the
+            // image width (often wider than the text container
+            para.lineBreakMode = .byClipping
             let collapsedPara = NSMutableParagraphStyle()
             collapsedPara.maximumLineHeight = 1
             collapsedPara.paragraphSpacing = 0
@@ -322,23 +327,65 @@ extension MarkdownStyler {
 
 extension MarkdownStyler {
 
-    // MARK: Horizontal Rules ---
+    // MARK: Horizontal Rules --- *** ___
 
     static func styleHorizontalRules(_ ctx: StylingContext) -> [StyledRange] {
         var attrs: [StyledRange] = []
-        let hrPattern = "^[ \\t]*-{3,}[ \\t]*$"
+        // CommonMark thematic break: a line of 3+ matching `-`, `*`, or `_`,
+        // optional surrounding whitespace.
+        let hrPattern = #"^[ \t]*(-{3,}|\*{3,}|_{3,})[ \t]*$"#
         if let hrRegex = try? NSRegularExpression(pattern: hrPattern, options: [.anchorsMatchLines]) {
             for hrMatch in hrRegex.matches(in: ctx.text, range: ctx.fullRange) {
-                attrs.append((hrMatch.range, [.foregroundColor: NSColor.clear]))
+                // Don't render the rule while the caret is sitting on this
+                // line. Otherwise typing the third `-` would instantly hide
+                // the source under a full-width rule, leaving the cursor at
+                // a now-invisible source-text position and tripping the
+                // layout pass on the next Enter (the visible HR fragment's
+                // geometry suddenly has to absorb a newline at a slot the
+                // user can't see). Once the caret leaves the line — i.e. on
+                // Enter — the rule renders normally.
+                let caretIsOnHRLine =
+                    NSLocationInRange(ctx.caretLocation, hrMatch.range)
+                    || ctx.caretLocation == NSMaxRange(hrMatch.range)
+                if caretIsOnHRLine { continue }
+                // Hide the source chars and tag the range so the layout
+                // fragment can paint a full-width rule. The previous
+                // implementation used a thick strikethrough across the
+                // matched chars; that worked only when an enter-handler
+                // had auto-expanded `---` to fill the container width,
+                // and never worked at all for `***`/`___`. With a
+                // dedicated marker the rule is always container-wide
+                // regardless of how many chars are in the source.
                 attrs.append((hrMatch.range, [
-                    .strikethroughStyle: NSUnderlineStyle.thick.rawValue,
-                    .strikethroughColor: ctx.configuration.theme.strikethroughColor
+                    .foregroundColor: NSColor.clear,
+                    .thematicBreak: true
                 ]))
                 let rulePara = NSMutableParagraphStyle()
                 attrs.append((hrMatch.range, [.paragraphStyle: rulePara]))
             }
         }
         return attrs
+    }
+
+    /// Returns the line range if `location` sits on a thematic-break line
+    /// (a line of 3+ matching `-`, `*`, or `_` with optional surrounding
+    /// whitespace), else `nil`. The coordinator uses this to trigger a
+    /// restyle on caret crossings in/out of an HR line — HRs are styled
+    /// via a pure attribute (no `MarkdownToken`), so `tokensChanged`
+    /// alone doesn't catch these crossings.
+    static func hrLineRange(at location: Int, in text: String) -> NSRange? {
+        let nsText = text as NSString
+        let safeLoc = max(0, min(location, nsText.length))
+        let lineRange = nsText.lineRange(for: NSRange(location: safeLoc, length: 0))
+        let line = nsText.substring(with: lineRange)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard line.range(
+            of: #"^[ \t]*(-{3,}|\*{3,}|_{3,})[ \t]*$"#,
+            options: .regularExpression
+        ) != nil else {
+            return nil
+        }
+        return lineRange
     }
 
     // MARK: Incomplete Link Brackets
@@ -373,9 +420,12 @@ extension MarkdownStyler {
             if token.kind == .codeBlock || token.kind == .inlineCode || token.kind == .inlineLatex || token.kind == .imageEmbed {
                 continue
             }
-            if MarkdownDetection.isInsideCodeBlock(range: token.range, codeTokens: ctx.codeTokens) {
-                continue
+            // Containment, not overlap — so a strike that wraps inline code isn't skipped.
+            let isFullyInsideCode = ctx.codeTokens.contains { codeToken in
+                token.range.location >= codeToken.range.location
+                    && NSMaxRange(token.range) <= NSMaxRange(codeToken.range)
             }
+            if isFullyInsideCode { continue }
             let smallSize = ctx.configuration.markers.hiddenMarkerFontSize
             let smallFont = NSFont(name: ctx.fontName, size: smallSize) ?? NSFont.systemFont(ofSize: smallSize)
             if token.kind == .link && token.markerRanges.count >= 4 {

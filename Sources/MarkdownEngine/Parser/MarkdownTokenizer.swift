@@ -11,8 +11,30 @@ import Foundation
 
 // MARK: - Static Regexes
 private extension MarkdownTokenizer {
+    // `*`-emphasis is parsed by the stack parser (parseEmphasisTokens);
+    // `_`-emphasis and `~~`-strikethrough are not handled there, so we
+    // keep these regexes for them.
+    //
+    // Underscore-style emphasis: GFM disables intraword emphasis for `_`,
+    // so we require a non-word boundary on each side to avoid matching
+    // identifiers like `snake_case`.
+    static let boldItalicUnderscoreRegex = try! NSRegularExpression(
+        pattern: #"(?<![A-Za-z0-9_])___([^_\r\n]+?)___(?![A-Za-z0-9_])"#
+    )
+    static let boldUnderscoreRegex = try! NSRegularExpression(
+        pattern: #"(?<![A-Za-z0-9_])__([^_\r\n]+?)__(?![A-Za-z0-9_])"#
+    )
+    static let italicUnderscoreRegex = try! NSRegularExpression(
+        pattern: #"(?<![A-Za-z0-9_])_([^_\r\n]+?)_(?![A-Za-z0-9_])"#
+    )
+    static let strikethroughRegex = try! NSRegularExpression(
+        pattern: "(?<!~)~~([^~\\r\\n]+?)(?<!~)~~(?!~)"
+    )
     static let imageEmbedRegex = try! NSRegularExpression(
         pattern: "!\\[\\[([^\\]\\r\\n]*)\\]\\]"
+    )
+    static let imageLinkRegex = try! NSRegularExpression(
+        pattern: "!\\[([^\\]\\r\\n]*)\\]\\(([^\\)\\r\\n]+)\\)"
     )
     static let wikiLinkRegex = try! NSRegularExpression(
         pattern: "\\[\\[([^\\|\\]\\r\\n]*)\\|?([^\\]\\r\\n]*)\\]\\]"
@@ -24,6 +46,12 @@ private extension MarkdownTokenizer {
         pattern: "^\\s*(#{1,6}) +(.*)$",
         options: [.anchorsMatchLines]
     )
+    // One blockquote line: optional ≤3-space indent, a run of `>` markers
+    // (each optionally followed by one space), then the quoted content.
+    static let blockquoteRegex = try! NSRegularExpression(
+        pattern: #"^[ \t]{0,3}((?:>[ \t]?)+)(.*)$"#,
+        options: [.anchorsMatchLines]
+    )
     static let taskListRegex = try! NSRegularExpression(
         pattern: #"^([ \t]*)([-•]|\d+\.)([ \t]+)(\[[ xX]\])(?=[ \t])"#,
         options: [.anchorsMatchLines]
@@ -32,8 +60,11 @@ private extension MarkdownTokenizer {
         pattern: #"^```[ \t]*([A-Za-z0-9_+#.-]*?)[ \t]*\r?\n((?:(?!^```[^\r\n]*$)[\s\S])*?)^(```)[^\r\n]*$"#,
         options: [.anchorsMatchLines]
     )
+    // CommonMark code span: an opening run of N backticks (not part of a
+    // longer run) closed by a run of exactly N backticks. The content may
+    // itself contain shorter/longer backtick runs (e.g. `` `tick` ``).
     static let inlineCodeRegex = try! NSRegularExpression(
-        pattern: "`([^`\\n]+)`",
+        pattern: #"(?<!`)(`+)(?!`)([^\n]+?)(?<!`)\1(?!`)"#,
         options: []
     )
     static let blockLatexRegex = try! NSRegularExpression(
@@ -43,6 +74,10 @@ private extension MarkdownTokenizer {
     static let inlineLatexRegex = try! NSRegularExpression(
         pattern: "(?<!\\$)\\$(?!\\$)([^$\\n]+?)\\$(?!\\$)",
         options: []
+    )
+    static let tableRegex = try! NSRegularExpression(
+        pattern: #"^[ \t]*\|.+\|[ \t]*\r?\n[ \t]*\|[- \t:|]+\|[ \t]*(?:\r?\n[ \t]*\|.+\|[ \t]*)*"#,
+        options: [.anchorsMatchLines]
     )
 }
 
@@ -56,6 +91,54 @@ enum MarkdownTokenizer {
 
         // Emphasis via stack parser.
         tokens.append(contentsOf: parseEmphasisTokens(in: text))
+
+        // Bold+Italic ___text___
+        for match in boldItalicUnderscoreRegex.matches(in: text, options: [], range: fullRange) {
+            let full = match.range
+            let content = match.range(at: 1)
+            let startMarker = NSRange(location: full.location, length: 3)
+            let endMarker = NSRange(location: full.location + full.length - 3, length: 3)
+            tokens.append(MarkdownToken(kind: .boldItalic,
+                                        range: full,
+                                        contentRange: content,
+                                        markerRanges: [startMarker, endMarker]))
+        }
+
+        // Bold __text__
+        for match in boldUnderscoreRegex.matches(in: text, options: [], range: fullRange) {
+            let full = match.range
+            let content = match.range(at: 1)
+            let startMarker = NSRange(location: full.location, length: 2)
+            let endMarker = NSRange(location: full.location + full.length - 2, length: 2)
+            tokens.append(MarkdownToken(kind: .bold,
+                                        range: full,
+                                        contentRange: content,
+                                        markerRanges: [startMarker, endMarker]))
+        }
+
+        // Italic _text_
+        for match in italicUnderscoreRegex.matches(in: text, options: [], range: fullRange) {
+            let full = match.range
+            let content = match.range(at: 1)
+            let startMarker = NSRange(location: full.location, length: 1)
+            let endMarker = NSRange(location: full.location + full.length - 1, length: 1)
+            tokens.append(MarkdownToken(kind: .italic,
+                                        range: full,
+                                        contentRange: content,
+                                        markerRanges: [startMarker, endMarker]))
+        }
+
+        // Strikethrough ~~text~~ (GFM)
+        for match in strikethroughRegex.matches(in: text, options: [], range: fullRange) {
+            let full = match.range
+            let content = match.range(at: 1)
+            let startMarker = NSRange(location: full.location, length: 2)
+            let endMarker = NSRange(location: full.location + full.length - 2, length: 2)
+            tokens.append(MarkdownToken(kind: .strikethrough,
+                                        range: full,
+                                        contentRange: content,
+                                        markerRanges: [startMarker, endMarker]))
+        }
 
         // Image embeds ![[Name]] (must be parsed before wikiLinks)
         var imageEmbedRanges: [NSRange] = []
@@ -86,9 +169,34 @@ enum MarkdownTokenizer {
                                         markerRanges: [open, close]))
         }
 
+        // Image links ![alt](URL) — standard Markdown image syntax. Must be
+        // parsed before markdownLinkRegex; otherwise the trailing
+        // `[alt](URL)` sub-string would be claimed as a plain link, leaving
+        // the leading `!` orphaned and the embedder no chance to render an
+        // image.
+        var imageLinkRanges: [NSRange] = []
+        for match in imageLinkRegex.matches(in: text, options: [], range: fullRange) {
+            let full = match.range(at: 0)
+            let altRange = match.range(at: 1)
+            let urlRange = match.range(at: 2)
+            let bangBracket = NSRange(location: full.location, length: 2) // ![
+            let closeBracket = NSRange(location: altRange.location + altRange.length, length: 1) // ]
+            let openParen = NSRange(location: urlRange.location - 1, length: 1) // (
+            let closeParen = NSRange(location: urlRange.location + urlRange.length, length: 1) // )
+            tokens.append(MarkdownToken(kind: .imageLink,
+                                        range: full,
+                                        contentRange: altRange,
+                                        markerRanges: [bangBracket, closeBracket, openParen, closeParen]))
+            imageLinkRanges.append(full)
+        }
+
         // Markdown links [Text](URL)
         for match in markdownLinkRegex.matches(in: text, options: [], range: fullRange) {
             let full = match.range
+            // Skip ranges that overlap with imageLink — the bang prefix is
+            // recognized one token earlier and we don't want to double-style
+            // the bracket region.
+            if imageLinkRanges.contains(where: { NSIntersectionRange($0, full).length > 0 }) { continue }
             let textRange = match.range(at: 1)
             let urlRange = match.range(at: 2)
             let openBracket = NSRange(location: full.location, length: 1)
@@ -140,6 +248,37 @@ enum MarkdownTokenizer {
                                         markerRanges: [openingMarker, closingMarker]))
         }
         
+        // Blockquote lines. After fenced code so a `>` inside a code block
+        // stays literal. One token per line; the styler stitches the bar.
+        for match in blockquoteRegex.matches(in: text, options: [], range: fullRange) {
+            let full = match.range(at: 0)
+            let marker = match.range(at: 1)
+            let content = match.range(at: 2)
+            let inCode = tokens.contains {
+                ($0.kind == .codeBlock || $0.kind == .blockLatex)
+                && NSIntersectionRange($0.range, full).length > 0
+            }
+            if inCode { continue }
+            tokens.append(MarkdownToken(kind: .blockquote,
+                                        range: full,
+                                        contentRange: content,
+                                        markerRanges: [marker]))
+        }
+
+        // GFM tables. Parsed after code blocks so we can skip table-shaped
+        // lines inside fenced code; sits before block-latex/inline-latex
+        // because we don't want `$$...$$` rules trying to claim ranges that
+        // belong to a table cell.
+        for match in tableRegex.matches(in: text, options: [], range: fullRange) {
+            let full = match.range(at: 0)
+            let inCode = tokens.contains { $0.kind == .codeBlock && NSIntersectionRange($0.range, full).length > 0 }
+            if inCode { continue }
+            tokens.append(MarkdownToken(kind: .table,
+                                        range: full,
+                                        contentRange: full,
+                                        markerRanges: []))
+        }
+
         // Block LaTeX $$...$$ (multiline)
         for match in blockLatexRegex.matches(in: text, options: [], range: fullRange) {
             let full = match.range(at: 0)
@@ -155,16 +294,37 @@ enum MarkdownTokenizer {
                                         markerRanges: [openMarker, closeMarker]))
         }
 
-        // Inline code `code`
+        // Inline code `code` / `` `tick` `` (N-backtick runs)
         for match in inlineCodeRegex.matches(in: text, options: [], range: fullRange) {
             let full = match.range(at: 0)
-            let content = match.range(at: 1)
-            let openBacktick = NSRange(location: full.location, length: 1)
-            let closeBacktick = NSRange(location: full.location + full.length - 1, length: 1)
+            let delimLength = match.range(at: 1).length          // run of N backticks
+            let rawContent = match.range(at: 2)
+
+            // CommonMark: if the content both begins and ends with a space
+            // but isn't all spaces, strip exactly one space from each side.
+            let rawString = (text as NSString).substring(with: rawContent)
+            let stripsSpaces = rawString.count >= 2
+                && rawString.first == " "
+                && rawString.last == " "
+                && rawString.contains(where: { $0 != " " })
+            let lead = stripsSpaces ? 1 : 0
+            let trail = stripsSpaces ? 1 : 0
+
+            let content = NSRange(
+                location: rawContent.location + lead,
+                length: rawContent.length - lead - trail
+            )
+            // The markers swallow the delimiter runs AND any stripped space,
+            // so they collapse together when the syntax is hidden.
+            let openMarker = NSRange(location: full.location, length: delimLength + lead)
+            let closeMarker = NSRange(
+                location: full.location + full.length - delimLength - trail,
+                length: delimLength + trail
+            )
             tokens.append(MarkdownToken(kind: .inlineCode,
                                         range: full,
                                         contentRange: content,
-                                        markerRanges: [openBacktick, closeBacktick]))
+                                        markerRanges: [openMarker, closeMarker]))
         }
 
         // Inline LaTeX $formula$
@@ -185,6 +345,66 @@ enum MarkdownTokenizer {
                                         contentRange: content,
                                         markerRanges: [openDollar, closeDollar]))
         }
+
+        // MARK: Backslash escapes (CommonMark §2.4)
+        //
+        // A backslash before any ASCII punctuation character makes that
+        // character literal — it loses its Markdown meaning. We scan left
+        // to right so that `\\` consumes itself (the even/odd-backslash
+        // rule): the char after an escaping backslash can never itself
+        // start a new escape. Escapes do not apply inside fenced code or
+        // block LaTeX, where a backslash is already literal.
+        let asciiPunctuation: Set<unichar> = {
+            let chars = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
+            return Set(chars.utf16)
+        }()
+        let escapeFreeRanges: [NSRange] = tokens
+            .filter { $0.kind == .codeBlock || $0.kind == .blockLatex }
+            .map { $0.range }
+        func isEscapeFree(_ loc: Int) -> Bool {
+            for r in escapeFreeRanges where loc >= r.location && loc < NSMaxRange(r) {
+                return true
+            }
+            return false
+        }
+
+        var escapedCharOffsets: Set<Int> = []
+        var escapeTokens: [MarkdownToken] = []
+        var i = 0
+        let textLength = nsText.length
+        while i < textLength - 1 {
+            if nsText.character(at: i) == 0x5C /* backslash */, !isEscapeFree(i) {
+                let next = nsText.character(at: i + 1)
+                if asciiPunctuation.contains(next) {
+                    escapedCharOffsets.insert(i + 1)
+                    escapeTokens.append(MarkdownToken(
+                        kind: .backslashEscape,
+                        range: NSRange(location: i, length: 2),
+                        contentRange: NSRange(location: i + 1, length: 1),
+                        markerRanges: [NSRange(location: i, length: 1)]
+                    ))
+                    i += 2   // the escaped char cannot start another escape
+                    continue
+                }
+            }
+            i += 1
+        }
+
+        if !escapedCharOffsets.isEmpty {
+            // An inline span whose opening or closing delimiter sits on an
+            // escaped (now-literal) character is not a real span — drop it
+            // so `\*not italic\*` / `` \` not code \` `` stay literal.
+            let escapableKinds: Set<MarkdownTokenKind> = [
+                .italic, .bold, .boldItalic, .strikethrough,
+                .inlineCode, .inlineLatex, .blockLatex,
+                .link, .wikiLink, .imageLink, .imageEmbed
+            ]
+            tokens.removeAll { token in
+                guard escapableKinds.contains(token.kind) else { return false }
+                return token.markerRanges.contains { escapedCharOffsets.contains($0.location) }
+            }
+        }
+        tokens.append(contentsOf: escapeTokens)
 
         return tokens
     }
