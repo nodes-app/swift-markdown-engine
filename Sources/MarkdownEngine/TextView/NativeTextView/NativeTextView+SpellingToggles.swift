@@ -11,6 +11,7 @@
 //  restores the "on" state whenever the caret leaves a code/LaTeX/link span).
 //
 
+#if os(macOS)
 import AppKit
 
 extension NativeTextView {
@@ -29,3 +30,4 @@ extension NativeTextView {
         (delegate as? NativeTextViewCoordinator)?.didToggleSpellCheckingPolicy(textView: self)
     }
 }
+#endif

@@ -5,6 +5,7 @@
 //  Ready-made LatexRenderer conformance backed by SwiftMath.
 //
 
+#if os(macOS)
 import AppKit
 import Foundation
 import SwiftMath
@@ -178,3 +179,4 @@ public final class SwiftMathBridge: LatexRenderer, @unchecked Sendable {
         return image
     }
 }
+#endif

@@ -7,6 +7,7 @@
 //  Caret-indicator workarounds: block-image hide/resize + trailing-`\n` Y-snap (FB22524198).
 //
 
+#if os(macOS)
 import AppKit
 
 extension NativeTextView {
@@ -105,3 +106,4 @@ extension NativeTextView {
         isApplyingCaretShift = false
     }
 }
+#endif

@@ -8,6 +8,7 @@
 //  hugs the bottom edge of the visible viewport while typing.
 //
 
+#if os(macOS)
 import AppKit
 import Foundation
 
@@ -60,3 +61,4 @@ struct BottomOverscrollPolicy {
         return floor((scrollUnlockDistance + desiredSlack) * activationProgress)
     }
 }
+#endif

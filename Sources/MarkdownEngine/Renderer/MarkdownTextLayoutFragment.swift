@@ -2,22 +2,13 @@
 //  MarkdownTextLayoutFragment.swift
 //  MarkdownEngine
 //
-//  Created by Luca Chen on 12.04.26.
+//  Custom layout fragment for macOS — draws code-block backgrounds,
+//  LaTeX images, and task checkboxes. iOS uses the base NSTextLayoutFragment
+//  (UITextView renders .backgroundColor natively).
 //
-//  TextKit 2 replacement for CodeBlockLayoutManager.
-//  Draws code-block backgrounds, LaTeX images, and task checkboxes
-//  via NSTextLayoutFragment instead of NSLayoutManager glyph overrides.
 
+#if os(macOS)
 import AppKit
-
-// MARK: - Custom attribute keys for rendering overlays
-
-extension NSAttributedString.Key {
-    static let latexImage = NSAttributedString.Key("LatexRenderedImage")
-    static let latexBounds = NSAttributedString.Key("LatexImageBounds")
-    static let latexIsBlock = NSAttributedString.Key("LatexIsBlock")
-    static let latexBlockOffsetY = NSAttributedString.Key("LatexBlockOffsetY")
-}
 
 final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
 
@@ -392,3 +383,5 @@ final class MarkdownLayoutManagerDelegate: NSObject, NSTextLayoutManagerDelegate
         return fragment
     }
 }
+
+#endif

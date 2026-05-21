@@ -2,17 +2,20 @@
 //  TextStylingService.swift
 //  MarkdownEngine
 //
-//  Created by Luca Chen on 18.02.26.
+//  Applies base text styling and refreshes only changed sections so editing
+//  stays smooth while Markdown formatting updates.
 //
 
-// Applies base text styling and refreshes only changed sections so editing
-// stays smooth while Markdown formatting updates.
-import AppKit
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 struct TextStylingService {
     static func makeBaseTypingAttributes(
-        font: NSFont,
+        font: PlatformFont,
         paragraphStyle: NSParagraphStyle,
         theme: MarkdownEditorTheme = .default
     ) -> [NSAttributedString.Key: Any] {
@@ -28,8 +31,8 @@ struct TextStylingService {
         fontSize: CGFloat,
         layoutBridge: LayoutBridge? = nil,
         configuration: MarkdownEditorConfiguration = .default
-    ) -> (font: NSFont, style: NSMutableParagraphStyle) {
-        let baseFont = NSFont(name: fontName, size: fontSize) ?? NSFont.systemFont(ofSize: fontSize)
+    ) -> (font: PlatformFont, style: NSMutableParagraphStyle) {
+        let baseFont = PlatformFont.markdownFont(name: fontName, size: fontSize)
         let defaultLineHeight = layoutBridgeDefaultLineHeight(for: baseFont, using: layoutBridge)
         let paragraph = NSMutableParagraphStyle()
         paragraph.minimumLineHeight = ceil(defaultLineHeight) + configuration.paragraph.lineHeightExtraSpacing
@@ -42,10 +45,10 @@ struct TextStylingService {
     }
 
     static func restyle(
-        textView: NSTextView,
+        textView: some MarkdownTextViewProtocol,
         layoutBridge: LayoutBridge?,
         paragraphCandidates: [NSRange],
-        baseFont: NSFont,
+        baseFont: PlatformFont,
         paragraphStyle: NSMutableParagraphStyle,
         caretLocation: Int,
         activeTokenIndices: Set<Int>,
@@ -62,12 +65,12 @@ struct TextStylingService {
         )
 
         guard !paragraphs.isEmpty else {
-            textView.setNeedsDisplay(textView.visibleRect)
+            textView.markdownInvalidateDisplay()
             return
         }
 
         let styledRanges = MarkdownStyler.styleAttributes(
-            text: textView.string,
+            text: textView.markdownString,
             fontName: baseFont.fontName,
             fontSize: baseFont.pointSize,
             layoutBridge: layoutBridge,
@@ -83,33 +86,33 @@ struct TextStylingService {
             attrs[.spellingState] as? Int == 0 ? range : nil
         }
 
-        // Remove existing spelling markers before reapplying disabled ranges.
         for disabledRange in spellingDisabledRanges {
             layoutBridge?.removeTemporaryAttribute(.spellingState, forCharacterRange: disabledRange)
         }
 
-        textView.textStorage?.beginEditing()
+        textView.markdownTextStorage?.beginEditing()
         for disabledRange in spellingDisabledRanges {
-            textView.textStorage?.addAttribute(.spellingState, value: 0, range: disabledRange)
+            textView.markdownTextStorage?.addAttribute(.spellingState, value: 0, range: disabledRange)
         }
         for paragraph in paragraphs {
-            textView.textStorage?.setAttributes([
+            textView.markdownTextStorage?.setAttributes([
                 .font: baseFont,
                 .foregroundColor: configuration.theme.bodyText,
                 .paragraphStyle: paragraphStyle
             ], range: paragraph)
-            textView.textStorage?.removeAttribute(.link, range: paragraph)
+            textView.markdownTextStorage?.removeAttribute(.link, range: paragraph)
             for (range, attrs) in styledRanges where NSIntersectionRange(range, paragraph).length > 0 {
                 let clippedRange = NSIntersectionRange(range, paragraph)
                 for (key, value) in attrs {
-                    textView.textStorage?.addAttribute(key, value: value, range: clippedRange)
+                    textView.markdownTextStorage?.addAttribute(key, value: value, range: clippedRange)
                 }
             }
         }
-        textView.textStorage?.endEditing()
-        // No ensureLayout here:
-        textView.setNeedsDisplay(textView.visibleRect)
+        textView.markdownTextStorage?.endEditing()
+        textView.markdownInvalidateDisplay()
+        #if os(macOS)
         (textView as? NativeTextView)?.ensureVisibleLayout()
+        #endif
     }
 
     private static func normalize(_ candidates: [NSRange]) -> [NSRange] {
@@ -123,7 +126,6 @@ struct TextStylingService {
         return result
     }
 
-    /// Convert an NSRange into an NSTextRange for use with NSTextLayoutManager.
     static func textRange(from range: NSRange, in contentStorage: NSTextContentStorage) -> NSTextRange? {
         let docStart = contentStorage.documentRange.location
         guard let start = contentStorage.location(docStart, offsetBy: range.location),

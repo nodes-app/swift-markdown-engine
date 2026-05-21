@@ -7,6 +7,7 @@
 //  macOS 15+ Writing Tools integration: pauses styling during the session, re-syncs results on end, fixes child window position, and recovers from Apple's stale-accept-action bug after mid-session Cmd+Z.
 //
 
+#if os(macOS)
 import AppKit
 
 extension NativeTextViewCoordinator {
@@ -125,3 +126,4 @@ extension NativeTextViewCoordinator {
         }
     }
 }
+#endif

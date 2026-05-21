@@ -11,6 +11,7 @@
 //  current match into view.
 //
 
+#if os(macOS)
 import AppKit
 
 extension NativeTextViewCoordinator {
@@ -86,3 +87,4 @@ extension NativeTextViewCoordinator {
         }
     }
 }
+#endif

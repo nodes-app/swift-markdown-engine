@@ -9,6 +9,7 @@
 //  enclosing paragraph.
 //
 
+#if os(macOS)
 import AppKit
 
 extension NativeTextView {
@@ -52,3 +53,4 @@ extension NativeTextView {
         return true
     }
 }
+#endif

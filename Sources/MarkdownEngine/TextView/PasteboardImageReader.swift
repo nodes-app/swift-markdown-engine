@@ -8,6 +8,7 @@
 //  from paste / drop events into the editor.
 //
 
+#if os(macOS)
 import AppKit
 import UniformTypeIdentifiers
 
@@ -92,3 +93,4 @@ public enum PasteboardImageReader {
         return bitmapRep.representation(using: .png, properties: [:])
     }
 }
+#endif

@@ -8,6 +8,7 @@
 //  that keeps drag-selection moving when the cursor sits near a window edge.
 //
 
+#if os(macOS)
 import AppKit
 
 extension NativeTextView {
@@ -57,3 +58,4 @@ extension NativeTextView {
         (scrollView as? ClampedScrollView)?.clampToInsets()
     }
 }
+#endif

@@ -5,6 +5,7 @@
 //  Created by Luca Chen on 18.02.26.
 //
 
+#if os(macOS)
 // Handles Markdown typing shortcuts, like continuing lists and keeping block
 // LaTeX on its own line while you type.
 import AppKit
@@ -113,3 +114,4 @@ enum MarkdownInputHandler {
         return false
     }
 }
+#endif

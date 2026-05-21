@@ -5,6 +5,7 @@
 //  Created by Luca Chen on 18.02.26.
 //
 
+#if os(macOS)
 // Brings the editor into SwiftUI and wires up the text view with the
 // right setup, styling, and callbacks.
 //
@@ -358,3 +359,4 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         return coordinator
     }
 }
+#endif

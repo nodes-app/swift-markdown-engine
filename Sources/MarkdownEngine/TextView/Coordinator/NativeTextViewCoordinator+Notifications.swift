@@ -10,6 +10,7 @@
 //  when the syntax highlighter signals an appearance change.
 //
 
+#if os(macOS)
 import AppKit
 
 extension NativeTextViewCoordinator {
@@ -38,3 +39,4 @@ extension NativeTextViewCoordinator {
         restyleTextView(tv, paragraphCandidates: [fullRange])
     }
 }
+#endif

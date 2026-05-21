@@ -7,12 +7,18 @@
 
 // Defines the basic Markdown building blocks the editor works with (bold,
 // links, code, LaTeX, etc.), plus shared text attributes.
-import AppKit
 import Foundation
 
 extension NSAttributedString.Key {
-    public static let wikiLinkID = NSAttributedString.Key("NodeLinkID")
-    public static let taskCheckbox = NSAttributedString.Key("TaskCheckbox")
+    public static let wikiLinkID    = NSAttributedString.Key("NodeLinkID")
+    public static let taskCheckbox  = NSAttributedString.Key("TaskCheckbox")
+    // LaTeX rendering overlay (consumed by MarkdownTextLayoutFragment on macOS)
+    static let latexImage           = NSAttributedString.Key("LatexRenderedImage")
+    static let latexBounds          = NSAttributedString.Key("LatexImageBounds")
+    static let latexIsBlock         = NSAttributedString.Key("LatexIsBlock")
+    static let latexBlockOffsetY    = NSAttributedString.Key("LatexBlockOffsetY")
+    // Spell-check suppression — AppKit reads "NSSpellingState", no-op on iOS
+    static let spellingState        = NSAttributedString.Key("NSSpellingState")
 }
 
 enum MarkdownTokenKind {

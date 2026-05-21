@@ -7,8 +7,12 @@
 //  GitHub-style `- [ ] / - [x]` task checkbox styling and strike-through.
 //
 
-import AppKit
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 extension MarkdownStyler {
 
@@ -78,14 +82,14 @@ extension MarkdownStyler {
                 }
             }
             if markerRange.location != NSNotFound {
-                attrs.append((markerRange, [.foregroundColor: NSColor.clear]))
+                attrs.append((markerRange, [.foregroundColor: PlatformColor.clear]))
             }
             if spacerRange.location != NSNotFound {
-                attrs.append((spacerRange, [.foregroundColor: NSColor.clear]))
+                attrs.append((spacerRange, [.foregroundColor: PlatformColor.clear]))
             }
             attrs.append((checkboxRange, [
                 .taskCheckbox: isChecked,
-                .foregroundColor: NSColor.clear
+                .foregroundColor: PlatformColor.clear
             ]))
         }
         return attrs

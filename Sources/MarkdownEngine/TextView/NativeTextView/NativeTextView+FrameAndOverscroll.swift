@@ -9,6 +9,7 @@
 //  scroll-position restoration.
 //
 
+#if os(macOS)
 import AppKit
 
 extension NativeTextView {
@@ -142,3 +143,4 @@ extension NativeTextView {
         }
     }
 }
+#endif

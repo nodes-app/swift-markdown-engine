@@ -6,6 +6,7 @@
 //
 //
 
+#if os(macOS)
 import AppKit
 
 extension NativeTextView {
@@ -90,3 +91,4 @@ extension NativeTextView {
         return super.validateUserInterfaceItem(item)
     }
 }
+#endif

@@ -7,6 +7,7 @@
 //  Right-click menu with toggleable Markdown formatting actions.
 //
 
+#if os(macOS)
 import Cocoa
 import SwiftUI
 
@@ -265,3 +266,4 @@ extension NativeTextViewWrapper.Coordinator: NSMenuItemValidation {
         }
     }
 }
+#endif

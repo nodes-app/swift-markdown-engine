@@ -2,13 +2,15 @@
 //  MarkdownStyler+TextStyling.swift
 //  MarkdownEngine
 //
-//  Created by Luca Chen on 16.03.26.
-//
 //  Heading and emphasis (bold / italic / bold+italic) attribute generation.
 //
 
-import AppKit
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 extension MarkdownStyler {
 
@@ -21,8 +23,7 @@ extension MarkdownStyler {
             let level = token.markerRanges.first?.length ?? 1
             let multiplier = ctx.configuration.headings.fontMultiplier(for: level)
             let fontSize = ctx.baseFont.pointSize * multiplier
-            let headingBase = NSFont(name: ctx.fontName, size: fontSize) ?? NSFont.systemFont(ofSize: fontSize)
-            let headingFont = NSFontManager.shared.convert(headingBase, toHaveTrait: .boldFontMask)
+            let headingFont = PlatformFont.markdownBold(name: ctx.fontName, size: fontSize)
 
             let paraRange = ctx.nsText.paragraphRange(for: token.range)
             let headingLineHeight = ceil(layoutBridgeDefaultLineHeight(for: headingFont, using: ctx.layoutBridge)) + 1
@@ -48,7 +49,6 @@ extension MarkdownStyler {
     // MARK: Bold / Italic / Bold+Italic
 
     static func styleEmphasis(_ ctx: StylingContext) -> [StyledRange] {
-        // Per-char trait map collapsed into contiguous font runs so nested emphasis combines instead of overwriting.
         let len = ctx.nsText.length
         guard len > 0 else { return [] }
 
@@ -59,22 +59,20 @@ extension MarkdownStyler {
         for token in ctx.tokens {
             let mask: UInt8
             switch token.kind {
-            case .bold: mask = boldBit
-            case .italic: mask = italicBit
+            case .bold:       mask = boldBit
+            case .italic:     mask = italicBit
             case .boldItalic: mask = boldBit | italicBit
             default: continue
             }
             if MarkdownDetection.isInsideCodeBlock(range: token.range, codeTokens: ctx.codeTokens) { continue }
             let r = token.contentRange
             let upper = min(r.location + r.length, len)
-            for i in max(r.location, 0)..<upper {
-                traits[i] |= mask
-            }
+            for i in max(r.location, 0)..<upper { traits[i] |= mask }
         }
 
-        let regularItalic = italicFont(in: ctx)
-        let regularBold = boldFont(in: ctx)
-        let regularBoldItalic = boldItalicFont(in: ctx)
+        let regularBold      = ctx.baseFont.markdownBold()
+        let regularItalic    = ctx.baseFont.markdownItalic()
+        let regularBoldItalic = ctx.baseFont.markdownBoldItalic()
 
         var attrs: [StyledRange] = []
         var i = 0
@@ -84,13 +82,13 @@ extension MarkdownStyler {
             var j = i + 1
             while j < len && traits[j] == t { j += 1 }
             let range = NSRange(location: i, length: j - i)
-            let font: NSFont
+            let font: PlatformFont
             if t == boldBit | italicBit {
                 font = headingAwareBoldItalic(in: ctx, contentLocation: i) ?? regularBoldItalic
             } else if t == boldBit {
                 font = regularBold
             } else {
-                font = headingAwareBoldItalic(in: ctx, contentLocation: i) ?? regularItalic
+                font = headingAwareItalic(in: ctx, contentLocation: i) ?? regularItalic
             }
             attrs.append((range, [.font: font]))
             i = j
@@ -98,35 +96,23 @@ extension MarkdownStyler {
         return attrs
     }
 
-    private static func boldFont(in ctx: StylingContext) -> NSFont {
-        let desc = ctx.baseDescriptor.withSymbolicTraits(.bold)
-        return NSFont(descriptor: desc, size: ctx.baseFont.pointSize)
-            ?? NSFontManager.shared.convert(ctx.baseFont, toHaveTrait: .boldFontMask)
-    }
-
-    private static func italicFont(in ctx: StylingContext) -> NSFont {
-        let desc = ctx.baseDescriptor.withSymbolicTraits(.italic)
-        return NSFont(descriptor: desc, size: ctx.baseFont.pointSize)
-            ?? NSFontManager.shared.convert(ctx.baseFont, toHaveTrait: .italicFontMask)
-    }
-
-    private static func boldItalicFont(in ctx: StylingContext) -> NSFont {
-        let desc = ctx.baseDescriptor.withSymbolicTraits([.bold, .italic])
-        return NSFont(descriptor: desc, size: ctx.baseFont.pointSize)
-            ?? NSFontManager.shared.convert(ctx.baseFont, toHaveTrait: [.boldFontMask, .italicFontMask])
-    }
-
-    /// Returns a heading-sized bold+italic font when the location sits inside a heading, else `nil` so emphasis doesn't shrink mid-line.
-    private static func headingAwareBoldItalic(in ctx: StylingContext, contentLocation: Int) -> NSFont? {
+    private static func headingAwareBoldItalic(in ctx: StylingContext, contentLocation: Int) -> PlatformFont? {
         guard let headingToken = ctx.tokens.first(where: {
             $0.kind == .heading && NSLocationInRange(contentLocation, $0.contentRange)
         }) else { return nil }
         let level = headingToken.markerRanges.first?.length ?? 1
         let multiplier = ctx.configuration.headings.fontMultiplier(for: level)
-        let headingBase = NSFont(name: ctx.fontName, size: ctx.baseFont.pointSize * multiplier)
-            ?? NSFont.systemFont(ofSize: ctx.baseFont.pointSize * multiplier)
-        let desc = headingBase.fontDescriptor.withSymbolicTraits([.bold, .italic])
-        return NSFont(descriptor: desc, size: headingBase.pointSize)
-            ?? NSFontManager.shared.convert(headingBase, toHaveTrait: [.boldFontMask, .italicFontMask])
+        return PlatformFont.markdownFont(name: ctx.fontName, size: ctx.baseFont.pointSize * multiplier)
+            .markdownBoldItalic()
+    }
+
+    private static func headingAwareItalic(in ctx: StylingContext, contentLocation: Int) -> PlatformFont? {
+        guard let headingToken = ctx.tokens.first(where: {
+            $0.kind == .heading && NSLocationInRange(contentLocation, $0.contentRange)
+        }) else { return nil }
+        let level = headingToken.markerRanges.first?.length ?? 1
+        let multiplier = ctx.configuration.headings.fontMultiplier(for: level)
+        return PlatformFont.markdownFont(name: ctx.fontName, size: ctx.baseFont.pointSize * multiplier)
+            .markdownItalic()
     }
 }

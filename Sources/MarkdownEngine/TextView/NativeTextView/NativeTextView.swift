@@ -13,6 +13,7 @@
 //  Pasteboard image inspection lives in `PasteboardImageReader.swift`.
 //
 
+#if os(macOS)
 import AppKit
 import UniformTypeIdentifiers
 
@@ -72,3 +73,4 @@ final class NativeTextView: NSTextView {
 
     deinit { caretIndicatorObservation?.invalidate() }
 }
+#endif

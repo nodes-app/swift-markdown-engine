@@ -10,6 +10,7 @@
 //  button overlapping the cursor while editing.
 //
 
+#if os(macOS)
 import AppKit
 
 extension NativeTextViewCoordinator {
@@ -55,3 +56,4 @@ extension NativeTextViewCoordinator {
         onCodeBlockSelectionChange?(selections)
     }
 }
+#endif

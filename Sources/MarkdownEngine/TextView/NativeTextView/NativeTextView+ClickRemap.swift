@@ -9,6 +9,7 @@
 //  the caret at a line-relative X within the chosen line.
 //
 
+#if os(macOS)
 import AppKit
 
 extension NativeTextView {
@@ -55,3 +56,4 @@ extension NativeTextView {
         return true
     }
 }
+#endif

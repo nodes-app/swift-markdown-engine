@@ -17,9 +17,13 @@
 //  via the ``WikiLinkResolver`` protocol.
 //
 
-import AppKit
 import Foundation
 import os
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 /// Bidirectional transform between the storage and display forms of wiki-links.
 public enum WikiLinkService {
@@ -169,8 +173,20 @@ public enum WikiLinkService {
     /// Resolve a clicked link's opaque id by reading the `.wikiLinkID`
     /// attribute under the caret, falling back to the link's display string
     /// if the attribute is missing.
+    #if os(macOS)
     public static func resolveIdentifier(link: Any, textView: NSTextView, at charIndex: Int) -> String? {
         if let idAttr = textView.textStorage?.attribute(.wikiLinkID, at: charIndex, effectiveRange: nil) as? String {
+            return idAttr
+        }
+        if let name = link as? String {
+            return name
+        }
+        return nil
+    }
+    #endif
+
+    public static func resolveIdentifier(link: Any, textStorage: NSTextStorage?, at charIndex: Int) -> String? {
+        if let idAttr = textStorage?.attribute(.wikiLinkID, at: charIndex, effectiveRange: nil) as? String {
             return idAttr
         }
         if let name = link as? String {

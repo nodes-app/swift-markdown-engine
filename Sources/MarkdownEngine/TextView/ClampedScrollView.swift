@@ -5,6 +5,7 @@
 //  Created by Luca Chen on 18.02.26.
 //
 
+#if os(macOS)
 // Scroll view that keeps vertical scrolling within a clean top and bottom range.
 import AppKit
 
@@ -47,3 +48,4 @@ final class ClampedScrollView: NSScrollView {
         }
     }
 }
+#endif

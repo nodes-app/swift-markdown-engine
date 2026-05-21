@@ -10,6 +10,7 @@
 //  `TextStylingService`.
 //
 
+#if os(macOS)
 import AppKit
 
 extension NativeTextViewCoordinator {
@@ -281,3 +282,4 @@ extension NativeTextViewCoordinator {
         textView.setSelectedRange(clampedCaret)
     }
 }
+#endif

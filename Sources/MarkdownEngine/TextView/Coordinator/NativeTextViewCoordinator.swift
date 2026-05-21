@@ -5,6 +5,7 @@
 //  Created by Luca Chen on 18.02.26.
 //
 
+#if os(macOS)
 // Keeps the editor in sync while you type, updating formatting, selections,
 // links, and other editing behavior in one place.
 import AppKit
@@ -266,4 +267,4 @@ extension NSTextView {
         return boundingRect
     }
 }
-
+#endif

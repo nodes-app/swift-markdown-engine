@@ -10,6 +10,7 @@
 //  activation in sync with the active-token-index set.
 //
 
+#if os(macOS)
 import AppKit
 
 extension NativeTextViewCoordinator {
@@ -115,3 +116,4 @@ extension NativeTextViewCoordinator {
         isImageEmbedActive = false
     }
 }
+#endif

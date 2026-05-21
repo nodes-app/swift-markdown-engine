@@ -13,7 +13,6 @@
 //  override individual fields without forking the engine.
 //
 
-import AppKit
 import Foundation
 
 // MARK: - Top-level Configuration
