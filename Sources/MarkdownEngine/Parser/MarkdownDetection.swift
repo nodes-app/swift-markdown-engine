@@ -16,8 +16,13 @@ enum MarkdownDetection {
     static func computeActiveTokenIndices(
         selectionRange: NSRange,
         tokens: [MarkdownToken],
-        in text: NSString
+        in text: NSString,
+        suppressed: Bool = false
     ) -> Set<Int> {
+        // In read-only mode (no caret) we never want to reveal raw markdown
+        // syntax — `isEditable: false` should hide all tokens regardless of
+        // the trailing selection NSTextView keeps around after a click.
+        if suppressed { return [] }
         var indices: Set<Int> = []
         let caretLocation = selectionRange.location
         for (index, token) in tokens.enumerated() {

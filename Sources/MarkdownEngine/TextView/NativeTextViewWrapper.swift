@@ -146,7 +146,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.configuration = configuration
         textView.insertionPointColor = configuration.theme.bodyText
         textView.isEditable = isEditable
-        textView.isSelectable = isEditable
+        textView.isSelectable = true
         textView.isRichText = true
         let initialState = WikiLinkService.makeDisplayState(from: text)
         textView.string = initialState.display
@@ -270,7 +270,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             (nsView.documentView as? NativeTextView)?.configuration.services = configuration.services
         }
         textView.isEditable = isEditable
-        textView.isSelectable = isEditable
+        textView.isSelectable = true
         textView.insertionPointColor = isEditable ? context.coordinator.configuration.theme.bodyText : .clear
         let fontChanged = (context.coordinator.fontName != fontName) || (context.coordinator.fontSize != fontSize)
         if let pendingInlineReplacement {

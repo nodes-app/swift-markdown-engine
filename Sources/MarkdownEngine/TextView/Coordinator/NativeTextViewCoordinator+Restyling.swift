@@ -46,11 +46,15 @@ extension NativeTextViewCoordinator {
         textView.textStorage?.setAttributes(baseAttrs, range: fullRange)
 
         let tokens = parsedDocument(for: displayText).tokens
-        let caretLocation = textView.selectedRange().location
+        // Hide the caret position from styling when the view is read-only,
+        // otherwise clicks reveal raw token syntax (#, `, etc.) even though
+        // the user can't edit.
+        let caretLocation = textView.isEditable ? textView.selectedRange().location : -1
         activeTokenIndices = MarkdownDetection.computeActiveTokenIndices(
             selectionRange: textView.selectedRange(),
             tokens: tokens,
-            in: nsDisplay
+            in: nsDisplay,
+            suppressed: !textView.isEditable
         )
 
         let ranges = MarkdownStyler.styleAttributes(
@@ -102,7 +106,7 @@ extension NativeTextViewCoordinator {
             paragraphCandidates: paragraphCandidates,
             baseFont: baseFont,
             paragraphStyle: paragraphStyle,
-            caretLocation: textView.selectedRange().location,
+            caretLocation: textView.isEditable ? textView.selectedRange().location : -1,
             activeTokenIndices: activeTokenIndices,
             wikiLinkIDProvider: { [weak self] range in
                 self?.wikiLinkID(for: range)
@@ -217,7 +221,8 @@ extension NativeTextViewCoordinator {
         activeTokenIndices = MarkdownDetection.computeActiveTokenIndices(
             selectionRange: textView.selectedRange(),
             tokens: tokens,
-            in: nsText
+            in: nsText,
+            suppressed: !textView.isEditable
         )
         restyleTextView(textView, paragraphCandidates: paragraphs, tokens: tokens)
     }

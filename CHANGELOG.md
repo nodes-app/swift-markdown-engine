@@ -26,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `MarkdownEditorConfiguration.safeAreaInsets`.
 
 ### Fixed
+- `NativeTextViewWrapper` keeps links clickable and text selectable
+  when `isEditable: false`; `isSelectable` is no longer coupled to
+  `isEditable`. (#31)
 - `NativeTextViewWrapper` now applies its initial styling pass even when
   the bound text starts at its final value (e.g. supplied as a SwiftUI
   `@State` initializer). Previously the editor would render the raw
