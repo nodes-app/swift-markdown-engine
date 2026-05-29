@@ -1,0 +1,6 @@
+heading @0+4 content=2+2 markers=[0+1,1+1] «# H1»
+heading @5+5 content=8+2 markers=[5+2,7+1] «## H2»
+heading @11+6 content=15+2 markers=[11+3,14+1] «### H3»
+heading @18+7 content=23+2 markers=[18+4,22+1] «#### H4»
+heading @26+8 content=32+2 markers=[26+5,31+1] «##### H5»
+heading @35+9 content=42+2 markers=[35+6,41+1] «###### H6»

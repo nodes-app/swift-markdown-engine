@@ -75,7 +75,7 @@ enum MarkdownDetection {
 
     /// Slow: parses tokens each call
     static func isInsideCodeBlock(range: NSRange, in text: String) -> Bool {
-        let codeTokens = MarkdownTokenizer.parseTokens(in: text).filter { $0.kind == .codeBlock || $0.kind == .inlineCode }
+        let codeTokens = MarkdownTokenizer.parseTokensViaAST(in: text).filter { $0.kind == .codeBlock || $0.kind == .inlineCode }
         return isInsideCodeBlock(range: range, codeTokens: codeTokens)
     }
 
@@ -105,7 +105,7 @@ enum MarkdownDetection {
     // MARK: - LaTeX Detection
 
     static func isInsideLatex(location: Int, in text: String) -> Bool {
-        let tokens = MarkdownTokenizer.parseTokens(in: text)
+        let tokens = MarkdownTokenizer.parseTokensViaAST(in: text)
         let latexTokens = tokens.filter { $0.kind == .inlineLatex || $0.kind == .blockLatex }
         return isInsideLatex(location: location, latexTokens: latexTokens)
     }
@@ -121,7 +121,7 @@ enum MarkdownDetection {
     }
 
     static func isInsideInlineLatex(range: NSRange, in text: String) -> Bool {
-        let latexTokens = MarkdownTokenizer.parseTokens(in: text).filter { $0.kind == .inlineLatex }
+        let latexTokens = MarkdownTokenizer.parseTokensViaAST(in: text).filter { $0.kind == .inlineLatex }
         return isInsideInlineLatex(range: range, latexTokens: latexTokens)
     }
 

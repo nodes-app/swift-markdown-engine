@@ -1,0 +1,4 @@
+boldItalic @0+15 content=3+9 markers=[0+3,12+3] «***strong em***»
+italic @20+16 content=21+14 markers=[20+1,35+1] «*a**b** and **a*»
+bold @22+5 content=24+1 markers=[22+2,25+2] «**b**»
+bold @32+7 content=34+3 markers=[32+2,37+2] «**a*b**»

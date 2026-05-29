@@ -87,7 +87,7 @@ enum MarkdownStyler {
         scopedRanges: [NSRange]? = nil,
         configuration: MarkdownEditorConfiguration = .default
     ) -> [StyledRange] {
-        let tokens = precomputedTokens ?? MarkdownTokenizer.parseTokens(in: text)
+        let tokens = precomputedTokens ?? MarkdownTokenizer.parseTokensViaAST(in: text)
         let nsText = text as NSString
         let fullRange = NSRange(location: 0, length: nsText.length)
         let codeTokens = tokens.filter { $0.kind == .codeBlock || $0.kind == .inlineCode }

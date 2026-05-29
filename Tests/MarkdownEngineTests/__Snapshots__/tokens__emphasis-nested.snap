@@ -1,0 +1,4 @@
+bold @0+29 content=2+25 markers=[0+2,27+2] «**bold with *italic* inside**»
+italic @12+8 content=13+6 markers=[12+1,19+1] «*italic*»
+italic @34+29 content=35+27 markers=[34+1,62+1] «*italic with **bold** inside*»
+bold @47+8 content=49+4 markers=[47+2,53+2] «**bold**»

@@ -1,0 +1,3 @@
+blockquote @0+16 content=2+14 markers=[0+2] «> quote line one»
+blockquote @17+15 content=20+12 markers=[17+3] «>> nested quote»
+blockquote @33+8 content=37+4 markers=[33+4] «>>> deep»

@@ -1,0 +1,2 @@
+italic @1+3 content=2+1 markers=[1+1,3+1] «*b*»
+bold @13+7 content=15+3 markers=[13+2,18+2] «**bar**»

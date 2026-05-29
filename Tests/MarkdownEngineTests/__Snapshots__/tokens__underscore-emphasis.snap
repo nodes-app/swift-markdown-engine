@@ -1,0 +1,3 @@
+italic @0+8 content=1+6 markers=[0+1,7+1] «_italic_»
+bold @9+8 content=11+4 markers=[9+2,15+2] «__bold__»
+boldItalic @18+16 content=21+10 markers=[18+3,31+3] «___bolditalic___»

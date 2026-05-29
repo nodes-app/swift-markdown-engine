@@ -135,7 +135,7 @@ extension NativeTextViewCoordinator {
             return cachedParsedDocument
         }
 
-        let tokens = MarkdownTokenizer.parseTokens(in: text)
+        let tokens = MarkdownTokenizer.parseTokensViaAST(in: text)
         var codeTokens: [MarkdownToken] = []
         var latexTokens: [MarkdownToken] = []
         var blockLatexTokens: [MarkdownToken] = []

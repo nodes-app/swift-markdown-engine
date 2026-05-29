@@ -1,0 +1,2 @@
+inlineLatex @5+11 content=6+9 markers=[5+1,15+1] «$a + b = c$»
+inlineLatex @45+3 content=46+1 markers=[45+1,47+1] «$x$»

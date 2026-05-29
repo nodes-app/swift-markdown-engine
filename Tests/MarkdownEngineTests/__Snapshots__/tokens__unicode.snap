@@ -1,0 +1,4 @@
+bold @0+6 content=2+2 markers=[0+2,4+2] «**粗体**»
+italic @11+4 content=12+2 markers=[11+1,14+1] «_斜体_»
+inlineCode @20+4 content=21+2 markers=[20+1,23+1] «`代码`»
+italic @37+8 content=38+6 markers=[37+1,44+1] «*italic*»

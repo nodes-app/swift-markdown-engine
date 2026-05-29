@@ -1,0 +1,17 @@
+heading @0+23 content=2+21 markers=[0+1,1+1] «# Title with *emphasis*»
+italic @13+10 content=14+8 markers=[13+1,22+1] «*emphasis*»
+bold @42+8 content=44+4 markers=[42+2,48+2] «**bold**»
+italic @52+12 content=53+10 markers=[52+1,63+1] «_underscore_»
+inlineCode @66+6 content=67+4 markers=[66+1,71+1] «`code`»
+link @76+31 content=77+4 markers=[76+1,81+1,82+1,106+1] «[link](https://example.com/(p))»
+wikiLink @111+20 content=113+8 markers=[111+2,129+2] «[[WikiNote|abc-123]]»
+imageEmbed @136+10 content=139+5 markers=[136+3,144+2] «![[Embed]]»
+inlineLatex @164+10 content=165+8 markers=[164+1,173+1] «$E = mc^2$»
+blockquote @177+44 content=179+42 markers=[177+2] «> A blockquote with ~~strike~~ and **bol…»
+strikethrough @197+10 content=199+6 markers=[197+2,205+2] «~~strike~~»
+bold @212+8 content=214+4 markers=[212+2,218+2] «**bold**»
+codeBlock @223+48 content=233+35 markers=[223+10,268+3] «```python⏎# not a heading⏎x = "*not ital…»
+inlineCode @289+6 content=290+4 markers=[289+1,294+1] «`code`»
+table @308+41 content=308+41 markers=[] «| col | val |⏎| --- | --- |⏎| a   | $5  …»
+backslashEscape @372+2 content=373+1 markers=[372+1] «\*»
+backslashEscape @381+2 content=382+1 markers=[381+1] «\*»
