@@ -62,12 +62,16 @@ extension MarkdownStyler {
                 continue
             }
 
+            // See renderTable: resolve table colors under the text view's real appearance.
+            let renderAppearance = ctx.layoutBridge?.firstTextContainer?.textView?.effectiveAppearance
+                ?? NSApp.effectiveAppearance
             let image = renderTable(
                 parsed,
                 baseFont: ctx.baseFont,
                 theme: ctx.configuration.theme,
                 codeBackgroundColor: ctx.codeBackgroundColor,
-                latex: ctx.services.latex
+                latex: ctx.services.latex,
+                appearance: renderAppearance
             )
             let imageBounds = CGRect(x: 0, y: 0, width: image.size.width, height: image.size.height)
             // Wide tables → scrollable mode (NSScrollView overlay); narrow → collapsed.
@@ -281,13 +285,24 @@ extension MarkdownStyler {
         baseFont: NSFont,
         theme: MarkdownEditorTheme,
         codeBackgroundColor: NSColor,
-        latex: any LatexRenderer
+        latex: any LatexRenderer,
+        appearance: NSAppearance
     ) -> NSImage {
         let columnCount = table.alignments.count
         let cellHPadding: CGFloat = 12
         let cellVPadding: CGFloat = 6
         let borderWidth: CGFloat = 1
-        let borderColor = theme.mutedText.withAlphaComponent(0.5)
+        // Resolve under the editor's real appearance: `.withAlphaComponent()` on a
+        // dynamic color freezes it to whatever NSAppearance.current happens to be,
+        // which made the lines invisible in light mode (frozen to the dark value).
+        func mutedColor(alpha: CGFloat) -> NSColor {
+            var resolved: NSColor = theme.mutedText
+            appearance.performAsCurrentDrawingAppearance {
+                resolved = theme.mutedText.usingColorSpace(.sRGB) ?? theme.mutedText
+            }
+            return resolved.withAlphaComponent(alpha)
+        }
+        let borderColor = mutedColor(alpha: 0.5)
         let baseLineHeight: CGFloat = ceil(baseFont.ascender - baseFont.descender + baseFont.leading)
         let minColumnContentWidth: CGFloat = 16
 
@@ -349,7 +364,7 @@ extension MarkdownStyler {
         }
 
         let alignments = table.alignments
-        let headerFill = theme.mutedText.withAlphaComponent(0.08)
+        let headerFill = mutedColor(alpha: 0.08)
 
         // Use a flipped image so AppKit drawing routines (NSBezierPath,
         // NSAttributedString.draw) handle the y-flip themselves; manually

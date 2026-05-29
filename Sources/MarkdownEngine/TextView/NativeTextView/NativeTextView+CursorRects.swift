@@ -2,18 +2,9 @@
 //  NativeTextView+CursorRects.swift
 //  MarkdownEngine
 //
-//  Read-only cursor handling.
+//  Created by Luca Chen on 27.05.26.
 //
-//  Since PR #31/#32 the text view is always `isSelectable = true` (so links
-//  stay clickable when `isEditable == false`). A selectable NSTextView shows
-//  the I-beam over its text — unwanted in read-only previews.
-//
-//  NSTextView installs a tracking area with .mouseMoved/.cursorUpdate and sets
-//  the I-beam from its mouseMoved handler. Its .cursorUpdate path does not
-//  reach an override, and plain cursor rects lose to that runtime cursor set
-//  (confirmed via logging). So we override mouseMoved/mouseEntered and set the
-//  cursor ourselves AFTER super — arrow over text, pointing hand over links.
-//  In edit mode we leave NSTextView's I-beam untouched.
+//  Read-only cursor handling: arrow over text, pointing hand over links.
 //
 
 import AppKit
