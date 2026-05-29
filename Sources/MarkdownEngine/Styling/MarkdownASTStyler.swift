@@ -44,10 +44,12 @@ enum MarkdownASTStyler {
             config: configuration,
             wikiLinkID: wikiLinkIDProvider
         )
+        let blocks = DocumentAST.parse(text)
         var attrs: [StyledRange] = []
-        for block in DocumentAST.parse(text) {
+        for block in blocks {
             styleBlock(block, font: baseFont, ctx: ctx, into: &attrs)
         }
+        shrinkInactiveMarkers(in: blocks, ctx: ctx, into: &attrs)
         return attrs
     }
 
@@ -176,6 +178,62 @@ enum MarkdownASTStyler {
         }
         if !contentAttrs.isEmpty { attrs.append((name, contentAttrs)) }
         for marker in markers { attrs.append((marker, [.foregroundColor: ctx.theme.mutedText])) }
+    }
+
+    // MARK: - Marker shrinking (hide syntax of inactive nodes)
+
+    /// Inactive nodes' markers collapse to a tiny, negatively-kerned font so the
+    /// `**`/`#`/`>`/`[]()` syntax visually disappears. Code spans, inline code,
+    /// inline LaTeX and image embeds manage their own markers and are skipped.
+    private static func shrinkInactiveMarkers(in blocks: [BlockNode], ctx: Ctx, into attrs: inout [StyledRange]) {
+        for block in blocks {
+            switch block {
+            case .heading(_, let range, let markers, let inlines):
+                if !ctx.isActive(range) { shrink(markers, ctx: ctx, into: &attrs) }
+                shrinkInlineMarkers(inlines, ctx: ctx, into: &attrs)
+            case .paragraph(_, let inlines), .blockquote(_, let inlines):
+                shrinkInlineMarkers(inlines, ctx: ctx, into: &attrs)
+            case .codeBlock, .blockLatex, .table, .thematicBreak, .blank:
+                break
+            }
+        }
+    }
+
+    private static func shrinkInlineMarkers(_ nodes: [InlineNode], ctx: Ctx, into attrs: inout [StyledRange]) {
+        for node in nodes {
+            switch node {
+            case .emphasis(_, let range, let markers, let children):
+                if !ctx.isActive(range) { shrink(markers, ctx: ctx, into: &attrs) }
+                shrinkInlineMarkers(children, ctx: ctx, into: &attrs)
+            case .strikethrough(let range, let markers, let children):
+                if !ctx.isActive(range) { shrink(markers, ctx: ctx, into: &attrs) }
+                shrinkInlineMarkers(children, ctx: ctx, into: &attrs)
+            case .link(let range, _, _, let markers, let children):
+                if !ctx.isActive(range) {
+                    shrink(markers, ctx: ctx, into: &attrs)
+                    if markers.count >= 4 {   // also hide the "(url)" run
+                        let hide = NSRange(location: markers[2].location,
+                                           length: NSMaxRange(markers[3]) - markers[2].location)
+                        attrs.append((hide, [.font: ctx.inlineMarkerFont, .foregroundColor: NSColor.clear]))
+                    }
+                }
+                shrinkInlineMarkers(children, ctx: ctx, into: &attrs)
+            case .wikiLink(let range, _, _, let markers):
+                if !ctx.isActive(range) { shrink(markers, ctx: ctx, into: &attrs) }
+            case .image(let range, _, _, let markers):
+                if !ctx.isActive(range) { shrink(markers, ctx: ctx, into: &attrs) }
+            case .escape(let range, _, let marker):
+                if !ctx.isActive(range) { shrink([marker], ctx: ctx, into: &attrs) }
+            case .text, .code, .imageEmbed, .inlineLatex:
+                break   // own marker handling / not shrunk
+            }
+        }
+    }
+
+    private static func shrink(_ markers: [NSRange], ctx: Ctx, into attrs: inout [StyledRange]) {
+        for marker in markers {
+            attrs.append((marker, [.font: ctx.inlineMarkerFont, .kern: -ctx.inlineMarkerFont.pointSize]))
+        }
     }
 
     // MARK: - Helpers
