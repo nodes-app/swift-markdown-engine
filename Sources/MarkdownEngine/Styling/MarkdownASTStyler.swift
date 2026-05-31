@@ -481,7 +481,8 @@ enum MarkdownASTStyler {
         var contentAttrs: [NSAttributedString.Key: Any] = [:]
         if let linkID { contentAttrs[.wikiLinkID] = linkID }
         if !ctx.isActive(range) {
-            let exists = ctx.config.services.wikiLinks.resolve(displayName: nodeName, range: name)?.exists ?? false
+            // Resolve by the stable UUID when present 
+            let exists = ctx.config.services.wikiLinks.resolve(displayName: linkID ?? nodeName, range: name)?.exists ?? false
             if exists {
                 contentAttrs[.link] = linkID ?? nodeName
             } else {

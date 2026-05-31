@@ -265,12 +265,16 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         // value-based comparison; full equality isn't required because the
         // embedder is the source of truth.
         let newImageFingerprint = configuration.services.images.fingerprint()
-        if newImageFingerprint != context.coordinator.lastImageFingerprint {
+        let newWikiFingerprint = configuration.services.wikiLinks.fingerprint()
+        let imageChanged = newImageFingerprint != context.coordinator.lastImageFingerprint
+        let wikiChanged = newWikiFingerprint != context.coordinator.lastWikiFingerprint
+        if imageChanged || wikiChanged {
             context.coordinator.lastImageFingerprint = newImageFingerprint
+            context.coordinator.lastWikiFingerprint = newWikiFingerprint
             context.coordinator.configuration.services = configuration.services
             (nsView.documentView as? NativeTextView)?.configuration.services = configuration.services
-            // Invalidate layout so custom image attributes re-measure.
-            if let tlm = textView.textLayoutManager {
+            // Only an image change needs a layout re-measure; a wiki-link rename is style-only.
+            if imageChanged, let tlm = textView.textLayoutManager {
                 tlm.invalidateLayout(for: tlm.documentRange)
             }
             // Restyle live tv content — full rebuild would clobber paste-fresh embeds when `text` binding hasn't caught up.
@@ -363,6 +367,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         coordinator.documentId = documentId
         coordinator.configuration = configuration
         coordinator.lastImageFingerprint = configuration.services.images.fingerprint()
+        coordinator.lastWikiFingerprint = configuration.services.wikiLinks.fingerprint()
         coordinator.onCodeBlockSelectionChange = onCodeBlockSelectionChange
         coordinator.userPrefersContinuousSpellChecking = configuration.spellChecking.continuousSpellChecking
         coordinator.userPrefersGrammarChecking = configuration.spellChecking.grammarChecking

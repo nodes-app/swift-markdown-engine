@@ -31,6 +31,15 @@ public protocol WikiLinkResolver: Sendable {
     ///   - range: The character range the link occupies in the document.
     /// - Returns: A resolution if the link points at known content; `nil` otherwise.
     func resolve(displayName: String, range: NSRange) -> WikiLinkResolution?
+
+    /// Coarse fingerprint of the resolver's known targets (typically IDs + names).
+    /// A different value triggers a wiki-link restyle, so a rename refreshes link
+    /// clickability/display without waiting for the next keystroke.
+    func fingerprint() -> AnyHashable
+}
+
+public extension WikiLinkResolver {
+    func fingerprint() -> AnyHashable { 0 }
 }
 
 /// The result of resolving a wiki-link.

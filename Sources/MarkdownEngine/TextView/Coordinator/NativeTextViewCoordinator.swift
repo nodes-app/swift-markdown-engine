@@ -36,6 +36,7 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     /// fingerprint" check — re-reading the same object twice always
     /// returns the current value, regardless of when state changed.
     var lastImageFingerprint: AnyHashable?
+    var lastWikiFingerprint: AnyHashable?
     private var busObservers: [NSObjectProtocol] = []
     private var registeredAppearanceObserverName: Notification.Name?
     weak var textView: NSTextView?
