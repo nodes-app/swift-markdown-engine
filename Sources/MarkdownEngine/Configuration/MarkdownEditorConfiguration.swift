@@ -29,6 +29,10 @@ public struct MarkdownEditorConfiguration: Sendable {
     public var theme: MarkdownEditorTheme
     public var services: MarkdownEditorServices
     public var markers: MarkerStyle
+    /// Whether markdown markers (`#`, `**`, list bullets, `---`, link/image
+    /// syntax, …) are revealed near the caret only (live preview), always shown,
+    /// or always concealed. See ``MarkerVisibility``.
+    public var markerVisibility: MarkerVisibility
     public var codeBlock: CodeBlockStyle
     public var inlineCode: InlineCodeStyle
     public var lists: ListStyle
@@ -50,6 +54,7 @@ public struct MarkdownEditorConfiguration: Sendable {
         theme: MarkdownEditorTheme = .default,
         services: MarkdownEditorServices = .default,
         markers: MarkerStyle = .default,
+        markerVisibility: MarkerVisibility = .livePreview,
         codeBlock: CodeBlockStyle = .default,
         inlineCode: InlineCodeStyle = .default,
         lists: ListStyle = .default,
@@ -70,6 +75,7 @@ public struct MarkdownEditorConfiguration: Sendable {
         self.theme = theme
         self.services = services
         self.markers = markers
+        self.markerVisibility = markerVisibility
         self.codeBlock = codeBlock
         self.inlineCode = inlineCode
         self.lists = lists
@@ -89,6 +95,22 @@ public struct MarkdownEditorConfiguration: Sendable {
     }
 
     public static let `default` = MarkdownEditorConfiguration()
+}
+
+// MARK: - Marker visibility
+
+/// Controls when markdown markers are concealed. The engine's normal behavior is
+/// `.livePreview`: markers are concealed except on the range the caret is in (so
+/// you edit raw syntax on the active line, read styled text elsewhere). The two
+/// other modes override that caret-gating uniformly:
+///
+/// - ``livePreview`` — markers revealed only near the caret (default).
+/// - ``allVisible`` — markers always shown, regardless of caret (source-like).
+/// - ``allHidden`` — markers always concealed, even on the caret's line.
+public enum MarkerVisibility: Sendable {
+    case livePreview
+    case allVisible
+    case allHidden
 }
 
 // MARK: - Spell checking

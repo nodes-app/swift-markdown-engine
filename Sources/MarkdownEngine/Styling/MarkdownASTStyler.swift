@@ -134,7 +134,7 @@ enum MarkdownASTStyler {
             hr.length -= 1
         }
         guard hr.length > 0,
-              !(NSLocationInRange(ctx.caret, hr) || ctx.caret == NSMaxRange(hr)) else { return }
+              !ctx.reveal(NSLocationInRange(ctx.caret, hr) || ctx.caret == NSMaxRange(hr)) else { return }
         attrs.append((hr, [.foregroundColor: NSColor.clear, .thematicBreak: true]))
         attrs.append((hr, [.paragraphStyle: NSMutableParagraphStyle()]))
     }
@@ -178,7 +178,7 @@ enum MarkdownASTStyler {
         // 2. Marker decoration (suppressed while the caret edits the syntax).
         if let box = item.checkbox {
             let syntax = NSRange(location: item.marker.location, length: NSMaxRange(box) - item.marker.location)
-            if NSLocationInRange(ctx.caret, syntax) || ctx.caret == NSMaxRange(box) { return }
+            if ctx.reveal(NSLocationInRange(ctx.caret, syntax) || ctx.caret == NSMaxRange(box)) { return }
             let spacer = NSRange(location: NSMaxRange(item.marker), length: box.location - NSMaxRange(item.marker))
             attrs.append((item.marker, [.foregroundColor: NSColor.clear]))
             if spacer.length > 0 { attrs.append((spacer, [.foregroundColor: NSColor.clear])) }
@@ -192,7 +192,7 @@ enum MarkdownASTStyler {
         } else if !item.ordered {
             let syntax = NSRange(location: item.marker.location,
                                  length: item.contentRange.location - item.marker.location)
-            if NSLocationInRange(ctx.caret, syntax) { return }
+            if ctx.reveal(NSLocationInRange(ctx.caret, syntax)) { return }
             attrs.append((item.marker, [.bulletMarker: true, .foregroundColor: NSColor.clear]))
         }
     }
@@ -243,12 +243,32 @@ enum MarkdownASTStyler {
         let wikiLinkID: (NSRange) -> String?
         let scopedRanges: [NSRange]?
 
-        /// Active (syntax revealed) when the caret is inside the range or at its end (minus a newline).
+        /// Active (syntax revealed) when the caret is inside the range or at its
+        /// end (minus a newline) — then overridden uniformly by the configured
+        /// ``MarkerVisibility`` mode.
         func isActive(_ range: NSRange) -> Bool {
+            reveal(caretReveals(range))
+        }
+
+        /// The unmodified live-preview test: caret inside the range or at its end.
+        private func caretReveals(_ range: NSRange) -> Bool {
             if NSLocationInRange(caret, range) { return true }
             guard range.length > 0, caret == NSMaxRange(range) else { return false }
             let last = ns.character(at: caret - 1)
             return last != 0x0A && last != 0x0D
+        }
+
+        /// Apply the marker-visibility mode to a live-preview reveal decision.
+        /// `.allVisible` reveals everything, `.allHidden` reveals nothing, and
+        /// `.livePreview` defers to the caret-proximity test. Every marker
+        /// concealment pass routes its caret check through here (or `isActive`)
+        /// so one flag flips them all.
+        func reveal(_ livePreviewDecision: @autoclosure () -> Bool) -> Bool {
+            switch config.markerVisibility {
+            case .allVisible: return true
+            case .allHidden:  return false
+            case .livePreview: return livePreviewDecision()
+            }
         }
         var theme: MarkdownEditorTheme { config.theme }
         var text: String { ns as String }
