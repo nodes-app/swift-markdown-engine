@@ -86,6 +86,18 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var userPrefersGrammarChecking: Bool = true
     var userPrefersAutomaticSpellingCorrection: Bool = true
 
+    // MARK: - Spell check rendering state
+    //
+    // TextKit 2's NSTextView does not auto-paint `.spellingState` underlines
+    // for custom NSTextLayoutFragment subclasses (which we use for code-block
+    // backgrounds, LaTeX images, etc.). To restore visible spell marks we
+    // drive NSSpellChecker ourselves on text changes (debounced) and have
+    // `MarkdownTextLayoutFragment.draw(at:in:)` paint dotted-red underlines
+    // for ranges in `spellMisspelledRanges`.
+    var spellMisspelledRanges: [NSRange] = []
+    var spellCheckWorkItem: DispatchWorkItem?
+    lazy var spellCheckDocumentTag: Int = NSSpellChecker.uniqueSpellDocumentTag()
+
     /// Fires after the user toggles a spell/grammar/auto-correction menu item.
     /// Embedders persist the returned policy (e.g. to `UserDefaults`) and feed
     /// it back via ``MarkdownEditorConfiguration/spellChecking`` on next launch.

@@ -26,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `MarkdownEditorConfiguration.safeAreaInsets`.
 
 ### Fixed
+- Spell-check underlines no longer appear on fenced code blocks or
+  inline `` `code` `` spans. The styler now applies `.spellingState: 0`
+  to those ranges, matching the existing convention used for links,
+  wiki-links, LaTeX, and tables. Prose is unaffected.
 - `NativeTextViewWrapper` keeps links clickable and text selectable
   when `isEditable: false`; `isSelectable` is no longer coupled to
   `isEditable`. (#31)

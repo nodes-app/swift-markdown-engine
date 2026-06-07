@@ -156,6 +156,10 @@ extension NativeTextViewCoordinator {
             (scrollView as? ClampedScrollView)?.clampToInsets()
         }
         previousActiveTokenIndices = activeTokenIndices
+        // Re-run the full-document spell scan after the user pauses
+        // typing. The debounce inside `scheduleSpellCheck` keeps this
+        // cheap during continuous edits.
+        scheduleSpellCheck(textView: tv)
     }
 
     public func textViewDidChangeSelection(_ notification: Notification) {

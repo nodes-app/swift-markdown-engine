@@ -218,6 +218,9 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             context.coordinator.refreshActiveLinkCaretRect()
             context.coordinator.updateCodeBlockSelection(textView: textView)
         }
+        // Kick off the initial spell scan after the first runloop turn so
+        // styling has settled and the text view is in the window hierarchy.
+        context.coordinator.scheduleSpellCheck(textView: textView)
         return scrollView
     }
 
@@ -353,6 +356,9 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.onInlineSelectionChange = onInlineSelectionChange
         context.coordinator.onCodeBlockSelectionChange = onCodeBlockSelectionChange
         context.coordinator.didInitialFormatting = true
+        // Re-scan when the document text/identity has actually changed.
+        // (Font-only changes don't need a fresh spell pass.)
+        context.coordinator.scheduleSpellCheck(textView: textView)
     }
 
     public func makeCoordinator() -> Coordinator {

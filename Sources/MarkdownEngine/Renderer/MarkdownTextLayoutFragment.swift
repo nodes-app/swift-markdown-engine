@@ -94,6 +94,12 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
 
         // 6. Blockquote bars (left gutter, behind nothing — text is indented)
         drawBlockquoteBars(at: point, in: context)
+
+        // 7. Spell-check underlines. NSTextView's automatic underline pass
+        //    does not fire for our custom NSTextLayoutFragment subclass on
+        //    TextKit 2, so the coordinator drives NSSpellChecker manually
+        //    and stashes ranges for us to paint here.
+        drawSpellMisspellings(at: point, in: context)
     }
 
     // MARK: - Helpers
@@ -586,6 +592,65 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
                 let symbolConfig = sizeConfig.applying(colorConfig)
                 let symbol = baseSymbol.withSymbolConfiguration(symbolConfig) ?? baseSymbol
                 symbol.draw(in: iconRect)
+            }
+        }
+    }
+
+    // MARK: - Spell-check underlines
+
+    /// Paints a dotted red underline beneath every misspelled range that
+    /// intersects this fragment. Walks `coordinator.spellMisspelledRanges`
+    /// (populated by `runSpellCheckPass`) and resolves per-line bounds via
+    /// `textLineFragments`, so wrapped misspellings get separate underlines
+    /// per line.
+    private func drawSpellMisspellings(at point: CGPoint, in context: CGContext) {
+        guard let fragRange = fragmentNSRange, fragRange.length > 0 else { return }
+        guard let textView = textLayoutManager?.textContainer?.textView as? NativeTextView,
+              let coordinator = textView.delegate as? NativeTextViewCoordinator,
+              !coordinator.spellMisspelledRanges.isEmpty else { return }
+
+        let fragStart = fragRange.location
+        let fragEnd = NSMaxRange(fragRange)
+
+        context.saveGState()
+        defer { context.restoreGState() }
+        context.setStrokeColor(NSColor.systemRed.withAlphaComponent(0.7).cgColor)
+        context.setLineWidth(1.5)
+        context.setLineDash(phase: 0, lengths: [1.5, 1.5])
+        context.setLineCap(.round)
+
+        for misspelled in coordinator.spellMisspelledRanges {
+            let mStart = misspelled.location
+            let mEnd = NSMaxRange(misspelled)
+            if mEnd <= fragStart || mStart >= fragEnd { continue }
+
+            let docLo = max(mStart, fragStart)
+            let docHi = min(mEnd, fragEnd)
+            let localLo = docLo - fragStart
+            let localHi = docHi - fragStart
+
+            for lineFragment in textLineFragments {
+                let lr = lineFragment.characterRange
+                let lrLo = lr.location
+                let lrHi = lr.location + lr.length
+                let lo = max(localLo, lrLo)
+                let hi = min(localHi, lrHi)
+                guard lo < hi else { continue }
+
+                let startPos = lineFragment.locationForCharacter(at: lo)
+                let endPos = lineFragment.locationForCharacter(at: hi)
+                let tb = lineFragment.typographicBounds
+                let x1 = point.x + tb.origin.x + startPos.x
+                let x2 = point.x + tb.origin.x + endPos.x
+                guard x2 > x1 else { continue }
+                // Place the underline ~1pt inside the bottom of the line
+                // box, which lines up with where AppKit normally paints
+                // misspelling marks.
+                let y = point.y + tb.origin.y + tb.height - 1.5
+
+                context.move(to: CGPoint(x: x1, y: y))
+                context.addLine(to: CGPoint(x: x2, y: y))
+                context.strokePath()
             }
         }
     }
