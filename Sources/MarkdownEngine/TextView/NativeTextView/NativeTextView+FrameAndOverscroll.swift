@@ -100,12 +100,40 @@ extension NativeTextView {
         return max(measuredHeight, minimumContentHeight)
     }
 
+    /// Fixed reading-column width = wrap width + horizontal insets on both sides.
+    var readingColumnWidth: CGFloat {
+        (configuration.readingWidth ?? 0) + configuration.textInsets.horizontal * 2
+    }
+
     func applyManagedFrameSize(width: CGFloat) {
         let contentHeight = max(ceil(baseContentHeight + activeBottomOverscroll), 0)
         let scrollViewHeight = enclosingScrollView?.contentView.bounds.height ?? 0
+        let height = max(contentHeight, scrollViewHeight)
+
+        // Reading column: size the full-width container + the fixed-width column, centered by position.
+        if configuration.readingWidth != nil, let container = superview as? ReadingColumnContainerView {
+            let clipWidth = enclosingScrollView?.contentView.bounds.width ?? width
+            let containerSize = NSSize(width: max(clipWidth, 0), height: height)
+            if abs(container.frame.size.width - containerSize.width) > 0.5
+                || abs(container.frame.size.height - containerSize.height) > 0.5 {
+                container.setFrameSize(containerSize)
+            }
+            let columnSize = NSSize(width: readingColumnWidth, height: height)
+            if abs(columnSize.width - frame.size.width) > 0.5 || abs(columnSize.height - frame.size.height) > 0.5 {
+                isApplyingManagedFrameSize = true
+                super.setFrameSize(columnSize)
+                isApplyingManagedFrameSize = false
+            }
+            let originX = floor(max(0, (containerSize.width - columnSize.width) / 2))
+            if abs(frame.origin.x - originX) > 0.5 || abs(frame.origin.y) > 0.5 {
+                setFrameOrigin(NSPoint(x: originX, y: 0))
+            }
+            return
+        }
+
         let targetSize = NSSize(
             width: max(width, 0),
-            height: max(contentHeight, scrollViewHeight)
+            height: height
         )
         guard abs(targetSize.width - frame.size.width) > 0.5 || abs(targetSize.height - frame.size.height) > 0.5 else {
             return
@@ -113,6 +141,23 @@ extension NativeTextView {
         isApplyingManagedFrameSize = true
         super.setFrameSize(targetSize)
         isApplyingManagedFrameSize = false
+    }
+
+    /// Re-center the column by moving its X (not resizing it) so it stays smooth during live resize.
+    func centerReadingColumn(forClipWidth clipWidth: CGFloat) {
+        guard configuration.readingWidth != nil,
+              let container = superview as? ReadingColumnContainerView else { return }
+        if abs(container.frame.size.width - clipWidth) > 0.5 {
+            var f = container.frame
+            f.size.width = max(clipWidth, 0)
+            container.frame = f
+        }
+        let originX = floor(max(0, (clipWidth - readingColumnWidth) / 2))
+        let delta = originX - frame.origin.x
+        if abs(delta) > 0.5 {
+            setFrameOrigin(NSPoint(x: originX, y: frame.origin.y))
+            repositionWideTableOverlaysForWidthChange(insetDelta: delta)
+        }
     }
 
     override func setFrameSize(_ newSize: NSSize) {
@@ -141,7 +186,9 @@ extension NativeTextView {
         if widthChanged {
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
-                self.restyleWideTableParagraphsForWidthChange()
+                if self.configuration.readingWidth == nil {
+                    self.restyleWideTableParagraphsForWidthChange()
+                }
                 self.updateWideTableOverlays()
             }
         }

@@ -44,6 +44,8 @@ public struct MarkdownEditorConfiguration: Sendable {
     public var safeAreaInsets: SafeAreaInsets
     public var scrollers: ScrollersPolicy
     public var textInsets: TextInsets
+    /// Centered reading-column width; wide tables break out to full width. nil = full width (default).
+    public var readingWidth: CGFloat?
     public var spellChecking: SpellCheckingPolicy
 
     public init(
@@ -65,6 +67,7 @@ public struct MarkdownEditorConfiguration: Sendable {
         safeAreaInsets: SafeAreaInsets = .default,
         scrollers: ScrollersPolicy = .default,
         textInsets: TextInsets = .default,
+        readingWidth: CGFloat? = nil,
         spellChecking: SpellCheckingPolicy = .default
     ) {
         self.theme = theme
@@ -85,6 +88,7 @@ public struct MarkdownEditorConfiguration: Sendable {
         self.safeAreaInsets = safeAreaInsets
         self.scrollers = scrollers
         self.textInsets = textInsets
+        self.readingWidth = readingWidth
         self.spellChecking = spellChecking
     }
 

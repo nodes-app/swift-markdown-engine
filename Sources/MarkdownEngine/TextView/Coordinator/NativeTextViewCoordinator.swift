@@ -266,8 +266,9 @@ extension NSTextView {
               let textContainer = textContainer else { return nil }
         var boundingRect = bridge.boundingRect(forCharacterRange: range, in: textContainer)
         let containerOrigin = textContainerOrigin
-        boundingRect.origin.x += containerOrigin.x
-        boundingRect.origin.y += containerOrigin.y
+        // Add the column's offset within its container (0 when the text view is the documentView).
+        boundingRect.origin.x += containerOrigin.x + frame.origin.x
+        boundingRect.origin.y += containerOrigin.y + frame.origin.y
         if let scrollView = enclosingScrollView {
             let contentOffset = scrollView.contentView.bounds.origin
             boundingRect.origin.x -= contentOffset.x

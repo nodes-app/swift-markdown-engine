@@ -9,6 +9,24 @@
 
 import AppKit
 
+// MARK: - Faint scroller
+
+/// Legacy scroller with a fainter knob.
+final class SubtleScroller: NSScroller {
+    override func drawKnobSlot(in slot: NSRect, highlight: Bool) {
+        // Transparent track — only the knob is drawn.
+    }
+
+    override func drawKnob() {
+        let knob = rect(for: .knob)
+        guard knob.width > 1, knob.height > 1 else { return }
+        let thickness: CGFloat = 5
+        let pill = knob.insetBy(dx: 2, dy: max(0, (knob.height - thickness) / 2))
+        NSColor.secondaryLabelColor.withAlphaComponent(0.3).setFill()   // ← faintness; tweak here
+        NSBezierPath(roundedRect: pill, xRadius: pill.height / 2, yRadius: pill.height / 2).fill()
+    }
+}
+
 // MARK: - Overlay view
 
 final class WideTableOverlay: NSScrollView {
@@ -21,6 +39,14 @@ final class WideTableOverlay: NSScrollView {
 
     /// Weak parent ref for offset persistence + caret forwarding.
     weak var ownerTextView: NativeTextView?
+
+    /// Table's left-edge offset (breakout: text-column left); scrollable space.
+    var leftContentInset: CGFloat = 0 {
+        didSet {
+            guard abs(contentInsets.left - leftContentInset) > 0.5 else { return }
+            contentInsets = NSEdgeInsets(top: 0, left: leftContentInset, bottom: 0, right: 0)
+        }
+    }
 
     private let tableImageView: WideTableImageView
 
@@ -37,14 +63,20 @@ final class WideTableOverlay: NSScrollView {
 
         hasHorizontalScroller = true
         hasVerticalScroller = false
-        autohidesScrollers = false
+        // Auto-hide: only show the scroller when the table actually overflows.
+        autohidesScrollers = true
         borderType = .noBorder
         drawsBackground = false
+        // Legacy scroller, fainter knob (see SubtleScroller).
         scrollerStyle = .legacy
+        let subtleScroller = SubtleScroller()
+        subtleScroller.scrollerStyle = .legacy
+        horizontalScroller = subtleScroller
         horizontalScrollElasticity = .allowed
         verticalScrollElasticity = .none
         usesPredominantAxisScrolling = true
         horizontalScroller?.controlSize = .small
+        automaticallyAdjustsContentInsets = false
 
         documentView = tableImageView
         tableImageView.ownerOverlay = self
@@ -84,6 +116,7 @@ final class WideTableOverlay: NSScrollView {
             nextResponder?.scrollWheel(with: event)
         }
     }
+
 
     /// Swap the rendered image after a restyle regenerated it.
     func updateImage(_ image: NSImage) {
@@ -134,8 +167,37 @@ final class WideTableImageView: NSImageView {
 
 extension NativeTextView {
 
-    /// Walk storage; create / position / destroy overlays to match attrs.
+    /// Coalesce overlay updates to one per runloop tick (resize fires bursts); first run is sync to avoid a load flash.
     func updateWideTableOverlays() {
+        if wideTableOverlays.isEmpty {
+            performWideTableOverlayUpdate()
+            return
+        }
+        if pendingWideTableOverlayUpdate { return }
+        pendingWideTableOverlayUpdate = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.pendingWideTableOverlayUpdate = false
+            self.performWideTableOverlayUpdate()
+        }
+    }
+
+    /// Cheap per-frame overlay reposition on width change (no layout) — keeps tables glued to the text during resize.
+    func repositionWideTableOverlaysForWidthChange(insetDelta: CGFloat) {
+        guard configuration.readingWidth != nil, !wideTableOverlays.isEmpty else { return }
+        // Overlays live in the full-width reading-column container; use its width.
+        let viewWidth = (superview ?? self).bounds.width
+        for (_, overlay) in wideTableOverlays {
+            var f = overlay.frame
+            f.origin.x = 0
+            f.size.width = viewWidth
+            overlay.frame = f
+            overlay.leftContentInset = max(0, overlay.leftContentInset + insetDelta)
+        }
+    }
+
+    /// Walk storage; create / position / destroy overlays to match attrs.
+    func performWideTableOverlayUpdate() {
         guard let storage = textStorage,
               let bridge = layoutBridge,
               let container = bridge.firstTextContainer,
@@ -147,6 +209,11 @@ extension NativeTextView {
 
         let containerWidth = container.size.width
         guard containerWidth.isFinite, containerWidth > 0 else { return }
+        // Breakout: tables span full width, flush with the text column's left.
+        let breakout = configuration.readingWidth != nil
+        // Breakout host: the full-width reading-column container, else the text view itself.
+        let host: NSView = breakout ? (superview ?? self) : self
+        let viewWidth = host.bounds.width
 
         var seenSourceIDs: Set<Int> = []
         let fullRange = NSRange(location: 0, length: storage.length)
@@ -180,20 +247,22 @@ extension NativeTextView {
             guard !anchorRect.isEmpty else { return }
 
             let totalHeight = (storage.attribute(.scrollableBlockTotalHeight, at: attrRange.location, effectiveRange: nil) as? CGFloat) ?? image.size.height
-            let overlayFrame = NSRect(
-                x: textContainerOrigin.x + anchorRect.minX,
-                y: textContainerOrigin.y + anchorRect.minY,
-                width: containerWidth,
-                height: totalHeight
-            )
+            // In breakout the overlay lives in the container, so add the column's X offset.
+            let columnLeft = (breakout ? frame.origin.x : 0) + textContainerOrigin.x + anchorRect.minX
+            let overlayFrame: NSRect = breakout
+                ? NSRect(x: 0, y: textContainerOrigin.y + anchorRect.minY, width: viewWidth, height: totalHeight)
+                : NSRect(x: columnLeft, y: textContainerOrigin.y + anchorRect.minY, width: containerWidth, height: totalHeight)
+            // Breakout: table starts at the text column's left edge; the left margin is scrollable space.
+            let leftContentInset: CGFloat = breakout ? max(0, columnLeft) : 0
 
             if let existing = wideTableOverlays[sourceID] {
                 if !existing.frame.equalTo(overlayFrame) {
                     // Invalidate both old + new region so the vacated area redraws.
-                    self.setNeedsDisplay(existing.frame)
+                    host.setNeedsDisplay(existing.frame)
                     existing.frame = overlayFrame
-                    self.setNeedsDisplay(overlayFrame)
+                    host.setNeedsDisplay(overlayFrame)
                 }
+                existing.leftContentInset = leftContentInset
                 existing.updateImage(image)
                 existing.anchorTextLocation = attrRange.location
             } else {
@@ -202,7 +271,8 @@ extension NativeTextView {
                     ownerTextView: self, anchorLocation: attrRange.location
                 )
                 overlay.frame = overlayFrame
-                addSubview(overlay)
+                overlay.leftContentInset = leftContentInset
+                host.addSubview(overlay)
                 wideTableOverlays[sourceID] = overlay
                 let savedOffset = tableHorizontalScrollOffsets[sourceID] ?? 0
                 if savedOffset > 0 { overlay.horizontalOffset = savedOffset }
@@ -210,7 +280,7 @@ extension NativeTextView {
         }
 
         for (sourceID, overlay) in wideTableOverlays where !seenSourceIDs.contains(sourceID) {
-            self.setNeedsDisplay(overlay.frame)
+            host.setNeedsDisplay(overlay.frame)
             overlay.removeFromSuperview()
             wideTableOverlays.removeValue(forKey: sourceID)
         }

@@ -41,7 +41,7 @@ extension NativeTextViewCoordinator {
             guard !activeTokenIndices.contains(originalIndex) else { return nil }
             guard var boundingRect = textView.viewRect(forCharacterRange: token.range, using: layoutBridge) else { return nil }
 
-            boundingRect.origin.x = textView.textContainerOrigin.x - scrollOffset.x
+            boundingRect.origin.x = textView.frame.origin.x + textView.textContainerOrigin.x - scrollOffset.x
             boundingRect.size.width = textContainer.containerSize.width
 
             return CodeBlockSelection(

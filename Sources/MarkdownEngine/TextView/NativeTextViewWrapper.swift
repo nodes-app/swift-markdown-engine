@@ -129,7 +129,13 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             fatalError("NSTextView did not create a TextKit 2 stack on this OS version")
         }
         textContainer.lineFragmentPadding = 0
-        textContainer.widthTracksTextView = true
+        if let readingWidth = configuration.readingWidth {
+            // Fix wrap width at readingWidth so text never re-wraps on resize; only the column's position moves.
+            textContainer.widthTracksTextView = false
+            textContainer.size = NSSize(width: readingWidth, height: .greatestFiniteMagnitude)
+        } else {
+            textContainer.widthTracksTextView = true
+        }
         textView.textContainerInset = NSSize(
             width: configuration.textInsets.horizontal,
             height: configuration.textInsets.vertical
@@ -154,7 +160,8 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         textView.isVerticallyResizable = true
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.postsFrameChangedNotifications = true
-        textView.autoresizingMask = [.width]
+        // Reading column: fixed-width column centered by the container; else fills the scroll view.
+        textView.autoresizingMask = configuration.readingWidth != nil ? [] : [.width]
         textView.backgroundColor = .clear
         let font = NSFont(name: fontName, size: fontSize) ?? NSFont.systemFont(ofSize: fontSize)
         textView.font = font
@@ -175,7 +182,15 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.layoutBridge = bridge
         textView.layoutBridge = bridge
 
-        scrollView.documentView = textView
+        if configuration.readingWidth != nil {
+            // Full-width container centers a fixed-width text column; wide tables break out into the margins.
+            let container = ReadingColumnContainerView()
+            container.textView = textView
+            container.addSubview(textView)
+            scrollView.documentView = container
+        } else {
+            scrollView.documentView = textView
+        }
         // Force full-document layout at init so paragraph heights are known
         // upfront; otherwise TextKit 2 viewport layout causes scroll drift.
         textLayoutManager.ensureLayout(for: textLayoutManager.documentRange)
@@ -191,6 +206,10 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.onCodeBlockSelectionChange = onCodeBlockSelectionChange
 
         textView.recalcOverscroll(for: scrollView)
+        // Initial reading-column centering; the resize observer below handles later changes.
+        if configuration.readingWidth != nil {
+            textView.centerReadingColumn(forClipWidth: scrollView.contentView.bounds.width)
+        }
         scrollView.contentView.postsBoundsChangedNotifications = true
         var lastObservedViewportWidth = scrollView.contentView.bounds.width
         NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: scrollView.contentView, queue: nil) { _ in
@@ -198,6 +217,10 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             let newWidth = scrollView.contentView.bounds.width
             if abs(newWidth - lastObservedViewportWidth) > 0.5 {
                 lastObservedViewportWidth = newWidth
+                // Re-center the column by position (no redraw) so it stays smooth during live resize.
+                if configuration.readingWidth != nil {
+                    textView.centerReadingColumn(forClipWidth: newWidth)
+                }
                 context.coordinator.didEnsureLayoutForCurrentDocument = false
                 context.coordinator.updateCodeBlockSelection(textView: textView)
             }
@@ -222,7 +245,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     }
 
     public func updateNSView(_ nsView: NSScrollView, context: Context) {
-        guard let textView = nsView.documentView as? NSTextView else { return }
+        guard let textView = nsView.nativeTextView else { return }
 
         let isNodeSwitch = context.coordinator.documentId != documentId
         let wtActive: Bool = {
@@ -241,9 +264,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             return
         }
 
-        if let bottomTextView = nsView.documentView as? NativeTextView {
-            bottomTextView.onPasteImage = onPasteImage
-        }
+        textView.onPasteImage = onPasteImage
         if nsView.hasVerticalScroller != configuration.scrollers.hasVerticalScroller {
             nsView.hasVerticalScroller = configuration.scrollers.hasVerticalScroller
         }
@@ -253,11 +274,13 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         if nsView.autohidesScrollers != configuration.scrollers.autohidesScrollers {
             nsView.autohidesScrollers = configuration.scrollers.autohidesScrollers
         }
+        // Reading column centers by POSITION (container subview), so the text inset is constant.
         let desiredTextInset = NSSize(
             width: configuration.textInsets.horizontal,
             height: configuration.textInsets.vertical
         )
-        if textView.textContainerInset != desiredTextInset {
+        if abs(textView.textContainerInset.width - desiredTextInset.width) > 0.5
+            || abs(textView.textContainerInset.height - desiredTextInset.height) > 0.5 {
             textView.textContainerInset = desiredTextInset
         }
         // Refresh services/theme when the embedder hands us a new configuration
@@ -272,7 +295,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             context.coordinator.lastImageFingerprint = newImageFingerprint
             context.coordinator.lastWikiFingerprint = newWikiFingerprint
             context.coordinator.configuration.services = configuration.services
-            (nsView.documentView as? NativeTextView)?.configuration.services = configuration.services
+            textView.configuration.services = configuration.services
             // Only an image change needs a layout re-measure; a wiki-link rename is style-only.
             if imageChanged, let tlm = textView.textLayoutManager {
                 tlm.invalidateLayout(for: tlm.documentRange)
@@ -314,7 +337,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             context.coordinator.didEnsureLayoutForCurrentDocument = false
             context.coordinator.resetImageEmbedState()
             // Drop old document's wide-table overlays synchronously.
-            (textView as? NativeTextView)?.removeAllWideTableOverlays()
+            textView.removeAllWideTableOverlays()
             // Reset scroll to top of content so the previous file's scrollY
             // doesn't leak into a (potentially shorter) new file.
             nsView.contentView.scroll(to: NSPoint(x: 0, y: -nsView.contentInsets.top))
@@ -324,11 +347,9 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
 
         let font = NSFont(name: fontName, size: fontSize) ?? NSFont.systemFont(ofSize: fontSize)
         textView.font = font
-        if let tv = nsView.documentView as? NativeTextView {
-            tv.baseFont = font
-            tv.recalcOverscroll(for: nsView)
-            (nsView as? ClampedScrollView)?.clampToInsets()
-        }
+        textView.baseFont = font
+        textView.recalcOverscroll(for: nsView)
+        (nsView as? ClampedScrollView)?.clampToInsets()
 
         // Sync coordinator's font fields BEFORE the rebuild so the helper
         // reads the current values from the View struct.
@@ -339,14 +360,10 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             from: text,
             invalidateLayout: isNodeSwitch
         )
-        if let tv = nsView.documentView as? NativeTextView {
-            tv.recalcOverscroll(for: nsView)
-            (nsView as? ClampedScrollView)?.clampToInsets()
-        }
+        textView.recalcOverscroll(for: nsView)
+        (nsView as? ClampedScrollView)?.clampToInsets()
         DispatchQueue.main.async {
-            if let tv = nsView.documentView as? NativeTextView {
-                context.coordinator.updateCodeBlockSelection(textView: tv)
-            }
+            context.coordinator.updateCodeBlockSelection(textView: textView)
         }
 
         context.coordinator.onCaretRectChange = onCaretRectChange
