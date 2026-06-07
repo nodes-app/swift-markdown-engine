@@ -273,10 +273,11 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
     }
 
     private func isCodeBlockBackgroundColor(_ color: NSColor) -> Bool {
-        let highlighter = (textLayoutManager?.textContainer?.textView as? NativeTextView)?
-            .configuration.services.syntaxHighlighter
-            ?? PlainTextSyntaxHighlighter()
-        let currentBg = highlighter.backgroundColor()
+        // Fenced code blocks carry the theme's code-block background (full-width
+        // fill); inline `code` carries a different fill, so this distinguishes
+        // them (inline code must NOT get the gutter-to-gutter fill).
+        let currentBg = (textLayoutManager?.textContainer?.textView as? NativeTextView)?
+            .configuration.theme.codeBlockBackground ?? MarkdownEditorTheme.default.codeBlockBackground
         guard let colorRGB = color.usingColorSpace(.deviceRGB),
               let currentBgRGB = currentBg.usingColorSpace(.deviceRGB) else { return false }
         let tolerance: CGFloat = 0.03
@@ -461,13 +462,13 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
         let theme = (textLayoutManager?.textContainer?.textView as? NativeTextView)?
             .configuration.theme ?? .default
         let indentPerLevel = Self.blockquoteIndentPerLevel
-        let barWidth = Self.blockquoteBarWidth
+        let barWidth = theme.blockquoteBarWidth
 
         NSGraphicsContext.saveGraphicsState()
         defer { NSGraphicsContext.restoreGraphicsState() }
         let nsContext = NSGraphicsContext(cgContext: context, flipped: true)
         NSGraphicsContext.current = nsContext
-        theme.mutedText.withAlphaComponent(0.5).setFill()
+        theme.blockquoteBar.setFill()
 
         let fragLocation = fragmentNSRange?.location ?? 0
         let leftEdge = point.x - layoutFragmentFrame.origin.x

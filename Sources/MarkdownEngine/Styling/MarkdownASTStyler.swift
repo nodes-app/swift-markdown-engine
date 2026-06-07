@@ -385,7 +385,7 @@ enum MarkdownASTStyler {
     private static func styleCodeBlock(range: NSRange, ctx: Ctx, into attrs: inout [StyledRange]) {
         let parts = codeBlockParts(range, ctx.ns)
         attrs.append((parts.codeRange, [
-            .font: ctx.codeFont, .backgroundColor: ctx.codeBackground, .paragraphStyle: ctx.codeParagraphStyle,
+            .font: ctx.codeFont, .backgroundColor: ctx.theme.codeBlockBackground, .paragraphStyle: ctx.codeParagraphStyle,
         ]))
         let codeContent = ctx.ns.substring(with: parts.content)
         if !codeContent.isEmpty,
@@ -450,7 +450,7 @@ enum MarkdownASTStyler {
                 styleInlines(children, font: font, ctx: ctx, into: &attrs)
 
             case .code(let range, let contentRange):
-                attrs.append((contentRange, [.font: ctx.codeFont, .backgroundColor: ctx.codeBackground]))
+                attrs.append((contentRange, [.font: ctx.codeFont, .backgroundColor: ctx.theme.inlineCodeBackground]))
                 let markerAttrs: [NSAttributedString.Key: Any] = ctx.isActive(range)
                     ? [.foregroundColor: ctx.theme.mutedText, .font: ctx.codeFont]
                     : [.foregroundColor: ctx.theme.mutedText.withAlphaComponent(ctx.config.markers.inlineCodeMarkerAlpha),

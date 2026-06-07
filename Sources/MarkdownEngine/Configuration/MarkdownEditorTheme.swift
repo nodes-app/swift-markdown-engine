@@ -74,6 +74,17 @@ public struct MarkdownEditorTheme: Sendable {
     /// (e.g. completed task list items, horizontal rules).
     public var strikethroughColor: NSColor
 
+    // MARK: Code + blockquote surfaces
+
+    /// Fill behind fenced code blocks (full-width).
+    public var codeBlockBackground: NSColor
+    /// Fill behind inline `code` spans.
+    public var inlineCodeBackground: NSColor
+    /// Color of the vertical bar drawn in the left gutter of blockquote lines.
+    public var blockquoteBar: NSColor
+    /// Width (points) of each blockquote bar.
+    public var blockquoteBarWidth: CGFloat
+
     // MARK: Init
 
     public init(
@@ -87,7 +98,11 @@ public struct MarkdownEditorTheme: Sendable {
         findCurrentMatchHighlight: NSColor = .systemYellow,
         latexLightModeText: NSColor = .black,
         latexDarkModeText: NSColor = .white,
-        strikethroughColor: NSColor = .labelColor
+        strikethroughColor: NSColor = .labelColor,
+        codeBlockBackground: NSColor = NSColor(white: 0.5, alpha: 0.12),
+        inlineCodeBackground: NSColor = NSColor(white: 0.5, alpha: 0.16),
+        blockquoteBar: NSColor = .tertiaryLabelColor,
+        blockquoteBarWidth: CGFloat = 3
     ) {
         self.bodyText = bodyText
         self.mutedText = mutedText
@@ -100,6 +115,10 @@ public struct MarkdownEditorTheme: Sendable {
         self.latexLightModeText = latexLightModeText
         self.latexDarkModeText = latexDarkModeText
         self.strikethroughColor = strikethroughColor
+        self.codeBlockBackground = codeBlockBackground
+        self.inlineCodeBackground = inlineCodeBackground
+        self.blockquoteBar = blockquoteBar
+        self.blockquoteBarWidth = blockquoteBarWidth
     }
 
     /// System-native palette built from `NSColor` dynamic system colors.
