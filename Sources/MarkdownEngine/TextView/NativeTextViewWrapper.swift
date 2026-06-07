@@ -283,6 +283,22 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
                 context.coordinator.restyleParagraphs([fullRange], in: textView)
             }
         }
+        // Live restyle when a whole-document style field changes: the marker
+        // visibility mode (show/hide all markers) or the theme (a palette/dark-mode
+        // switch). Both reattribute the entire document, so adopt the new
+        // configuration and rebuild styling in place — cursor/scroll are preserved.
+        let markerVisibilityChanged =
+            configuration.markerVisibility != context.coordinator.configuration.markerVisibility
+        let themeChanged =
+            configuration.theme.bodyText != context.coordinator.configuration.theme.bodyText
+            || configuration.theme.headingMarker != context.coordinator.configuration.theme.headingMarker
+            || configuration.theme.mutedText != context.coordinator.configuration.theme.mutedText
+        if markerVisibilityChanged || themeChanged {
+            context.coordinator.configuration = configuration
+            (nsView.documentView as? NativeTextView)?.configuration = configuration
+            context.coordinator.rebuildTextStorageAndStyle(textView, from: text, invalidateLayout: true)
+        }
+
         textView.isEditable = isEditable
         textView.isSelectable = true
         textView.insertionPointColor = isEditable ? context.coordinator.configuration.theme.bodyText : .clear

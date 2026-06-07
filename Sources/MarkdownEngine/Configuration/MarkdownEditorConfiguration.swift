@@ -107,7 +107,7 @@ public struct MarkdownEditorConfiguration: Sendable {
 /// - ``livePreview`` — markers revealed only near the caret (default).
 /// - ``allVisible`` — markers always shown, regardless of caret (source-like).
 /// - ``allHidden`` — markers always concealed, even on the caret's line.
-public enum MarkerVisibility: Sendable {
+public enum MarkerVisibility: Sendable, Equatable {
     case livePreview
     case allVisible
     case allHidden
