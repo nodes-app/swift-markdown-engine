@@ -39,6 +39,9 @@ public final class SwiftMathBridge: LatexRenderer, @unchecked Sendable {
     }
 
     private let singleLetterPaddingBottom: CGFloat
+    /// Multiplier applied to the engine-supplied font size — lets a host render
+    /// formulas larger than the surrounding text (e.g. 2.0 for 2×).
+    private let fontScale: CGFloat
     private var cache: [CacheKey: CacheEntry] = [:]
     private let cacheLock = NSLock()
 
@@ -47,8 +50,9 @@ public final class SwiftMathBridge: LatexRenderer, @unchecked Sendable {
     ///   clipping; matches the engine's
     ///   ``MarkdownEditorConfiguration/blockLatex/singleLetterPaddingBottom``
     ///   default. Override to match a customized configuration.
-    public init(singleLetterPaddingBottom: CGFloat = 1.0) {
+    public init(singleLetterPaddingBottom: CGFloat = 1.0, fontScale: CGFloat = 1.0) {
         self.singleLetterPaddingBottom = singleLetterPaddingBottom
+        self.fontScale = fontScale
     }
 
     /// Clears the rendered-image cache. Call after appearance flips if
@@ -68,6 +72,8 @@ public final class SwiftMathBridge: LatexRenderer, @unchecked Sendable {
     ) -> LatexRenderResult? {
         let normalizedLatex = latex.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedLatex.isEmpty else { return nil }
+
+        let fontSize = fontSize * fontScale
 
         let appearance = NSApp.keyWindow?.effectiveAppearance ?? NSApp.effectiveAppearance
         let isDarkMode = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
