@@ -54,6 +54,10 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     /// setSelectedRange, which re-fires textViewDidChangeSelection — without this
     /// the zero-length caret stays "newly active" and recurses to a stack overflow.
     var isPlacingRevealCaret: Bool = false
+    /// True while applying a selection pushed in from an embedder (e.g. a sibling
+    /// pane over the same document). We must NOT re-emit `onSelectionChange` for it,
+    /// or two synced editors echo selections back and forth on every keystroke.
+    var isApplyingExternalSelection: Bool = false
     /// One-shot guard so `updateCodeBlockSelection` only forces a full-document layout once per document.
     var didEnsureLayoutForCurrentDocument: Bool = false
     var lastSyncedText: String

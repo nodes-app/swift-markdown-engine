@@ -162,7 +162,10 @@ extension NativeTextViewCoordinator {
         guard let tv = notification.object as? NSTextView else { return }
         if isWritingToolsActive { return }
         let selRange = tv.selectedRange()
-        onSelectionChange?(selRange)
+        // Only the focused editor pushes its selection out. An unfocused sibling
+        // (synced over the same document) merely RECEIVES it, so it must never
+        // re-emit — otherwise text edits ping-pong selections between the panes.
+        if hasKeyboardFocus(tv), !isApplyingExternalSelection { onSelectionChange?(selRange) }
         let currentEventType = NSApp.currentEvent?.type
         // Mouse-/Wake-Fokus auf Link: kein Preview, erst Navigation. Gilt für alle Nicht-Key-Events.
         if currentEventType != .keyDown,

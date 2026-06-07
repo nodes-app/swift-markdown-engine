@@ -324,7 +324,11 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         if let selection,
            NSMaxRange(selection) <= (textView.string as NSString).length,
            selection != textView.selectedRange() {
+            // Suppress the change echo so a synced sibling pane doesn't ping-pong
+            // selections back on every keystroke.
+            context.coordinator.isApplyingExternalSelection = true
             textView.setSelectedRange(selection)
+            context.coordinator.isApplyingExternalSelection = false
             textView.scrollRangeToVisible(selection)
         }
 
