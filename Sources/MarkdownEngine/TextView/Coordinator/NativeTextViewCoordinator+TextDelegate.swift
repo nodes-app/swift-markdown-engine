@@ -119,7 +119,7 @@ extension NativeTextViewCoordinator {
             selectionRange: safeSelRange,
             tokens: tokens,
             in: fullText,
-            suppressed: !tv.isEditable
+            suppressed: !tv.isEditable || !hasKeyboardFocus(tv)
         )
         filterImageEmbedActiveTokens(parsed: parsed, text: fullText, selectionLocation: safeSelRange.location)
         updateAutocorrectSettings(
@@ -184,7 +184,7 @@ extension NativeTextViewCoordinator {
         let nsText = tv.string as NSString
 
         let prevActive = activeTokenIndices
-        activeTokenIndices = MarkdownDetection.computeActiveTokenIndices(selectionRange: selRange, tokens: tokens, in: nsText, suppressed: !tv.isEditable)
+        activeTokenIndices = MarkdownDetection.computeActiveTokenIndices(selectionRange: selRange, tokens: tokens, in: nsText, suppressed: !tv.isEditable || !hasKeyboardFocus(tv))
         filterImageEmbedActiveTokens(parsed: parsed, text: nsText, selectionLocation: selRange.location)
         updateAutocorrectSettings(
             tv,
@@ -361,7 +361,7 @@ extension NativeTextViewCoordinator {
             selectionRange: textView.selectedRange(),
             tokens: parsed.tokens,
             in: textView.string as NSString,
-            suppressed: !textView.isEditable
+            suppressed: !textView.isEditable || !hasKeyboardFocus(textView)
         )
 
         // Block LaTeX auto-wrap: insert newlines to keep $$ on its own line

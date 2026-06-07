@@ -56,6 +56,27 @@ final class NativeTextView: NSTextView {
     /// Persisted horizontal scroll offset per wide table; survives restyles.
     var tableHorizontalScrollOffsets: [Int: CGFloat] = [:]
 
+    // Caret-driven "reveal raw source" (LaTeX/images/tables) is gated on keyboard
+    // focus, so re-style when this view gains or loses first-responder status —
+    // otherwise a pane that lost focus stays stuck showing raw source.
+    override func becomeFirstResponder() -> Bool {
+        let ok = super.becomeFirstResponder()
+        if ok { notifyFocusChanged() }
+        return ok
+    }
+    override func resignFirstResponder() -> Bool {
+        let ok = super.resignFirstResponder()
+        if ok { notifyFocusChanged() }
+        return ok
+    }
+    private func notifyFocusChanged() {
+        // Defer so the window's firstResponder has settled before we read it.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let coord = self.delegate as? NativeTextViewCoordinator else { return }
+            coord.refreshFocusDependentStyling(self)
+        }
+    }
+
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         // Forward appearance changes to the embedder's highlighter via its registered notification.

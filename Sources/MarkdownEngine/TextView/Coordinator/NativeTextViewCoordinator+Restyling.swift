@@ -13,6 +13,28 @@
 import AppKit
 
 extension NativeTextViewCoordinator {
+    /// True when `tv` currently holds the window's keyboard focus. Caret-driven
+    /// "reveal raw source" (LaTeX / images / tables) is gated on this so that only
+    /// the focused editor reveals — a sibling pane that merely shares the synced
+    /// selection keeps rendering instead of flipping to raw source.
+    func hasKeyboardFocus(_ tv: NSTextView) -> Bool {
+        tv.window?.firstResponder === tv
+    }
+
+    /// Re-style the paragraphs whose rendering depends on focus (LaTeX / images /
+    /// tables reveal raw source only in the focused editor). Called when this view
+    /// gains or loses first-responder status. `restyleParagraphs` recomputes
+    /// `activeTokenIndices` with the (now-current) focus state.
+    func refreshFocusDependentStyling(_ tv: NSTextView) {
+        guard tv.textLayoutManager != nil else { return }
+        let nsText = tv.string as NSString
+        let parsed = parsedDocument(for: tv.string)
+        let paras = (parsed.latexTokens + parsed.blockLatexTokens + parsed.imageEmbedTokens)
+            .map { nsText.paragraphRange(for: $0.range) }
+        guard !paras.isEmpty else { return }
+        restyleParagraphs(paras, in: tv)
+    }
+
     /// Atomically rebuilds contents + base attrs + Markdown styling from storage-form `text`.
     func rebuildTextStorageAndStyle(
         _ textView: NSTextView,
@@ -53,7 +75,7 @@ extension NativeTextViewCoordinator {
             selectionRange: textView.selectedRange(),
             tokens: tokens,
             in: nsDisplay,
-            suppressed: !textView.isEditable
+            suppressed: !textView.isEditable || !hasKeyboardFocus(textView)
         )
 
         let ranges = MarkdownStyler.styleAttributes(
@@ -234,7 +256,7 @@ extension NativeTextViewCoordinator {
             selectionRange: textView.selectedRange(),
             tokens: tokens,
             in: nsText,
-            suppressed: !textView.isEditable
+            suppressed: !textView.isEditable || !hasKeyboardFocus(textView)
         )
         restyleTextView(textView, paragraphCandidates: paragraphs, tokens: tokens)
     }
