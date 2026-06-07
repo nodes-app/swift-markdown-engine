@@ -62,6 +62,12 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     /// Fires whenever the caret rect inside an active wiki-link changes,
     /// so embedders can position a follow-the-caret UI.
     public var onCaretRectChange: ((CGRect) -> Void)?
+    /// Fires on every selection change with the selected character range, so an
+    /// embedder can mirror the selection into another editor over the same text.
+    public var onSelectionChange: ((NSRange) -> Void)?
+    /// Externally-driven selection: set to mirror another editor's selection here.
+    /// Applied (and scrolled into view) when it differs from the current one.
+    public var selection: NSRange?
     /// Fires when the caret enters or leaves a `[[Name]]` or `![[…]]`
     /// token. `nil` means the caret is no longer inside such a token.
     public var onInlineSelectionChange: ((InlineSelectionState?) -> Void)?
@@ -85,6 +91,8 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         onPasteImage: ((NSPasteboard) -> String?)? = nil,
         onLinkClick: ((String) -> Void)? = nil,
         onCaretRectChange: ((CGRect) -> Void)? = nil,
+        onSelectionChange: ((NSRange) -> Void)? = nil,
+        selection: NSRange? = nil,
         onInlineSelectionChange: ((InlineSelectionState?) -> Void)? = nil,
         onCodeBlockSelectionChange: (([CodeBlockSelection]) -> Void)? = nil,
         onSpellCheckingPolicyChanged: ((SpellCheckingPolicy) -> Void)? = nil
@@ -100,6 +108,8 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         self.onPasteImage = onPasteImage
         self.onLinkClick = onLinkClick
         self.onCaretRectChange = onCaretRectChange
+        self.onSelectionChange = onSelectionChange
+        self.selection = selection
         self.onInlineSelectionChange = onInlineSelectionChange
         self.onCodeBlockSelectionChange = onCodeBlockSelectionChange
         self.onSpellCheckingPolicyChanged = onSpellCheckingPolicyChanged
@@ -187,6 +197,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.textView = textView
         context.coordinator.wikiLinkMetadata = initialState.metadata
         context.coordinator.onCaretRectChange = onCaretRectChange
+        context.coordinator.onSelectionChange = onSelectionChange
         context.coordinator.onInlineSelectionChange = onInlineSelectionChange
         context.coordinator.onCodeBlockSelectionChange = onCodeBlockSelectionChange
 
@@ -302,6 +313,18 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         textView.isEditable = isEditable
         textView.isSelectable = true
         textView.insertionPointColor = isEditable ? context.coordinator.configuration.theme.bodyText : .clear
+
+        // Mirror an externally-driven selection (e.g. the sibling pane over the
+        // same text). Done before the no-op early returns below, since a
+        // selection-only change carries no text/font delta. Guarded so it doesn't
+        // fight a selection the user is making in THIS view.
+        if let selection,
+           NSMaxRange(selection) <= (textView.string as NSString).length,
+           selection != textView.selectedRange() {
+            textView.setSelectedRange(selection)
+            textView.scrollRangeToVisible(selection)
+        }
+
         let fontChanged = (context.coordinator.fontName != fontName) || (context.coordinator.fontSize != fontSize)
         if let pendingInlineReplacement {
             if pendingInlineReplacement.documentId == documentId,
@@ -366,6 +389,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         }
 
         context.coordinator.onCaretRectChange = onCaretRectChange
+        context.coordinator.onSelectionChange = onSelectionChange
         context.coordinator.onInlineSelectionChange = onInlineSelectionChange
         context.coordinator.onCodeBlockSelectionChange = onCodeBlockSelectionChange
         context.coordinator.didInitialFormatting = true

@@ -44,6 +44,9 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var layoutDelegate: MarkdownLayoutManagerDelegate?
     var onLinkClick: ((String) -> Void)?
     var onCaretRectChange: ((CGRect) -> Void)?
+    /// Fires on every selection change with the textView's selected character
+    /// range — lets an embedder mirror the selection into another editor.
+    var onSelectionChange: ((NSRange) -> Void)?
     var onInlineSelectionChange: ((InlineSelectionState?) -> Void)?
     var onCodeBlockSelectionChange: (([CodeBlockSelection]) -> Void)?
     var didInitialFormatting: Bool = false

@@ -162,6 +162,7 @@ extension NativeTextViewCoordinator {
         guard let tv = notification.object as? NSTextView else { return }
         if isWritingToolsActive { return }
         let selRange = tv.selectedRange()
+        onSelectionChange?(selRange)
         let currentEventType = NSApp.currentEvent?.type
         // Mouse-/Wake-Fokus auf Link: kein Preview, erst Navigation. Gilt für alle Nicht-Key-Events.
         if currentEventType != .keyDown,
