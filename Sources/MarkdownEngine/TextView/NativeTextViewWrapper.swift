@@ -300,6 +300,8 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         // configuration and rebuild styling in place — cursor/scroll are preserved.
         let markerVisibilityChanged =
             configuration.markerVisibility != context.coordinator.configuration.markerVisibility
+            || configuration.applyFormatting != context.coordinator.configuration.applyFormatting
+            || configuration.renderLatex != context.coordinator.configuration.renderLatex
         let themeChanged =
             configuration.theme.bodyText != context.coordinator.configuration.theme.bodyText
             || configuration.theme.headingMarker != context.coordinator.configuration.theme.headingMarker

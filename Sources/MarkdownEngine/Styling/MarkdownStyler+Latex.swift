@@ -19,7 +19,8 @@ extension MarkdownStyler {
         let blockLatexTokens = ctx.tokens.enumerated().filter { $0.element.kind == .blockLatex }
         for (idx, token) in blockLatexTokens {
             if MarkdownDetection.isInsideCodeBlock(range: token.range, codeTokens: ctx.codeTokens) { continue }
-            let isActive = ctx.activeTokenIndices.contains(idx)
+            // Rendering disabled → always show raw source (styled like a code block).
+            let isActive = ctx.activeTokenIndices.contains(idx) || !ctx.configuration.renderLatex
             let rawLatexContent = ctx.nsText.substring(with: token.contentRange)
             let latexContent = rawLatexContent.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -99,7 +100,7 @@ extension MarkdownStyler {
 
             attrs.append((token.range, [NSAttributedString.Key.spellingState: 0]))
 
-            let isActive = ctx.activeTokenIndices.contains(idx)
+            let isActive = ctx.activeTokenIndices.contains(idx) || !ctx.configuration.renderLatex
             let latexContent = ctx.nsText.substring(with: token.contentRange)
             let latexFontSize = HeadingHelpers.latexFontSize(for: token, tokens: ctx.tokens, baseFont: ctx.baseFont)
                 * ctx.configuration.inlineLatex.fontScale

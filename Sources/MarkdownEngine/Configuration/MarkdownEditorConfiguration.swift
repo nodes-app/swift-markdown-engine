@@ -33,6 +33,15 @@ public struct MarkdownEditorConfiguration: Sendable {
     /// syntax, …) are revealed near the caret only (live preview), always shown,
     /// or always concealed. See ``MarkerVisibility``.
     public var markerVisibility: MarkerVisibility
+    /// When `false`, the document renders as plain text (base font + color only) —
+    /// no heading sizes, bold, lists, code-block fills, etc. A host can turn this
+    /// off to show raw source.
+    public var applyFormatting: Bool
+    /// When `false`, `$…$` / `$$…$$` stay as raw source instead of rendering math.
+    public var renderLatex: Bool
+    /// Reserved: when `false`, mermaid code fences stay raw (rendering is a host
+    /// concern, but the flag travels with the configuration for consistency).
+    public var renderMermaid: Bool
     public var codeBlock: CodeBlockStyle
     public var inlineCode: InlineCodeStyle
     public var lists: ListStyle
@@ -55,6 +64,9 @@ public struct MarkdownEditorConfiguration: Sendable {
         services: MarkdownEditorServices = .default,
         markers: MarkerStyle = .default,
         markerVisibility: MarkerVisibility = .livePreview,
+        applyFormatting: Bool = true,
+        renderLatex: Bool = true,
+        renderMermaid: Bool = true,
         codeBlock: CodeBlockStyle = .default,
         inlineCode: InlineCodeStyle = .default,
         lists: ListStyle = .default,
@@ -76,6 +88,9 @@ public struct MarkdownEditorConfiguration: Sendable {
         self.services = services
         self.markers = markers
         self.markerVisibility = markerVisibility
+        self.applyFormatting = applyFormatting
+        self.renderLatex = renderLatex
+        self.renderMermaid = renderMermaid
         self.codeBlock = codeBlock
         self.inlineCode = inlineCode
         self.lists = lists

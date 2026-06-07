@@ -52,6 +52,9 @@ enum MarkdownStyler {
         scopedRanges: [NSRange]? = nil,
         configuration: MarkdownEditorConfiguration = .default
     ) -> [StyledRange] {
+        // Plain-text mode: the caller wants raw source, so emit no styling. The
+        // base font/color applied by the rebuild remain, giving unstyled text.
+        guard configuration.applyFormatting else { return [] }
         let tokens = precomputedTokens ?? MarkdownTokenizer.parseTokensViaAST(in: text)
         let nsText = text as NSString
         let codeTokens = tokens.filter { $0.kind == .codeBlock || $0.kind == .inlineCode }
