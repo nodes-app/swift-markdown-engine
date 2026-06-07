@@ -306,6 +306,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             || configuration.theme.mutedText != context.coordinator.configuration.theme.mutedText
             || configuration.theme.codeBlockBackground != context.coordinator.configuration.theme.codeBlockBackground
             || configuration.theme.blockquoteBar != context.coordinator.configuration.theme.blockquoteBar
+            || configuration.theme.codeBlockBorder != context.coordinator.configuration.theme.codeBlockBorder
         if markerVisibilityChanged || themeChanged {
             context.coordinator.configuration = configuration
             (nsView.documentView as? NativeTextView)?.configuration = configuration

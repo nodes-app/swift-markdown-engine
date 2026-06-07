@@ -235,6 +235,37 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
             }
             path.fill()
         }
+
+        // Optional border. Sides are drawn on every segment; top/bottom only at the
+        // block's real top/bottom — a code block can span multiple layout fragments,
+        // so detect the boundary by whether the neighbouring char still carries the
+        // code background (a continuation) or not (a block edge).
+        let theme = (textLayoutManager?.textContainer?.textView as? NativeTextView)?.configuration.theme
+        if let borderColor = theme?.codeBlockBorder, let bw = theme?.codeBlockBorderWidth, bw > 0 {
+            func continuesCodeBg(at idx: Int) -> Bool {
+                guard idx >= 0, idx < ts.length,
+                      let c = ts.attribute(.backgroundColor, at: idx, effectiveRange: nil) as? NSColor
+                else { return false }
+                return isCodeBlockBackgroundColor(c)
+            }
+            let half = bw / 2
+            let left = bgRect.minX + half
+            let right = bgRect.maxX - half
+            let path = NSBezierPath()
+            path.lineWidth = bw
+            path.move(to: CGPoint(x: left, y: bgRect.minY));  path.line(to: CGPoint(x: left, y: bgRect.maxY))
+            path.move(to: CGPoint(x: right, y: bgRect.minY)); path.line(to: CGPoint(x: right, y: bgRect.maxY))
+            if !continuesCodeBg(at: range.location - 1) {
+                path.move(to: CGPoint(x: bgRect.minX, y: bgRect.minY + half))
+                path.line(to: CGPoint(x: bgRect.maxX, y: bgRect.minY + half))
+            }
+            if !continuesCodeBg(at: NSMaxRange(range)) {
+                path.move(to: CGPoint(x: bgRect.minX, y: bgRect.maxY - half))
+                path.line(to: CGPoint(x: bgRect.maxX, y: bgRect.maxY - half))
+            }
+            borderColor.setStroke()
+            path.stroke()
+        }
     }
 
     /// Returns active text-selection rectangles intersecting this fragment, in

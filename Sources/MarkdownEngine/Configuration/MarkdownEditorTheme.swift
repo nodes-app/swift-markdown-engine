@@ -84,6 +84,10 @@ public struct MarkdownEditorTheme: Sendable {
     public var blockquoteBar: NSColor
     /// Width (points) of each blockquote bar.
     public var blockquoteBarWidth: CGFloat
+    /// Optional stroke around fenced code blocks. `nil` (or zero width) = no border.
+    public var codeBlockBorder: NSColor?
+    /// Width (points) of the code-block border, when `codeBlockBorder` is set.
+    public var codeBlockBorderWidth: CGFloat
 
     // MARK: Init
 
@@ -102,7 +106,9 @@ public struct MarkdownEditorTheme: Sendable {
         codeBlockBackground: NSColor = NSColor(white: 0.5, alpha: 0.12),
         inlineCodeBackground: NSColor = NSColor(white: 0.5, alpha: 0.16),
         blockquoteBar: NSColor = .tertiaryLabelColor,
-        blockquoteBarWidth: CGFloat = 3
+        blockquoteBarWidth: CGFloat = 3,
+        codeBlockBorder: NSColor? = nil,
+        codeBlockBorderWidth: CGFloat = 1
     ) {
         self.bodyText = bodyText
         self.mutedText = mutedText
@@ -119,6 +125,8 @@ public struct MarkdownEditorTheme: Sendable {
         self.inlineCodeBackground = inlineCodeBackground
         self.blockquoteBar = blockquoteBar
         self.blockquoteBarWidth = blockquoteBarWidth
+        self.codeBlockBorder = codeBlockBorder
+        self.codeBlockBorderWidth = codeBlockBorderWidth
     }
 
     /// System-native palette built from `NSColor` dynamic system colors.
