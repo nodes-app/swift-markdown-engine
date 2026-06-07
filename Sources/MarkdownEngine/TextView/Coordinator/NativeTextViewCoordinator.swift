@@ -47,6 +47,9 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     /// Fires on every selection change with the textView's selected character
     /// range — lets an embedder mirror the selection into another editor.
     var onSelectionChange: ((NSRange) -> Void)?
+    /// Fires when the user clicks a rendered Mermaid diagram, with its source —
+    /// the embedder can open a zoom/pan view.
+    var onMermaidActivate: ((String) -> Void)?
     var onInlineSelectionChange: ((InlineSelectionState?) -> Void)?
     var onCodeBlockSelectionChange: (([CodeBlockSelection]) -> Void)?
     var didInitialFormatting: Bool = false

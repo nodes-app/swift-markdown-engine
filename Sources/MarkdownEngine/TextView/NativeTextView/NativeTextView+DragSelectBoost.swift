@@ -12,6 +12,9 @@ import AppKit
 
 extension NativeTextView {
     override func mouseDown(with event: NSEvent) {
+        if activateMermaidIfHit(event: event) {
+            return
+        }
         if let toggled = toggleTaskCheckboxIfHit(event: event), toggled {
             return
         }

@@ -24,6 +24,9 @@ extension NSAttributedString.Key {
     /// Marks a bullet-list marker char (`-`/`*`/`+`) whose glyph is hidden so
     /// the fragment can paint a `•` in its place. Set to `true`.
     static let bulletMarker = NSAttributedString.Key("BulletListMarker")
+    /// Carries a rendered Mermaid block's source (String) over its collapsed
+    /// range, so a click can be detected and the host can open a zoom view.
+    static let mermaidSource = NSAttributedString.Key("MermaidSource")
     /// CGFloat — natural image width; presence flags block as overlay-rendered.
     static let scrollableBlockNaturalWidth = NSAttributedString.Key("ScrollableBlockNaturalWidth")
     /// Int — hash of source text; key for overlay reconcile + offset persistence.

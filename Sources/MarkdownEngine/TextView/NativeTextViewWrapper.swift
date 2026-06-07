@@ -65,6 +65,8 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     /// Fires on every selection change with the selected character range, so an
     /// embedder can mirror the selection into another editor over the same text.
     public var onSelectionChange: ((NSRange) -> Void)?
+    /// Fires when the user clicks a rendered Mermaid diagram, with its source.
+    public var onMermaidActivate: ((String) -> Void)?
     /// Externally-driven selection: set to mirror another editor's selection here.
     /// Applied (and scrolled into view) when it differs from the current one.
     public var selection: NSRange?
@@ -92,6 +94,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         onLinkClick: ((String) -> Void)? = nil,
         onCaretRectChange: ((CGRect) -> Void)? = nil,
         onSelectionChange: ((NSRange) -> Void)? = nil,
+        onMermaidActivate: ((String) -> Void)? = nil,
         selection: NSRange? = nil,
         onInlineSelectionChange: ((InlineSelectionState?) -> Void)? = nil,
         onCodeBlockSelectionChange: (([CodeBlockSelection]) -> Void)? = nil,
@@ -109,6 +112,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         self.onLinkClick = onLinkClick
         self.onCaretRectChange = onCaretRectChange
         self.onSelectionChange = onSelectionChange
+        self.onMermaidActivate = onMermaidActivate
         self.selection = selection
         self.onInlineSelectionChange = onInlineSelectionChange
         self.onCodeBlockSelectionChange = onCodeBlockSelectionChange
@@ -198,6 +202,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.wikiLinkMetadata = initialState.metadata
         context.coordinator.onCaretRectChange = onCaretRectChange
         context.coordinator.onSelectionChange = onSelectionChange
+        context.coordinator.onMermaidActivate = onMermaidActivate
         context.coordinator.onInlineSelectionChange = onInlineSelectionChange
         context.coordinator.onCodeBlockSelectionChange = onCodeBlockSelectionChange
 
@@ -400,6 +405,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
 
         context.coordinator.onCaretRectChange = onCaretRectChange
         context.coordinator.onSelectionChange = onSelectionChange
+        context.coordinator.onMermaidActivate = onMermaidActivate
         context.coordinator.onInlineSelectionChange = onInlineSelectionChange
         context.coordinator.onCodeBlockSelectionChange = onCodeBlockSelectionChange
         context.coordinator.didInitialFormatting = true

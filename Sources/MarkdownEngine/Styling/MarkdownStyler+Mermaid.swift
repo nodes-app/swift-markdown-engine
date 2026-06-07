@@ -58,6 +58,8 @@ extension MarkdownStyler {
                 ctx: ctx,
                 attrs: &attrs
             )
+            // Tag the collapsed block so a click can be detected → open a zoom view.
+            attrs.append((token.range, [.mermaidSource: source]))
         }
         return attrs
     }

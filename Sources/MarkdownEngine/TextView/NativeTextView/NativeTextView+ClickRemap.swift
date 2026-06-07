@@ -12,6 +12,20 @@
 import AppKit
 
 extension NativeTextView {
+    /// If the click landed on a rendered Mermaid diagram (a range tagged with
+    /// `.mermaidSource`), fire the coordinator's activate callback instead of
+    /// placing the caret — the host opens a zoom/pan view.
+    func activateMermaidIfHit(event: NSEvent) -> Bool {
+        guard let ts = textStorage, ts.length > 0 else { return false }
+        let viewPoint = convert(event.locationInWindow, from: nil)
+        let idx = characterIndexForInsertion(at: viewPoint)
+        guard idx >= 0, idx < ts.length,
+              let source = ts.attribute(.mermaidSource, at: idx, effectiveRange: nil) as? String
+        else { return false }
+        (delegate as? NativeTextViewCoordinator)?.onMermaidActivate?(source)
+        return true
+    }
+
     func remapClickInParagraphSpacing(event: NSEvent) -> Bool {
         guard event.clickCount == 1, !event.modifierFlags.contains(.shift),
               let tlm = textLayoutManager, let tcs = textContentStorage else {
