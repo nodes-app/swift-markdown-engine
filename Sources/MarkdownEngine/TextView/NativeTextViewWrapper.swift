@@ -302,6 +302,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             configuration.markerVisibility != context.coordinator.configuration.markerVisibility
             || configuration.applyFormatting != context.coordinator.configuration.applyFormatting
             || configuration.renderLatex != context.coordinator.configuration.renderLatex
+            || configuration.renderMermaid != context.coordinator.configuration.renderMermaid
         let themeChanged =
             configuration.theme.bodyText != context.coordinator.configuration.theme.bodyText
             || configuration.theme.headingMarker != context.coordinator.configuration.theme.headingMarker

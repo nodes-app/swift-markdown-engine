@@ -92,6 +92,7 @@ enum MarkdownStyler {
         result += styleImageEmbeds(ctx)
         result += styleImageLinks(ctx)
         result += styleTables(ctx)
+        result += styleMermaidBlocks(ctx)
         return result
     }
 }

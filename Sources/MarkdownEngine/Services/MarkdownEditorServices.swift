@@ -179,6 +179,33 @@ public struct NoOpLatexRenderer: LatexRenderer {
     public func render(latex: String, fontSize: CGFloat, theme: MarkdownEditorTheme) -> LatexRenderResult? { nil }
 }
 
+// MARK: - Mermaid
+
+/// Renders a Mermaid diagram (a ```mermaid fenced block) to an image. Supplied
+/// by the embedder; the engine has no Mermaid implementation of its own.
+public protocol MermaidRenderer: Sendable {
+    /// Render `source` (the mermaid code) optionally tinted by `theme`.
+    /// - Returns: the image + its point size, or `nil` if it can't be rendered
+    ///   (parse error, missing dependency, …) — the engine then shows the source.
+    func render(mermaid source: String, theme: MarkdownEditorTheme) -> MermaidRenderResult?
+}
+
+/// Output of a Mermaid render call.
+public struct MermaidRenderResult: Sendable {
+    public let image: NSImage
+    public let size: CGSize
+    public init(image: NSImage, size: CGSize) {
+        self.image = image
+        self.size = size
+    }
+}
+
+/// Default renderer that ignores Mermaid — the block stays raw source.
+public struct NoOpMermaidRenderer: MermaidRenderer {
+    public init() {}
+    public func render(mermaid source: String, theme: MarkdownEditorTheme) -> MermaidRenderResult? { nil }
+}
+
 // MARK: - Event Bus
 
 /// Optional notification-name bridge that lets the editor communicate with
@@ -239,6 +266,7 @@ public struct MarkdownEditorServices: Sendable {
     public var images: any EmbeddedImageProvider
     public var syntaxHighlighter: any SyntaxHighlighter
     public var latex: any LatexRenderer
+    public var mermaid: any MermaidRenderer
     public var bus: MarkdownEditorBus
 
     public init(
@@ -246,12 +274,14 @@ public struct MarkdownEditorServices: Sendable {
         images: any EmbeddedImageProvider = NoOpEmbeddedImageProvider(),
         syntaxHighlighter: any SyntaxHighlighter = PlainTextSyntaxHighlighter(),
         latex: any LatexRenderer = NoOpLatexRenderer(),
+        mermaid: any MermaidRenderer = NoOpMermaidRenderer(),
         bus: MarkdownEditorBus = .default
     ) {
         self.wikiLinks = wikiLinks
         self.images = images
         self.syntaxHighlighter = syntaxHighlighter
         self.latex = latex
+        self.mermaid = mermaid
         self.bus = bus
     }
 

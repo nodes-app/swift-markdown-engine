@@ -404,7 +404,7 @@ enum MarkdownASTStyler {
     }
 
     /// Split a fenced-code range into open fence (+language), content, close fence, and language.
-    private static func codeBlockParts(_ range: NSRange, _ ns: NSString)
+    static func codeBlockParts(_ range: NSRange, _ ns: NSString)
         -> (codeRange: NSRange, openFence: NSRange, content: NSRange, closeFence: NSRange, language: String?) {
         let start = range.location
         let end = NSMaxRange(range)

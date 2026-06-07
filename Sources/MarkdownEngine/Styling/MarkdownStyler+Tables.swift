@@ -41,7 +41,11 @@ extension MarkdownStyler {
             let occurrenceIndex = occurrenceByContentHash[contentHash, default: 0]
             occurrenceByContentHash[contentHash] = occurrenceIndex + 1
 
+            // In the reading view (all markers concealed) the table stays rendered
+            // even when the caret is in it — editing structure is a Code-view job,
+            // and keeping it rendered makes copy/paste of rows cleaner.
             let isActive = ctx.activeTokenIndices.contains(idx)
+                && ctx.configuration.markerVisibility != .allHidden
             if isActive {
                 // Caret inside the table — show editable source, pipes muted like other syntax.
                 let muted = ctx.configuration.theme.mutedText
