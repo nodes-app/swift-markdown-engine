@@ -28,6 +28,7 @@ extension MarkdownStyler {
             guard token.standaloneParagraphRange(in: ctx.nsText) != nil else { continue }
 
             let latexFontSize = HeadingHelpers.latexFontSize(for: token, tokens: ctx.tokens, baseFont: ctx.baseFont)
+                * ctx.configuration.blockLatex.fontScale
 
             if isActive {
                 appendSecondaryMarkers(for: token, to: &attrs, theme: ctx.configuration.theme)
@@ -82,6 +83,7 @@ extension MarkdownStyler {
             let isActive = ctx.activeTokenIndices.contains(idx)
             let latexContent = ctx.nsText.substring(with: token.contentRange)
             let latexFontSize = HeadingHelpers.latexFontSize(for: token, tokens: ctx.tokens, baseFont: ctx.baseFont)
+                * ctx.configuration.inlineLatex.fontScale
 
             if isActive {
                 for markerRange in token.markerRanges {

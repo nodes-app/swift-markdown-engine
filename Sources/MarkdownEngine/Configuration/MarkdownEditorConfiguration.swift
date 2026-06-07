@@ -361,15 +361,20 @@ public struct BlockLatexStyle: Sendable {
     public var paragraphSpacing: CGFloat
     /// Extra bottom padding added to single-letter formulas to avoid clipping.
     public var singleLetterPaddingBottom: CGFloat
+    /// Multiplier on the rendered formula's font size relative to body text.
+    /// Display ($$…$$) math typically reads well a bit larger than the prose.
+    public var fontScale: CGFloat
 
     public init(
         paragraphSpacingBefore: CGFloat = 16,
         paragraphSpacing: CGFloat = 20,
-        singleLetterPaddingBottom: CGFloat = 1.0
+        singleLetterPaddingBottom: CGFloat = 1.0,
+        fontScale: CGFloat = 1.0
     ) {
         self.paragraphSpacingBefore = paragraphSpacingBefore
         self.paragraphSpacing = paragraphSpacing
         self.singleLetterPaddingBottom = singleLetterPaddingBottom
+        self.fontScale = fontScale
     }
 
     public static let `default` = BlockLatexStyle()
@@ -378,11 +383,14 @@ public struct BlockLatexStyle: Sendable {
 /// Reserved for future inline-LaTeX (`$...$`) tuning. Currently has no
 /// effect; inline LaTeX inherits font size from the surrounding context.
 public struct InlineLatexStyle: Sendable {
-    /// Reserved for future inline-LaTeX tuning — currently the engine inherits
-    /// font size from the surrounding heading context.
-    public var placeholder: Void
+    /// Multiplier on the rendered formula's font size relative to surrounding
+    /// text. Inline ($…$) math sits in a line of prose, so keep it near 1.0 —
+    /// just a touch larger reads better than an exact match.
+    public var fontScale: CGFloat
 
-    public init() { self.placeholder = () }
+    public init(fontScale: CGFloat = 1.0) {
+        self.fontScale = fontScale
+    }
 
     public static let `default` = InlineLatexStyle()
 }
