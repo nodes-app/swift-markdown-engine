@@ -50,6 +50,10 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var onInlineSelectionChange: ((InlineSelectionState?) -> Void)?
     var onCodeBlockSelectionChange: (([CodeBlockSelection]) -> Void)?
     var didInitialFormatting: Bool = false
+    /// Re-entrancy guard: placing the caret inside a just-revealed formula calls
+    /// setSelectedRange, which re-fires textViewDidChangeSelection — without this
+    /// the zero-length caret stays "newly active" and recurses to a stack overflow.
+    var isPlacingRevealCaret: Bool = false
     /// One-shot guard so `updateCodeBlockSelection` only forces a full-document layout once per document.
     var didEnsureLayoutForCurrentDocument: Bool = false
     var lastSyncedText: String

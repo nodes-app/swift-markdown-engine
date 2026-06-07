@@ -261,7 +261,7 @@ extension NativeTextViewCoordinator {
         // Clicking (mouse) into a rendered (previously inactive) latex or image
         // embed reveals its raw source — place the caret just inside the content
         // rather than selecting the whole thing (a select-all feels heavy).
-        if selRange.length == 0,
+        if selRange.length == 0, !isPlacingRevealCaret,
            let eventType = currentEventType,
            eventType == .leftMouseUp || eventType == .leftMouseDown {
             let newlyActive = activeTokenIndices.subtracting(previousActiveTokenIndices)
@@ -274,7 +274,12 @@ extension NativeTextViewCoordinator {
                 }
                 let content = token.contentRange
                 if content.length > 0 {
+                    // Re-entrancy guarded: setSelectedRange re-fires this delegate,
+                    // and a zero-length caret would otherwise stay newly-active and
+                    // recurse forever.
+                    isPlacingRevealCaret = true
                     tv.setSelectedRange(NSRange(location: content.location, length: 0))
+                    isPlacingRevealCaret = false
                     break
                 }
             }
