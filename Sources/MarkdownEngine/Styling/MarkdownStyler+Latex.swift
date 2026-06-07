@@ -32,6 +32,25 @@ extension MarkdownStyler {
 
             if isActive {
                 appendSecondaryMarkers(for: token, to: &attrs, theme: ctx.configuration.theme)
+                // Dress the revealed raw source like a fenced code block: the
+                // theme code-block background (which the layout fragment turns into
+                // a full-width fill + border), code paragraph indent, and the mono
+                // code font.
+                if let paraRange = token.standaloneParagraphRange(in: ctx.nsText) {
+                    let codeFont = ctx.configuration.services.syntaxHighlighter.codeFont(size: ctx.baseFont.pointSize)
+                    let indent = ctx.configuration.codeBlock.horizontalIndent
+                    let para = NSMutableParagraphStyle()
+                    para.firstLineHeadIndent = indent
+                    para.headIndent = indent
+                    para.tailIndent = -indent
+                    para.paragraphSpacingBefore = ctx.configuration.codeBlock.paragraphSpacing
+                    para.paragraphSpacing = ctx.configuration.codeBlock.paragraphSpacing
+                    attrs.append((paraRange, [
+                        .backgroundColor: ctx.configuration.theme.codeBlockBackground,
+                        .paragraphStyle: para,
+                    ]))
+                    attrs.append((token.contentRange, [.font: codeFont]))
+                }
             } else if !latexContent.isEmpty,
                       let entry = ctx.services.latex.render(latex: latexContent, fontSize: latexFontSize, theme: ctx.configuration.theme) {
                 _ = appendRenderedStandaloneBlock(
@@ -89,6 +108,12 @@ extension MarkdownStyler {
                 for markerRange in token.markerRanges {
                     attrs.append((markerRange, [.foregroundColor: ctx.configuration.theme.mutedText]))
                 }
+                // Revealed inline source reads like an inline `code` span.
+                let codeFont = ctx.configuration.services.syntaxHighlighter.codeFont(size: ctx.baseFont.pointSize)
+                attrs.append((token.range, [
+                    .backgroundColor: ctx.configuration.theme.inlineCodeBackground,
+                    .font: codeFont,
+                ]))
             } else {
                 var renderTheme = ctx.configuration.theme
                 if blockquoteRanges.contains(where: { NSLocationInRange(token.range.location, $0) }) {

@@ -258,7 +258,9 @@ extension NativeTextViewCoordinator {
             restyleTextView(tv, paragraphCandidates: paragraphCandidates, tokens: tokens)
         }
 
-        // Auto-select content when clicking (mouse) into a rendered (previously inactive) latex or image embed
+        // Clicking (mouse) into a rendered (previously inactive) latex or image
+        // embed reveals its raw source — place the caret just inside the content
+        // rather than selecting the whole thing (a select-all feels heavy).
         if selRange.length == 0,
            let eventType = currentEventType,
            eventType == .leftMouseUp || eventType == .leftMouseDown {
@@ -270,9 +272,9 @@ extension NativeTextViewCoordinator {
                     || token.kind == .imageEmbed else {
                     continue
                 }
-                let selectRange = token.contentRange
-                if selectRange.length > 0 {
-                    tv.setSelectedRange(selectRange)
+                let content = token.contentRange
+                if content.length > 0 {
+                    tv.setSelectedRange(NSRange(location: content.location, length: 0))
                     break
                 }
             }
