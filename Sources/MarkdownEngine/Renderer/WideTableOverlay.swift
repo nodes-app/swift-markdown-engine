@@ -108,7 +108,11 @@ final class WideTableOverlay: NSScrollView {
 
 // MARK: - Document view inside the overlay
 
-/// Forwards mouseDown to caret-into-table (so clicking switches to edit mode).
+/// Forwards mouseDown to caret-into-table (so clicking switches to edit mode) —
+/// unless the block carries an activation source (e.g. a rendered diagram), in
+/// which case it fires the activate callback instead. Wide blocks live inside
+/// this scroll-view subview, so a click here never reaches the text view's own
+/// mouseDown; the activation has to be re-dispatched from here.
 final class WideTableImageView: NSImageView {
 
     weak var ownerOverlay: WideTableOverlay?
@@ -123,6 +127,16 @@ final class WideTableImageView: NSImageView {
         let docLen = (textView.string as NSString).length
         guard location >= 0, location <= docLen else {
             super.mouseDown(with: event)
+            return
+        }
+        // A wide rendered block tagged with an activation source (a diagram)
+        // opens its zoom view on click, matching the narrow/inline path; only
+        // un-tagged wide blocks (plain wide tables) fall through to edit-mode.
+        if location < docLen,
+           let src = textView.textStorage?.attribute(.mermaidSource, at: location, effectiveRange: nil) as? String,
+           let coord = textView.delegate as? NativeTextViewCoordinator,
+           let activate = coord.onMermaidActivate {
+            activate(src)
             return
         }
         textView.window?.makeFirstResponder(textView)
