@@ -18,23 +18,21 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .library(name: "MarkdownEngine", targets: ["MarkdownEngine"]),
-        // Code-block syntax highlighting via HighlighterSwift (highlight.js).
+        // Code-block syntax highlighting — highlight.js (vendored) run via
+        // JavaScriptCore, colored from the host's palette.
         .library(name: "MarkdownEngineCodeBlocks", targets: ["MarkdownEngineCodeBlocks"]),
         // LaTeX rendering via SwiftMath.
         .library(name: "MarkdownEngineLatex", targets: ["MarkdownEngineLatex"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/smittytone/HighlighterSwift", from: "3.0.0"),
         .package(url: "https://github.com/mgriebling/SwiftMath", from: "1.7.0"),
     ],
     targets: [
         .target(name: "MarkdownEngine"),
         .target(
             name: "MarkdownEngineCodeBlocks",
-            dependencies: [
-                "MarkdownEngine",
-                .product(name: "Highlighter", package: "HighlighterSwift"),
-            ]
+            dependencies: ["MarkdownEngine"],
+            resources: [.copy("Resources/highlight.min.js")]
         ),
         .target(
             name: "MarkdownEngineLatex",
