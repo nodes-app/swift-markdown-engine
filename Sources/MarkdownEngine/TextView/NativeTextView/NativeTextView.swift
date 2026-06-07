@@ -77,6 +77,33 @@ final class NativeTextView: NSTextView {
         }
     }
 
+    // A clickable (pointing-hand) cursor over rendered Mermaid diagrams, signalling
+    // they open a zoom view. Recomputed by AppKit on geometry changes; the
+    // coordinator also invalidates after a restyle so freshly-rendered diagrams
+    // pick it up.
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        guard let tlm = textLayoutManager, let tcs = textContentStorage,
+              let ts = textStorage, ts.length > 0 else { return }
+        tlm.enumerateTextLayoutFragments(from: tlm.documentRange.location, options: [.ensuresLayout]) { fragment in
+            let start = tcs.offset(from: tcs.documentRange.location, to: fragment.rangeInElement.location)
+            let len = tcs.offset(from: fragment.rangeInElement.location, to: fragment.rangeInElement.endLocation)
+            guard start != NSNotFound, start >= 0, len > 0 else { return true }
+            let range = NSRange(location: start, length: min(len, ts.length - start))
+            var isMermaid = false
+            ts.enumerateAttribute(.mermaidSource, in: range, options: []) { v, _, stop in
+                if v != nil { isMermaid = true; stop.pointee = true }
+            }
+            if isMermaid {
+                var rect = fragment.layoutFragmentFrame
+                rect.origin.x += self.textContainerOrigin.x
+                rect.origin.y += self.textContainerOrigin.y
+                self.addCursorRect(rect, cursor: .pointingHand)
+            }
+            return true
+        }
+    }
+
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         // Forward appearance changes to the embedder's highlighter via its registered notification.

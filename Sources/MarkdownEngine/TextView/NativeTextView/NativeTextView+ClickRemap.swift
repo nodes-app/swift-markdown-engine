@@ -12,18 +12,34 @@
 import AppKit
 
 extension NativeTextView {
-    /// If the click landed on a rendered Mermaid diagram (a range tagged with
-    /// `.mermaidSource`), fire the coordinator's activate callback instead of
-    /// placing the caret — the host opens a zoom/pan view.
+    /// If the click landed on a rendered Mermaid diagram, fire the coordinator's
+    /// activate callback instead of placing the caret — the host opens a zoom/pan
+    /// view. We hit-test the whole LAYOUT FRAGMENT under the click (not a single
+    /// character — the diagram image spans more than its collapsed source line),
+    /// then scan it for the `.mermaidSource` attribute.
     func activateMermaidIfHit(event: NSEvent) -> Bool {
-        guard let ts = textStorage, ts.length > 0 else { return false }
-        let viewPoint = convert(event.locationInWindow, from: nil)
-        let idx = characterIndexForInsertion(at: viewPoint)
-        guard idx >= 0, idx < ts.length,
-              let source = ts.attribute(.mermaidSource, at: idx, effectiveRange: nil) as? String
-        else { return false }
+        guard let source = mermaidSource(atViewPoint: convert(event.locationInWindow, from: nil)) else {
+            return false
+        }
         (delegate as? NativeTextViewCoordinator)?.onMermaidActivate?(source)
         return true
+    }
+
+    /// The Mermaid source whose rendered block contains `viewPoint`, or nil.
+    func mermaidSource(atViewPoint viewPoint: CGPoint) -> String? {
+        guard let tlm = textLayoutManager, let tcs = textContentStorage,
+              let ts = textStorage, ts.length > 0 else { return nil }
+        let p = CGPoint(x: viewPoint.x - textContainerOrigin.x, y: viewPoint.y - textContainerOrigin.y)
+        guard let fragment = tlm.textLayoutFragment(for: p) else { return nil }
+        let start = tcs.offset(from: tcs.documentRange.location, to: fragment.rangeInElement.location)
+        let len = tcs.offset(from: fragment.rangeInElement.location, to: fragment.rangeInElement.endLocation)
+        guard start != NSNotFound, start >= 0, len > 0 else { return nil }
+        let range = NSRange(location: start, length: min(len, ts.length - start))
+        var src: String?
+        ts.enumerateAttribute(.mermaidSource, in: range, options: []) { val, _, stop in
+            if let s = val as? String { src = s; stop.pointee = true }
+        }
+        return src
     }
 
     func remapClickInParagraphSpacing(event: NSEvent) -> Bool {
