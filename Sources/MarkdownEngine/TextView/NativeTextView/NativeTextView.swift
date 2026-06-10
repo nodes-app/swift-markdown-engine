@@ -25,6 +25,17 @@ final class NativeTextView: NSTextView {
     var pendingFullLayoutMeasure = false
     var suppressAutoRevealOnce: Bool = false
 
+    /// When true, this view sets NO cursor (suppresses its I-beam). Set by an
+    /// embedder while a modal overlay sits above the editor and owns the pointer,
+    /// so the overlay's cursor isn't fought by the text view's I-beam. Toggling it
+    /// rebuilds the cursor rects (see `NativeTextView+CursorRects`).
+    var suppressesCursor: Bool = false {
+        didSet {
+            guard suppressesCursor != oldValue else { return }
+            window?.invalidateCursorRects(for: self)
+        }
+    }
+
     // MARK: Configuration
     var configuration: MarkdownEditorConfiguration = .default {
         didSet {
@@ -82,6 +93,9 @@ final class NativeTextView: NSTextView {
     // coordinator also invalidates after a restyle so freshly-rendered diagrams
     // pick it up.
     override func resetCursorRects() {
+        // Suppressed (a modal overlay above owns the pointer) → add NO cursor rects
+        // at all, so the window doesn't paint the I-beam over the editor.
+        guard !suppressesCursor else { return }
         super.resetCursorRects()
         guard let tlm = textLayoutManager, let tcs = textContentStorage,
               let ts = textStorage, ts.length > 0 else { return }

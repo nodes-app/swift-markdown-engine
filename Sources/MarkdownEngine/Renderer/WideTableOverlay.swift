@@ -149,7 +149,15 @@ final class WideTableImageView: NSImageView {
 extension NativeTextView {
 
     /// Walk storage; create / position / destroy overlays to match attrs.
+    /// Doubles as the "rendered layout settled" beat: after the reconcile, the
+    /// embedder is notified so its own block decorations (see
+    /// `renderedDiagramRegions()`) can reposition on the same cadence.
     func updateWideTableOverlays() {
+        reconcileWideTableOverlays()
+        (delegate as? NativeTextViewCoordinator)?.onRenderedLayoutChange?()
+    }
+
+    private func reconcileWideTableOverlays() {
         guard let storage = textStorage,
               let bridge = layoutBridge,
               let container = bridge.firstTextContainer,

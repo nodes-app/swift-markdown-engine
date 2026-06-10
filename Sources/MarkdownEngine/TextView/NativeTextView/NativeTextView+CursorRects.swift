@@ -12,13 +12,22 @@ import AppKit
 extension NativeTextView {
 
     override func mouseMoved(with event: NSEvent) {
+        guard !suppressesCursor else { return }   // an overlay above owns the pointer
         super.mouseMoved(with: event)
         applyReadOnlyCursor(for: event)
     }
 
     override func mouseEntered(with event: NSEvent) {
+        guard !suppressesCursor else { return }
         super.mouseEntered(with: event)
         applyReadOnlyCursor(for: event)
+    }
+
+    /// Don't set a cursor on cursorUpdate either while suppressed (the I-beam rect
+    /// itself is dropped in `resetCursorRects`, in NativeTextView.swift).
+    override func cursorUpdate(with event: NSEvent) {
+        guard !suppressesCursor else { return }
+        super.cursorUpdate(with: event)
     }
 
     /// In read-only mode, override NSTextView's I-beam: pointing hand over a

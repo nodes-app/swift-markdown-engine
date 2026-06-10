@@ -384,6 +384,25 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
         return rects
     }
 
+    /// Frame of the inline block image anchored at document character
+    /// `location`, relative to this fragment's origin. Mirrors the
+    /// `drawLatexImages` geometry exactly, so companion overlays (badges, pins)
+    /// can sit precisely over a rendered block image. nil when the location
+    /// carries no inline block image or the block is overlay-rendered.
+    func blockImageFrame(forCharacterAt location: Int) -> CGRect? {
+        guard let ts = textStorage, let range = fragmentNSRange,
+              NSLocationInRange(location, range) else { return nil }
+        var attrRange = NSRange(location: NSNotFound, length: 0)
+        guard ts.attribute(.latexImage, at: location, longestEffectiveRange: &attrRange, in: range) is NSImage,
+              (ts.attribute(.latexIsBlock, at: location, effectiveRange: nil) as? Bool) == true,
+              ts.attribute(.scrollableBlockNaturalWidth, at: location, effectiveRange: nil) == nil
+        else { return nil }
+        let imageBounds = (ts.attribute(.latexBounds, at: location, effectiveRange: nil) as? NSValue)?.rectValue ?? .zero
+        let blockOffsetY = ts.attribute(.latexBlockOffsetY, at: location, effectiveRange: nil) as? CGFloat
+        return blockImageDrawRect(attrRange: attrRange, imageBounds: imageBounds,
+                                  blockOffsetY: blockOffsetY, point: .zero)
+    }
+
     // MARK: - LaTeX Images
 
     private func drawLatexImages(at point: CGPoint, in context: CGContext) {

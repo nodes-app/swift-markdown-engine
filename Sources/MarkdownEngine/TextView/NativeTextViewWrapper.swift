@@ -50,6 +50,9 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     public var documentId: String
     /// When `false` the editor renders read-only with no caret.
     public var isEditable: Bool
+    /// When `true` the editor sets NO cursor (suppresses its I-beam) — for use
+    /// while a modal overlay above the editor owns the pointer.
+    public var suppressesCursor: Bool
     /// Optional paste hook. Return a Markdown image-embed string (e.g.
     /// `"![[my-image]]"`) to insert at the caret, or `nil` to fall through
     /// to the system's default plain-text paste.
@@ -67,6 +70,14 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     public var onSelectionChange: ((NSRange) -> Void)?
     /// Fires when the user clicks a rendered Mermaid diagram, with its source.
     public var onMermaidActivate: ((String) -> Void)?
+    /// Fires after a layout-affecting restyle settles, so an embedder can
+    /// reposition decorations it overlays on rendered blocks (see
+    /// `NSTextView.renderedDiagramRegions()`).
+    public var onRenderedLayoutChange: (() -> Void)?
+    /// Hands the embedder the underlying text view once it's created, for
+    /// AppKit-level decorations (overlay views over rendered blocks) that a
+    /// SwiftUI overlay can't express.
+    public var onTextViewReady: ((NSTextView) -> Void)?
     /// Externally-driven selection: set to mirror another editor's selection here.
     /// Applied (and scrolled into view) when it differs from the current one.
     public var selection: NSRange?
@@ -90,11 +101,14 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         fontSize: CGFloat = 16,
         documentId: String = "default",
         isEditable: Bool = true,
+        suppressesCursor: Bool = false,
         onPasteImage: ((NSPasteboard) -> String?)? = nil,
         onLinkClick: ((String) -> Void)? = nil,
         onCaretRectChange: ((CGRect) -> Void)? = nil,
         onSelectionChange: ((NSRange) -> Void)? = nil,
         onMermaidActivate: ((String) -> Void)? = nil,
+        onRenderedLayoutChange: (() -> Void)? = nil,
+        onTextViewReady: ((NSTextView) -> Void)? = nil,
         selection: NSRange? = nil,
         onInlineSelectionChange: ((InlineSelectionState?) -> Void)? = nil,
         onCodeBlockSelectionChange: (([CodeBlockSelection]) -> Void)? = nil,
@@ -108,11 +122,14 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         self.fontSize = fontSize
         self.documentId = documentId
         self.isEditable = isEditable
+        self.suppressesCursor = suppressesCursor
         self.onPasteImage = onPasteImage
         self.onLinkClick = onLinkClick
         self.onCaretRectChange = onCaretRectChange
         self.onSelectionChange = onSelectionChange
         self.onMermaidActivate = onMermaidActivate
+        self.onRenderedLayoutChange = onRenderedLayoutChange
+        self.onTextViewReady = onTextViewReady
         self.selection = selection
         self.onInlineSelectionChange = onInlineSelectionChange
         self.onCodeBlockSelectionChange = onCodeBlockSelectionChange
@@ -144,9 +161,8 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         }
         textContainer.lineFragmentPadding = 0
         textContainer.widthTracksTextView = true
-        textView.textContainerInset = NSSize(
-            width: configuration.textInsets.horizontal,
-            height: configuration.textInsets.vertical
+        textView.textContainerInset = configuration.textInsets.containerInset(
+            forViewportWidth: scrollView.contentView.bounds.width
         )
         textContainer.heightTracksTextView = false
 
@@ -160,6 +176,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.configuration = configuration
         textView.insertionPointColor = configuration.theme.bodyText
         textView.isEditable = isEditable
+        textView.suppressesCursor = suppressesCursor
         textView.isSelectable = true
         textView.isRichText = true
         let initialState = WikiLinkService.makeDisplayState(from: text)
@@ -203,8 +220,10 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.onCaretRectChange = onCaretRectChange
         context.coordinator.onSelectionChange = onSelectionChange
         context.coordinator.onMermaidActivate = onMermaidActivate
+        context.coordinator.onRenderedLayoutChange = onRenderedLayoutChange
         context.coordinator.onInlineSelectionChange = onInlineSelectionChange
         context.coordinator.onCodeBlockSelectionChange = onCodeBlockSelectionChange
+        onTextViewReady?(textView)
 
         textView.recalcOverscroll(for: scrollView)
         scrollView.contentView.postsBoundsChangedNotifications = true
@@ -214,6 +233,12 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             let newWidth = scrollView.contentView.bounds.width
             if abs(newWidth - lastObservedViewportWidth) > 0.5 {
                 lastObservedViewportWidth = newWidth
+                // Re-derive the inset so a capped text column stays centered as
+                // the viewport resizes (see TextInsets.maxContentWidth).
+                let inset = textView.configuration.textInsets.containerInset(forViewportWidth: newWidth)
+                if textView.textContainerInset != inset {
+                    textView.textContainerInset = inset
+                }
                 context.coordinator.didEnsureLayoutForCurrentDocument = false
                 context.coordinator.updateCodeBlockSelection(textView: textView)
             }
@@ -239,6 +264,9 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
 
     public func updateNSView(_ nsView: NSScrollView, context: Context) {
         guard let textView = nsView.documentView as? NSTextView else { return }
+        // Apply cursor suppression up front (before the no-op early-returns below),
+        // so toggling a modal overlay above the editor takes effect immediately.
+        (textView as? NativeTextView)?.suppressesCursor = suppressesCursor
 
         let isNodeSwitch = context.coordinator.documentId != documentId
         let wtActive: Bool = {
@@ -269,9 +297,8 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         if nsView.autohidesScrollers != configuration.scrollers.autohidesScrollers {
             nsView.autohidesScrollers = configuration.scrollers.autohidesScrollers
         }
-        let desiredTextInset = NSSize(
-            width: configuration.textInsets.horizontal,
-            height: configuration.textInsets.vertical
+        let desiredTextInset = configuration.textInsets.containerInset(
+            forViewportWidth: nsView.contentView.bounds.width
         )
         if textView.textContainerInset != desiredTextInset {
             textView.textContainerInset = desiredTextInset
@@ -406,6 +433,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.onCaretRectChange = onCaretRectChange
         context.coordinator.onSelectionChange = onSelectionChange
         context.coordinator.onMermaidActivate = onMermaidActivate
+        context.coordinator.onRenderedLayoutChange = onRenderedLayoutChange
         context.coordinator.onInlineSelectionChange = onInlineSelectionChange
         context.coordinator.onCodeBlockSelectionChange = onCodeBlockSelectionChange
         context.coordinator.didInitialFormatting = true

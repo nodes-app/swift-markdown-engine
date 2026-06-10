@@ -189,10 +189,28 @@ public struct ScrollersPolicy: Sendable {
 public struct TextInsets: Sendable {
     public var horizontal: CGFloat
     public var vertical: CGFloat
+    /// Optional cap on the content region's width (the text column plus the two
+    /// `horizontal` margins). When the view is wider than this, the surplus is
+    /// split into equal extra side margins, keeping the column centered at its
+    /// cap while the view — and its scroll bar — span the full width. `nil`
+    /// means no cap (the column tracks the view width).
+    public var maxContentWidth: CGFloat?
 
-    public init(horizontal: CGFloat = 0, vertical: CGFloat = 0) {
+    public init(horizontal: CGFloat = 0, vertical: CGFloat = 0, maxContentWidth: CGFloat? = nil) {
         self.horizontal = horizontal
         self.vertical = vertical
+        self.maxContentWidth = maxContentWidth
+    }
+
+    /// The `textContainerInset` to apply at `viewportWidth`: the configured
+    /// margins, widened symmetrically once the viewport exceeds
+    /// `maxContentWidth` so the text column stays centered at its cap.
+    public func containerInset(forViewportWidth viewportWidth: CGFloat) -> NSSize {
+        var h = horizontal
+        if let maxWidth = maxContentWidth, viewportWidth > maxWidth {
+            h += (viewportWidth - maxWidth) / 2
+        }
+        return NSSize(width: h, height: vertical)
     }
 
     public static let `default` = TextInsets()

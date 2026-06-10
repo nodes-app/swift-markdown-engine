@@ -50,6 +50,10 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     /// Fires when the user clicks a rendered Mermaid diagram, with its source —
     /// the embedder can open a zoom/pan view.
     var onMermaidActivate: ((String) -> Void)?
+    /// Fires after a layout-affecting restyle has settled (same cadence the
+    /// wide-block overlays reconcile on), so an embedder can reposition its own
+    /// rendered-block decorations (see `renderedDiagramRegions()`).
+    var onRenderedLayoutChange: (() -> Void)?
     var onInlineSelectionChange: ((InlineSelectionState?) -> Void)?
     var onCodeBlockSelectionChange: (([CodeBlockSelection]) -> Void)?
     var didInitialFormatting: Bool = false
