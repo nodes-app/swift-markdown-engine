@@ -57,7 +57,10 @@ extension NativeTextViewCoordinator {
         tlm.enumerateTextLayoutFragments(from: matchStart, options: [.ensuresLayout]) { fragment in
             let cv = scrollView.contentView
             let insetsTop = scrollView.contentInsets.top
-            let frame = fragment.layoutFragmentFrame
+            // Fragment frames are text-view-local; the scroll offset is in
+            // document-view space — lift by the text view's offset inside the
+            // container (the header band).
+            let frame = fragment.layoutFragmentFrame.offsetBy(dx: 0, dy: tv.frame.origin.y)
             let visibleTop = cv.bounds.origin.y + insetsTop
             let visibleBottom = cv.bounds.origin.y + cv.bounds.height
             // Only scroll when the match is off-screen; reveal it a little below the top.
@@ -79,9 +82,13 @@ extension NativeTextViewCoordinator {
         let visualTopDocY = preY + insetsTop
         var anchorOffsetFromTop: CGFloat = 0
         var anchorTextRange: NSTextRange? = nil
+        // Fragment frames are text-view-local; visualTopDocY is in document-view
+        // space — lift them by the text view's offset inside the container (the
+        // header band) before comparing.
+        let textViewTop = tv.frame.origin.y
         if let tlm = tv.textLayoutManager {
             tlm.enumerateTextLayoutFragments(from: tlm.documentRange.location, options: [.ensuresLayout]) { fragment in
-                let frame = fragment.layoutFragmentFrame
+                let frame = fragment.layoutFragmentFrame.offsetBy(dx: 0, dy: textViewTop)
                 if frame.maxY < visualTopDocY { return true }
                 anchorTextRange = fragment.rangeInElement
                 anchorOffsetFromTop = visualTopDocY - frame.minY
@@ -97,7 +104,7 @@ extension NativeTextViewCoordinator {
 
         if let tlm = tv.textLayoutManager, let anchor = anchorTextRange {
             tlm.enumerateTextLayoutFragments(from: anchor.location, options: [.ensuresLayout]) { fragment in
-                let newDocY = fragment.layoutFragmentFrame.minY + anchorOffsetFromTop
+                let newDocY = fragment.layoutFragmentFrame.minY + textViewTop + anchorOffsetFromTop
                 let targetScrollY = newDocY - insetsTop
                 if let cv = scrollView?.contentView, abs(cv.bounds.origin.y - targetScrollY) > 0.5 {
                     cv.scroll(to: NSPoint(x: cv.bounds.origin.x, y: targetScrollY))

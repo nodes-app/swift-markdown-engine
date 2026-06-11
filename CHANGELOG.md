@@ -7,7 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Scroll-away header: `NativeTextViewWrapper` gains `header: AnyView?`,
+  `headerCollapsedHeight: CGFloat`, and `headerExpanded: Bool`. The engine
+  hosts the supplied SwiftUI view above the document body, scrolling with
+  it; collapsing animates the reserved band down to `headerCollapsedHeight`
+  (the top row stays visible, lower rows clip away). The hosted content
+  refreshes on every SwiftUI update and stays fully interactive. Composes
+  with `readingWidth`. See the README's *Scrolling Header* section.
+
 ### Changed
+- The scroll view's `documentView` is now always an engine-internal
+  container view (hosting the text view, the optional scroll-away header,
+  and the reading column's breakout overlays) rather than sometimes the
+  `NSTextView` itself. Embedders that reached into
+  `scrollView.documentView` expecting an `NSTextView` must adapt — the
+  document view's class was never API.
 - **Breaking**: The editor's enclosing scroll view no longer applies a
   hard-coded `top: 55.4` content inset. The default is now `0` on every
   edge, matching the most common embedding case where the editor fills

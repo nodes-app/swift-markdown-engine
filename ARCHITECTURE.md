@@ -13,6 +13,9 @@ Sources/
 │   ├── Input/                               # MarkdownInputHandler + MarkdownListHandler
 │   ├── TextView/
 │   │   ├── NativeTextViewWrapper.swift      # SwiftUI entry point (NSViewRepresentable)
+│   │   ├── NativeTextViewContainer.swift    # the scroll view's documentView: header band + text column stacking
+│   │   ├── ScrollingHeaderController.swift  # scroll-away header: hosting, collapse/expand, teardown
+│   │   ├── ClampedScrollView.swift          # scroll range clamped to real content height
 │   │   ├── NativeTextView/                  # AppKit subclass + UX extensions (paste, drag-select, …)
 │   │   └── Coordinator/                     # NSTextViewDelegate split by concern (restyling, find, …)
 │   └── MarkdownEngine.docc/                 # DocC catalog
@@ -129,10 +132,24 @@ the text-view delegate.
 ## [`TextView/`](Sources/MarkdownEngine/TextView): NSTextView + SwiftUI bridge
 
 The entry point is `NativeTextViewWrapper.swift` — an `NSViewRepresentable` that
-owns the coordinator and the configured text view. Two sub-folders matter:
+owns the coordinator and the configured text view.
+
+The scroll view's `documentView` is **always** `NativeTextViewContainer`, never
+the text view itself. The container stacks up to three kinds of siblings in a
+flipped coordinate space: the optional scroll-away header band at the top (a
+clipped `NSHostingView` managed by `ScrollingHeaderController`, reserved height
+mirrored into `container.headerHeight`), the `NativeTextView` at
+`y = headerHeight` (centered at a fixed width when
+`configuration.readingWidth` is set), and — in reading-column mode — the
+full-width wide-table breakout overlays. Anything that converts between
+text-view-local rects and scroll/document space must lift by the text view's
+origin inside the container (`convert(_:to:)` or `frame.origin`); see
+`viewRect(forCharacterRange:)` and the find-in-document paths for the pattern.
+
+Two sub-folders matter:
 
 - `NativeTextView/` — extensions on the AppKit subclass (paste, drag-select
-  boost, spell policy, caret workarounds)
+  boost, spell policy, caret workarounds, frame/overscroll management)
 - `Coordinator/` — `NSTextViewDelegate` glue, split by concern (restyling,
   writing-tools, find, code-blocks, inline selection, autocorrect)
 

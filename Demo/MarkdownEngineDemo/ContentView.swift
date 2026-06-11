@@ -21,9 +21,49 @@ import MarkdownEngineLatex
 
 struct ContentView: View {
     @State private var text: String = sampleMarkdown
+    @State private var showHeader = false
+    @State private var headerExpanded = true
 
     var body: some View {
-        NativeTextViewWrapper(text: $text, configuration: configuration)
+        NativeTextViewWrapper(
+            text: $text,
+            configuration: configuration,
+            header: showHeader ? AnyView(demoHeader) : nil,
+            headerCollapsedHeight: 40,
+            headerExpanded: headerExpanded
+        )
+        .toolbar {
+            ToolbarItemGroup {
+                // Scroll-away header: an embedder-supplied SwiftUI view hosted
+                // above the body that scrolls with it. "Expanded" animates
+                // between the full content height and `headerCollapsedHeight`
+                // (the top row stays visible; the rows below clip away).
+                Toggle("Header", isOn: $showHeader)
+                Toggle("Expanded", isOn: $headerExpanded)
+                    .disabled(!showHeader)
+            }
+        }
+    }
+
+    /// Sample scroll-away header: a fixed top row (kept visible when collapsed)
+    /// plus detail rows that reveal/hide with the `headerExpanded` toggle.
+    private var demoHeader: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Scroll-away header").font(.headline)
+                Spacer()
+            }
+            .frame(height: 40)   // == headerCollapsedHeight: the always-visible row
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("These rows clip away when the header collapses.")
+                Text("The header scrolls with the document body and stays fully interactive.")
+                    .foregroundStyle(.secondary)
+            }
+            .font(.callout)
+            .padding(.bottom, 12)
+        }
+        .padding(.horizontal, 16)
     }
 
     /// The engine talks to your app through service protocols. Two of them —

@@ -36,8 +36,10 @@ final class ClampedScrollView: NSScrollView {
         guard let doc = documentView else { return }
         let minY = -contentInsets.top
         // Use the real content height (not the inflated frame) so small
-        // documents can't scroll past their actual content.
-        let realHeight = nativeTextView?.scrollableContentHeight ?? doc.bounds.height
+        // documents can't scroll past their actual content. The document view is
+        // always a `NativeTextViewContainer` (header band + text column).
+        let realHeight = (doc as? NativeTextViewContainer)?.scrollableContentHeight
+            ?? doc.bounds.height
         let maxY = max(minY, realHeight - contentView.bounds.height)
         let b = contentView.bounds
         let clampedY = min(max(b.origin.y, minY), maxY)

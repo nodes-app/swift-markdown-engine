@@ -40,6 +40,9 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     private var busObservers: [NSObjectProtocol] = []
     private var registeredAppearanceObserverName: Notification.Name?
     weak var textView: NSTextView?
+    /// Owns the scroll-away header (build, content refresh, collapse/expand,
+    /// teardown). Created on first reconcile with a non-nil header.
+    var headerController: ScrollingHeaderController?
     var layoutBridge: LayoutBridge?
     var layoutDelegate: MarkdownLayoutManagerDelegate?
     var onLinkClick: ((String) -> Void)?
@@ -266,10 +269,20 @@ extension NSTextView {
               let textContainer = textContainer else { return nil }
         var boundingRect = bridge.boundingRect(forCharacterRange: range, in: textContainer)
         let containerOrigin = textContainerOrigin
-        // Add the column's offset within its container (0 when the text view is the documentView).
-        boundingRect.origin.x += containerOrigin.x + frame.origin.x
-        boundingRect.origin.y += containerOrigin.y + frame.origin.y
+        boundingRect.origin.x += containerOrigin.x
+        boundingRect.origin.y += containerOrigin.y
+        // The text view sits inside a container document view, offset by the header
+        // band (y) and the reading-column centering (x), so its glyph rects
+        // (text-view-local) must be lifted into the document view's space before
+        // subtracting the scroll offset (which is in document-view space).
+        // `convert(.zero, to: doc)` covers both offsets and self-zeroes if this text
+        // view ever IS the document view.
         if let scrollView = enclosingScrollView {
+            if let doc = scrollView.documentView, doc !== self {
+                let originInDoc = convert(CGPoint.zero, to: doc)
+                boundingRect.origin.x += originInDoc.x
+                boundingRect.origin.y += originInDoc.y
+            }
             let contentOffset = scrollView.contentView.bounds.origin
             boundingRect.origin.x -= contentOffset.x
             boundingRect.origin.y -= contentOffset.y

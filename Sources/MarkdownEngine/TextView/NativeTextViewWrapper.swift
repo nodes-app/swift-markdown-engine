@@ -73,6 +73,26 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     /// ``MarkdownEditorConfiguration/spellChecking`` on next launch.
     public var onSpellCheckingPolicyChanged: ((SpellCheckingPolicy) -> Void)?
 
+    /// Ghost text shown at the first-line position while the document is empty;
+    /// the first typed character hides it. Lives inside the scrolled content, so
+    /// it sits below the header band and tracks its expand/collapse animation.
+    public var placeholder: NSAttributedString?
+
+    /// SwiftUI header hosted above the body and scrolling with it. The engine owns
+    /// an `NSHostingView`, reserves its (intrinsic) height at the top of the text
+    /// content, and refreshes the hosted content on every SwiftUI update. The header
+    /// is a sibling of the text view in the scrolled container, so it is fully
+    /// interactive. Inject any required SwiftUI environment into this content
+    /// before passing it in.
+    public var header: AnyView?
+    /// Visible header height when collapsed — typically just the top row. Content
+    /// below this is clipped. The embedder measures and supplies it so the top row
+    /// stays fully visible while the lower content reveals/hides.
+    public var headerCollapsedHeight: CGFloat
+    /// Whether the header is expanded to its full content height or collapsed to
+    /// ``headerCollapsedHeight``. Toggling animates the reveal.
+    public var headerExpanded: Bool
+
     public init(
         text: Binding<String>,
         isWikiLinkActive: Binding<Bool> = .constant(false),
@@ -87,7 +107,11 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         onCaretRectChange: ((CGRect) -> Void)? = nil,
         onInlineSelectionChange: ((InlineSelectionState?) -> Void)? = nil,
         onCodeBlockSelectionChange: (([CodeBlockSelection]) -> Void)? = nil,
-        onSpellCheckingPolicyChanged: ((SpellCheckingPolicy) -> Void)? = nil
+        onSpellCheckingPolicyChanged: ((SpellCheckingPolicy) -> Void)? = nil,
+        placeholder: NSAttributedString? = nil,
+        header: AnyView? = nil,
+        headerCollapsedHeight: CGFloat = 0,
+        headerExpanded: Bool = true
     ) {
         self._text = text
         self._isWikiLinkActive = isWikiLinkActive
@@ -103,6 +127,10 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         self.onInlineSelectionChange = onInlineSelectionChange
         self.onCodeBlockSelectionChange = onCodeBlockSelectionChange
         self.onSpellCheckingPolicyChanged = onSpellCheckingPolicyChanged
+        self.placeholder = placeholder
+        self.header = header
+        self.headerCollapsedHeight = headerCollapsedHeight
+        self.headerExpanded = headerExpanded
     }
 
     public func makeNSView(context: Context) -> NSScrollView {
@@ -160,9 +188,12 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         textView.isVerticallyResizable = true
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.postsFrameChangedNotifications = true
-        // Reading column: fixed-width column centered by the container; else fills the scroll view.
-        textView.autoresizingMask = configuration.readingWidth != nil ? [] : [.width]
+        // Width and origin are driven by the container document view (see below).
+        textView.autoresizingMask = []
         textView.backgroundColor = .clear
+        // Body compositing for the scroll-away header (clipsToBounds + redraw policy)
+        // is applied by ScrollingHeaderController when a header is first supplied, so
+        // header-less embedders keep AppKit's default rendering.
         let font = NSFont(name: fontName, size: fontSize) ?? NSFont.systemFont(ofSize: fontSize)
         textView.font = font
         textView.baseFont = font
@@ -182,15 +213,22 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.layoutBridge = bridge
         textView.layoutBridge = bridge
 
-        if configuration.readingWidth != nil {
-            // Full-width container centers a fixed-width text column; wide tables break out into the margins.
-            let container = ReadingColumnContainerView()
-            container.textView = textView
-            container.addSubview(textView)
-            scrollView.documentView = container
-        } else {
-            scrollView.documentView = textView
-        }
+        // The document view is ALWAYS a container (`NativeTextViewContainer`) hosting
+        // the text view, the optional scroll-away header (a top band stacked ABOVE the
+        // text view as a sibling — disjoint frames, so body/header overlap is
+        // geometrically impossible), and, in reading-column mode, the full-width
+        // wide-table overlays around the centered fixed-width column. The text view
+        // keeps managing its own height; the container offsets it below the header
+        // band and sizes itself to the sum.
+        let vpSize = scrollView.contentView.bounds.size
+        let container = NativeTextViewContainer(frame: NSRect(origin: .zero, size: vpSize))
+        container.autoresizingMask = [.width]
+        container.clipsToBounds = true
+        container.textView = textView
+        let initialWidth = configuration.readingWidth != nil ? textView.readingColumnWidth : vpSize.width
+        textView.frame = NSRect(x: 0, y: 0, width: initialWidth, height: textView.frame.height)
+        container.addSubview(textView)
+        scrollView.documentView = container
         // Force full-document layout at init so paragraph heights are known
         // upfront; otherwise TextKit 2 viewport layout causes scroll drift.
         textLayoutManager.ensureLayout(for: textLayoutManager.documentRange)
@@ -206,6 +244,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.onCodeBlockSelectionChange = onCodeBlockSelectionChange
 
         textView.recalcOverscroll(for: scrollView)
+        textView.setPlaceholder(placeholder)
         // Initial reading-column centering; the resize observer below handles later changes.
         if configuration.readingWidth != nil {
             textView.centerReadingColumn(forClipWidth: scrollView.contentView.bounds.width)
@@ -225,15 +264,17 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
                 context.coordinator.updateCodeBlockSelection(textView: textView)
             }
             // Only react with overscroll recalc when the viewport itself resizes
-            // (window resize). Without this guard, TextKit-induced textView frame
-            // changes echo back here and re-trigger recalcOverscroll, causing a
-            // 149pt height oscillation after clicks.
-            guard abs(textView.frame.height - scrollView.contentView.bounds.height) > 1 else { return }
+            // (window resize). Without this guard, TextKit-induced frame changes echo
+            // back here and re-trigger recalcOverscroll, causing a 149pt height
+            // oscillation after clicks. Compare the CONTAINER (the document view) height
+            // to the viewport — it tracks the viewport for short docs.
+            guard let container = scrollView.documentView as? NativeTextViewContainer,
+                  abs(container.frame.height - scrollView.contentView.bounds.height) > 1 else { return }
             textView.recalcOverscroll(for: scrollView)
             scrollView.clampToInsets()
         }
         NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: scrollView.contentView, queue: nil) { _ in
-            (textView as? NativeTextView)?.ensureVisibleLayout()
+            textView.ensureVisibleLayout()
             if context.coordinator.isWritingToolsActive {
                 context.coordinator.fixWritingToolsChildWindowIfNeeded(textView: textView)
             }
@@ -241,11 +282,13 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             context.coordinator.refreshActiveLinkCaretRect()
             context.coordinator.updateCodeBlockSelection(textView: textView)
         }
+        reconcileHeader(textView: textView, context: context)
         return scrollView
     }
 
     public func updateNSView(_ nsView: NSScrollView, context: Context) {
         guard let textView = nsView.nativeTextView else { return }
+        reconcileHeader(textView: textView, context: context)
 
         let isNodeSwitch = context.coordinator.documentId != documentId
         let wtActive: Bool = {
@@ -265,6 +308,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         }
 
         textView.onPasteImage = onPasteImage
+        textView.setPlaceholder(placeholder)
         if nsView.hasVerticalScroller != configuration.scrollers.hasVerticalScroller {
             nsView.hasVerticalScroller = configuration.scrollers.hasVerticalScroller
         }
@@ -362,6 +406,8 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         )
         textView.recalcOverscroll(for: nsView)
         (nsView as? ClampedScrollView)?.clampToInsets()
+        // Document rebuilds bypass textDidChange — re-derive emptiness here.
+        textView.refreshPlaceholderVisibility()
         DispatchQueue.main.async {
             context.coordinator.updateCodeBlockSelection(textView: textView)
         }
@@ -391,5 +437,32 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         coordinator.userPrefersAutomaticSpellingCorrection = configuration.spellChecking.automaticSpellingCorrection
         coordinator.onSpellCheckingPolicyChanged = onSpellCheckingPolicyChanged
         return coordinator
+    }
+}
+// MARK: - Scrolling header view
+
+private extension NativeTextViewWrapper {
+    /// Host the embedder's header above the body, inside the container document
+    /// view. The hosted content refreshes on every SwiftUI update; build,
+    /// collapse/expand, and teardown live in `ScrollingHeaderController`.
+    func reconcileHeader(textView: NSTextView, context: Context) {
+        let coord = context.coordinator
+        guard let container = (textView as? NativeTextView)?.superview as? NativeTextViewContainer else { return }
+
+        guard let header else {
+            if let controller = coord.headerController {
+                controller.remove(from: container)
+                coord.headerController = nil
+            }
+            return
+        }
+        let controller = coord.headerController ?? ScrollingHeaderController()
+        coord.headerController = controller
+        controller.reconcile(
+            header: header,
+            collapsedHeight: headerCollapsedHeight,
+            expanded: headerExpanded,
+            container: container
+        )
     }
 }

@@ -182,6 +182,20 @@ extension NativeTextView {
         }
     }
 
+    /// Cheap per-frame overlay shift when the container moves the text view
+    /// vertically (header band growing/collapsing). Breakout overlays are
+    /// SIBLINGS in the container whose frames bake in the text view's offset
+    /// at update time; non-breakout overlays are text-view subviews and move
+    /// with it automatically.
+    func shiftWideTableOverlays(byY deltaY: CGFloat) {
+        guard configuration.readingWidth != nil, !wideTableOverlays.isEmpty else { return }
+        for (_, overlay) in wideTableOverlays {
+            var f = overlay.frame
+            f.origin.y += deltaY
+            overlay.frame = f
+        }
+    }
+
     /// Cheap per-frame overlay reposition on width change (no layout) — keeps tables glued to the text during resize.
     func repositionWideTableOverlaysForWidthChange(insetDelta: CGFloat) {
         guard configuration.readingWidth != nil, !wideTableOverlays.isEmpty else { return }
@@ -247,10 +261,12 @@ extension NativeTextView {
             guard !anchorRect.isEmpty else { return }
 
             let totalHeight = (storage.attribute(.scrollableBlockTotalHeight, at: attrRange.location, effectiveRange: nil) as? CGFloat) ?? image.size.height
-            // In breakout the overlay lives in the container, so add the column's X offset.
+            // In breakout the overlay lives in the container, so add the column's X
+            // offset and the text view's Y offset (the scroll-away header band).
             let columnLeft = (breakout ? frame.origin.x : 0) + textContainerOrigin.x + anchorRect.minX
+            let breakoutTop = frame.origin.y + textContainerOrigin.y + anchorRect.minY
             let overlayFrame: NSRect = breakout
-                ? NSRect(x: 0, y: textContainerOrigin.y + anchorRect.minY, width: viewWidth, height: totalHeight)
+                ? NSRect(x: 0, y: breakoutTop, width: viewWidth, height: totalHeight)
                 : NSRect(x: columnLeft, y: textContainerOrigin.y + anchorRect.minY, width: containerWidth, height: totalHeight)
             // Breakout: table starts at the text column's left edge; the left margin is scrollable space.
             let leftContentInset: CGFloat = breakout ? max(0, columnLeft) : 0

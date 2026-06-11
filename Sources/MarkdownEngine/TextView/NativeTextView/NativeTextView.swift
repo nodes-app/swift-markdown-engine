@@ -52,6 +52,11 @@ final class NativeTextView: NSTextView {
     // MARK: Drag-select state
     var dragStartMouseScreenLoc: NSPoint?
 
+    // MARK: Placeholder state
+    /// Click-through ghost-text label shown while the document is empty;
+    /// managed by `NativeTextView+Placeholder.swift`.
+    weak var placeholderView: PlaceholderLabelView?
+
     // MARK: Wide-table overlay state
     /// Live NSScrollView per wide table; keyed by source-ID hash.
     var wideTableOverlays: [Int: WideTableOverlay] = [:]

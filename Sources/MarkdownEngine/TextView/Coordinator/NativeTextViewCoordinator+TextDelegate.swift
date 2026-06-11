@@ -39,6 +39,8 @@ extension NativeTextViewCoordinator {
 
     public func textDidChange(_ notification: Notification) {
         guard let tv = notification.object as? NSTextView else { return }
+        // Before the early returns: the first keystroke must hide the placeholder.
+        (tv as? NativeTextView)?.refreshPlaceholderVisibility()
         let wtActive = isWritingToolsActive
         if wtActive, wtDetectedMode == .unknown {
             let firstEditLen = tv.textStorage?.editedRange.length ?? 0
