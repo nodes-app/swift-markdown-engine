@@ -59,6 +59,9 @@ extension NativeTextViewCoordinator {
         // so no stale-offset underlines paint during the debounce window.
         // The next `scheduleSpellCheck` call (at the end of this method)
         // will recompute fresh ranges once the user stops typing.
+        let editedLen = tv.textStorage?.editedRange.length ?? 0
+        let editedLoc = tv.textStorage?.editedRange.location ?? -1
+        print("[SC] textDidChange: editedRange={\(editedLoc),\(editedLen)} fullLen=\(fullLength) hasMarked=\(tv.hasMarkedText())")
         clearSpellMisspellings(textView: tv)
         let safeLocation = min(rawSelRange.location, fullLength)
         let safeSelRange = NSRange(location: safeLocation, length: 0)

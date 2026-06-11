@@ -628,6 +628,7 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
         guard let fragRange = fragmentNSRange, fragRange.length > 0 else { return }
         let fragStart = fragRange.location
         let fragEnd = NSMaxRange(fragRange)
+        print("[SC] draw frag={\(fragStart),\(fragRange.length)} cacheCount=\(coordinator.spellMisspelledRanges.count)")
 
         let theme = textView.configuration.theme
         NSGraphicsContext.saveGraphicsState()

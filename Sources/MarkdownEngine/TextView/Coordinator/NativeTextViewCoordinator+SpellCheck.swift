@@ -11,15 +11,16 @@
 //  `MarkdownTextLayoutFragment.draw(at:in:)`.
 //
 //  Design (see devlog-0610-spellcheck-15x-fallback-design.md):
-//  - Synchronous `checkSpelling(of:startingAt:)` walk on a background
-//    queue — deterministic, no unreliable completion handlers.
+//  - Synchronous `checkSpelling(of:startingAt:)` walk on the main
+//    thread — deterministic, no background-queue data races.
 //  - 400 ms debounce. Cache is cleared **synchronously** on every
 //    `textDidChange` before the next pass is scheduled, so the stale-
 //    offset bug class never surfaces.
-//  - System's own continuous-spell-check pass is disabled on 15.x so it
-//    can't race with the engine's driver (the unreliable underlines that
-//    sometimes appeared after selection changes were from the system's
-//    pass, not ours).
+//  - The system's own continuous spell-check pass is left enabled.
+//    On macOS 15.x it paints on the default fragment (which our custom
+//    fragment replaces), so it can't interfere with our cache-based
+//    drawing. Disabling it was tried and caused a recursive
+//    textDidChange cascade that cancelled the debounced pass.
 //  - Reuses existing zone helpers (`isInsideCode`, `isInsideLatex`,
 //    `isInsideSpellcheckSuppressedToken`) — same gates as
 //    `NativeTextView+SpellingPolicy`. Belt-and-suspenders with the
@@ -58,16 +59,21 @@ extension NativeTextViewCoordinator {
         }
         guard userPrefersContinuousSpellChecking else {
             // Toggle is off — make sure stale marks aren't left around.
+            print("[SC] schedule: toggle OFF, clearing")
             clearSpellMisspellings(textView: textView)
             return
         }
-        // Disable the system's own continuous spell-check pass on 15.x
-        // so it can't race with the engine's driver. On macOS 15.7.7 the
-        // system's pass paints `.spellingState` unreliably (sometimes
-        // after mount, sometimes after selection, rarely after edits),
-        // producing the inconsistent underlines reported in testing.
-        // The engine is the sole painter on 15.x.
-        textView.isContinuousSpellCheckingEnabled = false
+        print("[SC] schedule: queued, len=\((textView.string as NSString).length)")
+        // NOTE: the system's own continuous spell-check pass is left
+        // enabled. On macOS 15.x it paints on the default fragment
+        // (which our custom MarkdownTextLayoutFragment replaces), so
+        // its `.spellingState` underlines are invisible. Our cache-
+        // based drawing in drawSpellMisspellings is the sole visible
+        // painter. Disabling the system pass via
+        // `textView.isContinuousSpellCheckingEnabled = false` was tried
+        // but caused a recursive textDidChange cascade (AppKit clears
+        // .spellingState attributes synchronously, which triggers a
+        // delegate call that cancels the debounced pass).
         let work = DispatchWorkItem { [weak self, weak textView] in
             guard let self, let textView else { return }
             self.runSpellCheckPass(textView: textView)
@@ -101,13 +107,16 @@ extension NativeTextViewCoordinator {
     func runSpellCheckPass(textView: NSTextView) {
         guard #unavailable(macOS 26) else { return }
         guard userPrefersContinuousSpellChecking else {
+            print("[SC] run: toggle OFF")
             clearSpellMisspellings(textView: textView)
             return
         }
         let string = textView.string
         let ns = string as NSString
         let length = ns.length
+        print("[SC] run: start len=\(length)")
         guard length > 0 else {
+            print("[SC] run: empty doc")
             updateSpellMisspelledRanges([], textView: textView)
             return
         }
@@ -118,6 +127,7 @@ extension NativeTextViewCoordinator {
         // Synchronous walk on the main thread — avoids all threading
         // issues with NSTextView.string and the parsedDocument cache.
         var misspelledRanges: [NSRange] = []
+        var rawHits = 0
         var searchStart = 0
         while searchStart < length {
             let misspelled = checker.checkSpelling(
@@ -129,11 +139,13 @@ extension NativeTextViewCoordinator {
                 wordCount: nil
             )
             guard misspelled.location != NSNotFound else { break }
+            rawHits += 1
             if !shouldSuppressSpellMark(range: misspelled, in: string) {
                 misspelledRanges.append(misspelled)
             }
             searchStart = NSMaxRange(misspelled)
         }
+        print("[SC] run: done rawHits=\(rawHits) kept=\(misspelledRanges.count) tag=\(docTag)")
         updateSpellMisspelledRanges(misspelledRanges, textView: textView)
     }
 
@@ -145,12 +157,42 @@ extension NativeTextViewCoordinator {
         updateSpellMisspelledRanges([], textView: textView)
     }
 
-    /// Replaces the stored set and asks the text view to redraw. The
-    /// fragment's `draw(at:in:)` reads from `spellMisspelledRanges` on
-    /// each repaint, so a simple `needsDisplay = true` is enough — no
-    /// layout invalidation required.
+    /// Replaces the stored set and forces every fragment overlapping an
+    /// affected range to re-execute its draw. `textView.needsDisplay = true`
+    /// alone is insufficient on macOS 15.x because TextKit 2 maintains
+    /// per-fragment rendering caches: a paragraph that wasn't restyled or
+    /// re-laid-out simply re-blits its old imagery, so newly-discovered
+    /// misspellings outside the edited paragraph never paint until
+    /// something forces a full re-layout (panel show/hide, selection
+    /// change, etc.).
+    ///
+    /// `invalidateRenderingAttributes(for:)` is too soft — the layout
+    /// manager treats it as a hint and may silently no-op when no
+    /// rendering-attribute spans actually changed in the range. We saw
+    /// this in repro logs: the call returned, no `draw(at:in:)` followed,
+    /// and underlines stayed gone until a selection change forced a
+    /// fresh display pass.
+    ///
+    /// `invalidateLayout(for:)` always busts the fragment's drawing
+    /// cache and re-runs `draw(at:in:)` on the next display tick. Layout
+    /// re-runs only over the small misspelling ranges, so cost is
+    /// bounded. We pair it with `textView.needsDisplay = true` so the
+    /// containing view actually schedules the next display pass.
     private func updateSpellMisspelledRanges(_ ranges: [NSRange], textView: NSTextView) {
+        print("[SC] update: was=\(spellMisspelledRanges.count) now=\(ranges.count)")
+        let previous = spellMisspelledRanges
         spellMisspelledRanges = ranges
+
+        guard let tlm = textView.textLayoutManager,
+              let tcs = tlm.textContentManager as? NSTextContentStorage else {
+            textView.needsDisplay = true
+            return
+        }
+
+        for nsRange in (previous + ranges) where nsRange.length > 0 {
+            guard let textRange = TextStylingService.textRange(from: nsRange, in: tcs) else { continue }
+            tlm.invalidateLayout(for: textRange)
+        }
         textView.needsDisplay = true
     }
 
