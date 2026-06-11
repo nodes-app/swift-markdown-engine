@@ -74,6 +74,14 @@ public struct MarkdownEditorTheme: Sendable {
     /// (e.g. completed task list items, horizontal rules).
     public var strikethroughColor: NSColor
 
+    /// Stroke color used for misspelling underlines drawn by the engine's
+    /// macOS 15.x fallback (when AppKit's own TextKit 2 pass does not
+    /// paint `.spellingState` rendering attributes). Defaults to
+    /// `.systemRed` to match the system's native misspelling marks; apps
+    /// with a custom palette should override this alongside the rest of
+    /// the theme.
+    public var misspellingUnderlineColor: NSColor
+
     // MARK: Init
 
     public init(
@@ -87,7 +95,8 @@ public struct MarkdownEditorTheme: Sendable {
         findCurrentMatchHighlight: NSColor = .systemYellow,
         latexLightModeText: NSColor = .black,
         latexDarkModeText: NSColor = .white,
-        strikethroughColor: NSColor = .labelColor
+        strikethroughColor: NSColor = .labelColor,
+        misspellingUnderlineColor: NSColor = .systemRed
     ) {
         self.bodyText = bodyText
         self.mutedText = mutedText
@@ -100,6 +109,7 @@ public struct MarkdownEditorTheme: Sendable {
         self.latexLightModeText = latexLightModeText
         self.latexDarkModeText = latexDarkModeText
         self.strikethroughColor = strikethroughColor
+        self.misspellingUnderlineColor = misspellingUnderlineColor
     }
 
     /// System-native palette built from `NSColor` dynamic system colors.

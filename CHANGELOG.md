@@ -21,6 +21,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ```
 
 ### Added
+- `MarkdownEditorTheme.misspellingUnderlineColor` (default `.systemRed`),
+  routed through the engine's macOS 15.x spell-check fallback so custom
+  palettes control the dotted-red underline color.
+- macOS 15.x spell-check fallback. On macOS 15.x the system's own
+  TextKit 2 pass neither writes nor paints `.spellingState` rendering
+  attributes on custom `NSTextLayoutFragment` subclasses. The engine now
+  drives `NSSpellChecker.requestChecking(of:…)` itself (400 ms debounce,
+  async, no main-thread stalls) and paints dotted-red underlines in
+  `MarkdownTextLayoutFragment.draw(at:in:)`. The cache is cleared
+  synchronously on every `textDidChange` so no stale-offset underlines
+  paint during the debounce window. On macOS 26+ the fallback is a
+  no-op (AppKit's native pass handles everything). Uses
+  `textView.spellCheckerDocumentTag` so "Ignore Spelling" works,
+  respects the existing `SpellCheckingPolicy` toggles from #36, and
+  excludes underlines from print/PDF output via `NSPrintOperation.current`.
+- `MarkdownASTStyler` now stamps `.spellingState: 0` on fenced code
+  blocks and inline `code` spans, completing the engine's existing
+  spell-check suppression convention (links, wiki-links, LaTeX, and
+  tables already carry the same attribute). Code regions stay clean
+  under both the system's native pass (macOS 26+) and the engine's
+  own 15.x fallback driver.
 - `SafeAreaInsets` struct exposing `top` / `leading` / `trailing` / `bottom`
   inset knobs for the editor's enclosing scroll view, configurable via
   `MarkdownEditorConfiguration.safeAreaInsets`.

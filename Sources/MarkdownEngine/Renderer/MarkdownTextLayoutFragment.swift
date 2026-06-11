@@ -94,6 +94,11 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
 
         // 6. Blockquote bars (left gutter, behind nothing — text is indented)
         drawBlockquoteBars(at: point, in: context)
+
+        // 7. Spell-check underlines (macOS 15.x fallback). On macOS 26+
+        //    AppKit's own TextKit 2 pass paints `.spellingState` via the
+        //    default fragment; the engine's driver is a no-op there.
+        drawSpellMisspellings(at: point, in: context)
     }
 
     // MARK: - Helpers
@@ -588,6 +593,89 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
                 symbol.draw(in: iconRect)
             }
         }
+    }
+
+    // MARK: - Spell-check underlines (macOS 15.x fallback)
+
+    /// Paint dotted red underlines beneath every misspelled range that
+    /// intersects this fragment. Reads the cache populated by
+    /// `NativeTextViewCoordinator+SpellCheck` (see
+    /// `scheduleSpellCheck` / `runSpellCheckPass`).
+    ///
+    /// Required on macOS 15.x: the system's own continuous-spell-check
+    /// pass neither writes nor paints `.spellingState` rendering
+    /// attributes on TextKit 2 custom fragments (confirmed by
+    /// `spellcheck-pipeline-test.swift` in the fork's `.tmp/`). On
+    /// macOS 26+ AppKit handles this natively and the cache stays empty.
+    ///
+    /// Anti-pattern fixes vs. PR #59:
+    /// - Routes color through `MarkdownEditorTheme.misspellingUnderlineColor`.
+    /// - RTL-safe: computes absolute `x1`/`x2` and swaps when needed.
+    /// - Skips when the current graphics context is for print/PDF so
+    ///   misspelling marks don't bleed into exported documents.
+    /// - No version gate here: on 26+ the cache is empty because the
+    ///   engine's `scheduleSpellCheck` driver is gated in the coordinator.
+    private func drawSpellMisspellings(at point: CGPoint, in context: CGContext) {
+        // Print/PDF exclusion: underlines are for on-screen editing only.
+        // `NSPrintOperation.current` is set while the fragment is being
+        // drawn into a print/PDF context; screen drawing leaves it nil.
+        if NSPrintOperation.current != nil { return }
+        // On macOS 26+ the coordinator keeps this empty.
+        guard let textView = textLayoutManager?.textContainer?.textView as? NativeTextView,
+              let coordinator = textView.delegate as? NativeTextViewCoordinator,
+              !coordinator.spellMisspelledRanges.isEmpty
+        else { return }
+        guard let fragRange = fragmentNSRange, fragRange.length > 0 else { return }
+        let fragStart = fragRange.location
+        let fragEnd = NSMaxRange(fragRange)
+
+        let theme = textView.configuration.theme
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        let nsContext = NSGraphicsContext(cgContext: context, flipped: true)
+        NSGraphicsContext.current = nsContext
+
+        theme.misspellingUnderlineColor.withAlphaComponent(0.7).setStroke()
+        let path = NSBezierPath()
+        path.lineWidth = 1.5
+        path.lineCapStyle = .round
+        path.setLineDash([1.5, 1.5], count: 2, phase: 0)
+
+        for misspelled in coordinator.spellMisspelledRanges {
+            let mStart = misspelled.location
+            let mEnd = NSMaxRange(misspelled)
+            if mEnd <= fragStart || mStart >= fragEnd { continue }
+            let docLo = max(mStart, fragStart)
+            let docHi = min(mEnd, fragEnd)
+            let localLo = docLo - fragStart
+            let localHi = docHi - fragStart
+
+            for lineFragment in textLineFragments {
+                let lr = lineFragment.characterRange
+                let lrLo = lr.location
+                let lrHi = lr.location + lr.length
+                let lo = max(localLo, lrLo)
+                let hi = min(localHi, lrHi)
+                guard lo < hi else { continue }
+
+                let startPos = lineFragment.locationForCharacter(at: lo)
+                let endPos = lineFragment.locationForCharacter(at: hi)
+                let tb = lineFragment.typographicBounds
+                var x1 = point.x + tb.origin.x + startPos.x
+                var x2 = point.x + tb.origin.x + endPos.x
+                // RTL-safe: swap if the text direction flipped the order.
+                if x2 < x1 { swap(&x1, &x2) }
+                guard x1 != x2 else { continue }
+                // baselineY = line-top + baseline offset within the line.
+                let baselineY = point.y + tb.origin.y + startPos.y
+                // Place the underline ~1.5pt below the baseline, matching
+                // where AppKit's own misspelling marks typically sit.
+                let y = baselineY + 1.5
+                path.move(to: NSPoint(x: x1, y: y))
+                path.line(to: NSPoint(x: x2, y: y))
+            }
+        }
+        path.stroke()
     }
 }
 

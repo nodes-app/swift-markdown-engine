@@ -367,6 +367,10 @@ enum MarkdownASTStyler {
         attrs.append((parts.codeRange, [
             .font: ctx.codeFont, .backgroundColor: ctx.codeBackground, .paragraphStyle: ctx.codeParagraphStyle,
         ]))
+        // Suppress spell-check underlines on the whole fenced block —
+        // code is not prose. Completes the existing link / wiki-link
+        // convention (see `styleLink` / `styleWikiLink`).
+        attrs.append((parts.codeRange, [.spellingState: 0]))
         let codeContent = ctx.ns.substring(with: parts.content)
         if !codeContent.isEmpty,
            let highlighted = ctx.config.services.syntaxHighlighter.highlight(code: codeContent, language: parts.language) {
@@ -431,6 +435,10 @@ enum MarkdownASTStyler {
 
             case .code(let range, let contentRange):
                 attrs.append((contentRange, [.font: ctx.codeFont, .backgroundColor: ctx.codeBackground]))
+                // Suppress spell-check underlines on inline `code` spans
+                // (markers + content) — same convention as `styleLink` /
+                // `styleWikiLink` / `styleTable` / `styleLatex`.
+                attrs.append((range, [.spellingState: 0]))
                 let markerAttrs: [NSAttributedString.Key: Any] = ctx.isActive(range)
                     ? [.foregroundColor: ctx.theme.mutedText, .font: ctx.codeFont]
                     : [.foregroundColor: ctx.theme.mutedText.withAlphaComponent(ctx.config.markers.inlineCodeMarkerAlpha),
