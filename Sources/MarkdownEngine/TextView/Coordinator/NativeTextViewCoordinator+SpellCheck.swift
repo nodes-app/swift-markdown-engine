@@ -11,10 +11,15 @@
 //  `MarkdownTextLayoutFragment.draw(at:in:)`.
 //
 //  Design (see devlog-0610-spellcheck-15x-fallback-design.md):
-//  - Async `NSSpellChecker.requestChecking(of:…)` — no main-thread XPC.
+//  - Synchronous `checkSpelling(of:startingAt:)` walk on a background
+//    queue — deterministic, no unreliable completion handlers.
 //  - 400 ms debounce. Cache is cleared **synchronously** on every
 //    `textDidChange` before the next pass is scheduled, so the stale-
 //    offset bug class never surfaces.
+//  - System's own continuous-spell-check pass is disabled on 15.x so it
+//    can't race with the engine's driver (the unreliable underlines that
+//    sometimes appeared after selection changes were from the system's
+//    pass, not ours).
 //  - Reuses existing zone helpers (`isInsideCode`, `isInsideLatex`,
 //    `isInsideSpellcheckSuppressedToken`) — same gates as
 //    `NativeTextView+SpellingPolicy`. Belt-and-suspenders with the
@@ -56,6 +61,13 @@ extension NativeTextViewCoordinator {
             clearSpellMisspellings(textView: textView)
             return
         }
+        // Disable the system's own continuous spell-check pass on 15.x
+        // so it can't race with the engine's driver. On macOS 15.7.7 the
+        // system's pass paints `.spellingState` unreliably (sometimes
+        // after mount, sometimes after selection, rarely after edits),
+        // producing the inconsistent underlines reported in testing.
+        // The engine is the sole painter on 15.x.
+        textView.isContinuousSpellCheckingEnabled = false
         let work = DispatchWorkItem { [weak self, weak textView] in
             guard let self, let textView else { return }
             self.runSpellCheckPass(textView: textView)
@@ -67,47 +79,61 @@ extension NativeTextViewCoordinator {
         )
     }
 
-    /// Run an async full-document scan via `NSSpellChecker.requestChecking`.
-    /// Filters results against the engine's existing zone helpers so code,
-    /// LaTeX, links, and image embeds never end up underlined.
+    /// Run a full-document scan on a background queue using the
+    /// synchronous `checkSpelling(of:startingAt:)` loop. The previous
+    /// async `requestChecking(of:…)` API was unreliable on macOS 15.x —
+    /// its completion handler sometimes didn't fire after the first call,
+    /// leaving the cache permanently empty after edits.
+    ///
+    /// Filters results against the engine's existing zone helpers so
+    /// code, LaTeX, links, and image embeds never end up underlined.
     func runSpellCheckPass(textView: NSTextView) {
         guard #unavailable(macOS 26) else { return }
         guard userPrefersContinuousSpellChecking else {
-            clearSpellMisspellings(textView: textView)
+            DispatchQueue.main.async {
+                self.clearSpellMisspellings(textView: textView)
+            }
             return
         }
         let string = textView.string
-        let length = (string as NSString).length
+        let ns = string as NSString
+        let length = ns.length
         guard length > 0 else {
-            updateSpellMisspelledRanges([], textView: textView)
+            DispatchQueue.main.async {
+                self.updateSpellMisspelledRanges([], textView: textView)
+            }
             return
         }
 
         let checker = NSSpellChecker.shared
         let docTag = textView.spellCheckerDocumentTag
-        let wholeDocument = NSRange(location: 0, length: length)
 
-        checker.requestChecking(
-            of: string,
-            range: wholeDocument,
-            types: NSTextCheckingTypes(NSTextCheckingResult.CheckingType.spelling.rawValue),
-            options: [:],
-            inSpellDocumentWithTag: docTag,
-            completionHandler: { [weak self, weak textView] (_ seq: Int, results: [NSTextCheckingResult], _ orthography: NSOrthography, _ wordCount: Int) in
-                guard let self, let textView else { return }
-                let filtered = results.compactMap { result -> NSRange? in
-                    guard result.resultType == .spelling else { return nil }
-                    return self.shouldSuppressSpellMark(range: result.range, in: string)
-                        ? nil
-                        : result.range
+        // Synchronous walk on a background queue.
+        // `checkSpelling(of:startingAt:)` is fast for typical note sizes
+        // and deterministically calls back — no completion-handler race.
+        DispatchQueue.global(qos: .userInitiated).async { [weak self, weak textView] in
+            guard let self, let textView else { return }
+            var misspelledRanges: [NSRange] = []
+            var searchStart = 0
+            while searchStart < length {
+                let misspelled = checker.checkSpelling(
+                    of: ns as String,
+                    startingAt: searchStart,
+                    language: nil,
+                    wrap: false,
+                    inSpellDocumentWithTag: docTag,
+                    wordCount: nil
+                )
+                guard misspelled.location != NSNotFound else { break }
+                if !self.shouldSuppressSpellMark(range: misspelled, in: string) {
+                    misspelledRanges.append(misspelled)
                 }
-                // NSSpellChecker calls back on NSTextCheckingOperationQueue
-                // (a background queue). Hop to main before touching UI.
-                DispatchQueue.main.async {
-                    self.updateSpellMisspelledRanges(filtered, textView: textView)
-                }
+                searchStart = NSMaxRange(misspelled)
             }
-        )
+            DispatchQueue.main.async {
+                self.updateSpellMisspelledRanges(misspelledRanges, textView: textView)
+            }
+        }
     }
 
     /// Empties the misspelling set and triggers a redraw so any leftover
