@@ -15,3 +15,4 @@ DerivedData/
 # Generated documentation
 /docs
 *.doccarchive
+.tmp/
