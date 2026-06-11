@@ -101,7 +101,11 @@ extension NativeTextViewCoordinator {
                         ? nil
                         : result.range
                 }
-                self.updateSpellMisspelledRanges(filtered, textView: textView)
+                // NSSpellChecker calls back on NSTextCheckingOperationQueue
+                // (a background queue). Hop to main before touching UI.
+                DispatchQueue.main.async {
+                    self.updateSpellMisspelledRanges(filtered, textView: textView)
+                }
             }
         )
     }

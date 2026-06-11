@@ -1,0 +1,24 @@
+feat: stamp .spellingState: 0 on fenced code blocks and inline `code`
+
+Code is not prose. Fenced blocks and inline `code` spans should be left
+alone by the system spell-checker, the same way links, wiki-links, LaTeX,
+and table cells already are. This completes the engine's existing
+spell-check suppression convention with two minimal styler hunks.
+
+- MarkdownASTStyler.styleCodeBlock: append .spellingState: 0 on the
+  whole fenced codeRange (alongside the existing .font/.background/
+  .paragraphStyle stamp).
+- MarkdownASTStyler inline .code case: append .spellingState: 0 on the
+  full inline span (markers + content), so the suppression covers the
+  backticks too.
+- MarkdownASTStylerTests: new @Test asserting .spellingState: 0 is
+  present on a fenced-block content range and on an inline `code` span,
+  and that plain prose carries no .spellingState attribute.
+- CHANGELOG: Unreleased / Added entry framed as completing the existing
+  suppression convention.
+
+This is the styler portion split out of #59 per review feedback. The
+render-pass approach in that PR is being abandoned — the harness
+attached to #59 confirms the underline absence on macOS 15.7.7 is a
+system-wide TextKit 2 issue, not something the custom NSTextLayoutFragment
+subclass causes.
