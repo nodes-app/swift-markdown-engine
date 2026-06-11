@@ -241,6 +241,11 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             context.coordinator.refreshActiveLinkCaretRect()
             context.coordinator.updateCodeBlockSelection(textView: textView)
         }
+        // Spell-check fallback (macOS 15.x): kick off the initial scan
+        // after the first runloop turn so the text view is wired up and
+        // the initial styling pass has settled. On macOS 26+ this is a
+        // no-op (`scheduleSpellCheck` short-circuits on #available).
+        context.coordinator.scheduleSpellCheck(textView: textView)
         return scrollView
     }
 
@@ -370,6 +375,14 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.onInlineSelectionChange = onInlineSelectionChange
         context.coordinator.onCodeBlockSelectionChange = onCodeBlockSelectionChange
         context.coordinator.didInitialFormatting = true
+
+        // Spell-check fallback (macOS 15.x): on node switch, recompute
+        // underlines against the new document. The cache is cleared at
+        // the top of the toggle branch so no bleed-through from the
+        // previous note. On macOS 26+ this is a no-op.
+        if isNodeSwitch {
+            context.coordinator.scheduleSpellCheck(textView: textView)
+        }
     }
 
     public func makeCoordinator() -> Coordinator {

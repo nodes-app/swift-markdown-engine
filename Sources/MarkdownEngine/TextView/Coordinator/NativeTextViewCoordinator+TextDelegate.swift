@@ -55,6 +55,11 @@ extension NativeTextViewCoordinator {
         let rawSelRange = tv.selectedRange()
         let fullLength = (tv.string as NSString).length
         guard !tv.hasMarkedText() else { return }
+        // Spell-check fallback: synchronously clear the misspelling cache
+        // so no stale-offset underlines paint during the debounce window.
+        // The next `scheduleSpellCheck` call (at the end of this method)
+        // will recompute fresh ranges once the user stops typing.
+        clearSpellMisspellings(textView: tv)
         let safeLocation = min(rawSelRange.location, fullLength)
         let safeSelRange = NSRange(location: safeLocation, length: 0)
         previousCaretLocation = safeSelRange.location
@@ -155,6 +160,11 @@ extension NativeTextViewCoordinator {
             bottomTextView.recalcOverscroll(for: scrollView, debugTag: "textDidChange")
             (scrollView as? ClampedScrollView)?.clampToInsets()
         }
+        // Spell-check fallback: kick off the debounced scan now that the
+        // edit has settled. The cache is already empty from the top of
+        // this method, so no stale underlines can paint in the 400 ms
+        // window before the async pass completes.
+        scheduleSpellCheck(textView: tv)
         previousActiveTokenIndices = activeTokenIndices
     }
 

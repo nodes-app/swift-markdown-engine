@@ -79,6 +79,25 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     // Skip spellcheck property setters when the state wouldn't change.
     var cachedSpellingDisabled: Bool?
 
+    // MARK: - Spell-check cache (macOS 15.x fallback)
+    //
+    // On macOS 26+ the system's own TextKit 2 pass paints `.spellingState`
+    // rendering attributes via the default fragment. On 15.x that pass is
+    // broken — the system neither writes nor paints `.spellingState` on
+    // custom fragments (see `spellcheck-pipeline-test.swift` in the
+    // fork's `.tmp/`, and devlog-0610-spellcheck-15x-fallback-design.md).
+    // The engine therefore drives `NSSpellChecker` itself on 15.x and
+    // paints dotted-red underlines from this cache in
+    // `MarkdownTextLayoutFragment.draw(at:in:)`.
+    //
+    // The cache is cleared synchronously on every `textDidChange` so
+    // underlines never paint on stale offsets during the 400 ms debounce
+    // window. The fragment reads the cache directly; no layout
+    // invalidation is required for the repaint.
+    var spellMisspelledRanges: [NSRange] = []
+    /// Pending debounced pass; `scheduleSpellCheck` replaces this each time.
+    var spellCheckWorkItem: DispatchWorkItem?
+
     // Mirrors the user's last-known preference for each spell/grammar toggle.
     // `updateAutocorrectSettings` reads these when restoring outside a
     // suppress zone, so caret movement no longer clobbers a manual "off".
@@ -103,6 +122,12 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     /// underlying property. Snapshots the text view's state, refreshes the
     /// cache so the next caret move doesn't immediately overwrite it, and
     /// notifies the embedder.
+    ///
+    /// Spell-check fallback: cancel any pending debounced pass. On
+    /// toggle-off, also clear the misspelling cache so the underline
+    /// disappears immediately. On toggle-on, schedule an immediate
+    /// (non-debounced) pass so the underline reappears within the debounce
+    /// window instead of waiting for the next keystroke.
     func didToggleSpellCheckingPolicy(textView: NSTextView) {
         userPrefersContinuousSpellChecking = textView.isContinuousSpellCheckingEnabled
         userPrefersGrammarChecking = textView.isGrammarCheckingEnabled
@@ -110,6 +135,17 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
         // Invalidate the "didn't change" short-circuit so the next selection
         // update re-applies the preferences cleanly.
         cachedSpellingDisabled = nil
+        // Spell-check fallback: cancel the pending debounced pass.
+        spellCheckWorkItem?.cancel()
+        spellCheckWorkItem = nil
+        if userPrefersContinuousSpellChecking {
+            // Toggle-on: schedule a non-debounced pass so underlines
+            // reappear promptly instead of waiting for the next edit.
+            scheduleSpellCheck(textView: textView)
+        } else {
+            // Toggle-off: clear the cache so underlines vanish now.
+            clearSpellMisspellings(textView: textView)
+        }
         onSpellCheckingPolicyChanged?(currentSpellCheckingPolicy)
     }
 
