@@ -79,61 +79,62 @@ extension NativeTextViewCoordinator {
         )
     }
 
-    /// Run a full-document scan on a background queue using the
-    /// synchronous `checkSpelling(of:startingAt:)` loop. The previous
-    /// async `requestChecking(of:…)` API was unreliable on macOS 15.x —
-    /// its completion handler sometimes didn't fire after the first call,
-    /// leaving the cache permanently empty after edits.
+    /// Run a full-document scan on the main thread using the
+    /// synchronous `checkSpelling(of:startingAt:)` loop.
+    ///
+    /// Previous approaches used a background queue (async
+    /// `requestChecking` or `DispatchQueue.global`), but both were
+    /// unreliable on macOS 15.x:
+    /// - `requestChecking`'s completion handler sometimes never fired
+    ///   after the first call.
+    /// - Background-queue access to `textView.string` (not thread-safe)
+    ///   and `shouldSuppressSpellMark` (reads `cachedParsedDocument`
+    ///   which the main thread mutates during restyles) caused data
+    ///   races that silently produced empty results after edits.
+    ///
+    /// For typical notes (hundreds of words, a handful of
+    /// misspellings) the synchronous walk takes single-digit
+    /// milliseconds — well within the 400 ms debounce window.
     ///
     /// Filters results against the engine's existing zone helpers so
     /// code, LaTeX, links, and image embeds never end up underlined.
     func runSpellCheckPass(textView: NSTextView) {
         guard #unavailable(macOS 26) else { return }
         guard userPrefersContinuousSpellChecking else {
-            DispatchQueue.main.async {
-                self.clearSpellMisspellings(textView: textView)
-            }
+            clearSpellMisspellings(textView: textView)
             return
         }
         let string = textView.string
         let ns = string as NSString
         let length = ns.length
         guard length > 0 else {
-            DispatchQueue.main.async {
-                self.updateSpellMisspelledRanges([], textView: textView)
-            }
+            updateSpellMisspelledRanges([], textView: textView)
             return
         }
 
         let checker = NSSpellChecker.shared
         let docTag = textView.spellCheckerDocumentTag
 
-        // Synchronous walk on a background queue.
-        // `checkSpelling(of:startingAt:)` is fast for typical note sizes
-        // and deterministically calls back — no completion-handler race.
-        DispatchQueue.global(qos: .userInitiated).async { [weak self, weak textView] in
-            guard let self, let textView else { return }
-            var misspelledRanges: [NSRange] = []
-            var searchStart = 0
-            while searchStart < length {
-                let misspelled = checker.checkSpelling(
-                    of: ns as String,
-                    startingAt: searchStart,
-                    language: nil,
-                    wrap: false,
-                    inSpellDocumentWithTag: docTag,
-                    wordCount: nil
-                )
-                guard misspelled.location != NSNotFound else { break }
-                if !self.shouldSuppressSpellMark(range: misspelled, in: string) {
-                    misspelledRanges.append(misspelled)
-                }
-                searchStart = NSMaxRange(misspelled)
+        // Synchronous walk on the main thread — avoids all threading
+        // issues with NSTextView.string and the parsedDocument cache.
+        var misspelledRanges: [NSRange] = []
+        var searchStart = 0
+        while searchStart < length {
+            let misspelled = checker.checkSpelling(
+                of: ns as String,
+                startingAt: searchStart,
+                language: nil,
+                wrap: false,
+                inSpellDocumentWithTag: docTag,
+                wordCount: nil
+            )
+            guard misspelled.location != NSNotFound else { break }
+            if !shouldSuppressSpellMark(range: misspelled, in: string) {
+                misspelledRanges.append(misspelled)
             }
-            DispatchQueue.main.async {
-                self.updateSpellMisspelledRanges(misspelledRanges, textView: textView)
-            }
+            searchStart = NSMaxRange(misspelled)
         }
+        updateSpellMisspelledRanges(misspelledRanges, textView: textView)
     }
 
     /// Empties the misspelling set and triggers a redraw so any leftover
