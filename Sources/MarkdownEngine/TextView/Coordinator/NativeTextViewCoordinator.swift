@@ -19,6 +19,9 @@ import SwiftUI
 /// Notifications, Restyling, TextDelegate, WritingTools).
 public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var documentId: String?
+    /// Remembered scroll offset (`bounds.origin.y`) per `documentId` — saved on
+    /// switch-away, restored on switch-back.
+    var scrollOffsets: [String: CGFloat] = [:]
     @Binding var text: String
     @Binding var isWikiLinkActive: Bool
     var fontName: String

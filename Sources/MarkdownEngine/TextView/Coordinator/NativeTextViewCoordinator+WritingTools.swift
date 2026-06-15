@@ -65,8 +65,9 @@ extension NativeTextViewCoordinator {
         if undoDuringSession {
             rebuildTextStorageAndStyle(textView, from: storage)
         }
+        // Don't pre-set `lastSyncedText` — leaving it stale lets updateNSView do its
+        // normal rebuild (restyle + re-measure) so the accepted WT result stays visible.
         DispatchQueue.main.async { [self] in
-            lastSyncedText = storage
             text = storage
         }
     }

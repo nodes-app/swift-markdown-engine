@@ -93,6 +93,9 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     /// ``headerCollapsedHeight``. Toggling animates the reveal.
     public var headerExpanded: Bool
 
+    /// documentIds whose scroll offset to keep; others are forgotten. `nil` keeps all.
+    public var retainedScrollDocumentIds: Set<String>?
+
     public init(
         text: Binding<String>,
         isWikiLinkActive: Binding<Bool> = .constant(false),
@@ -111,7 +114,8 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         placeholder: NSAttributedString? = nil,
         header: AnyView? = nil,
         headerCollapsedHeight: CGFloat = 0,
-        headerExpanded: Bool = true
+        headerExpanded: Bool = true,
+        retainedScrollDocumentIds: Set<String>? = nil
     ) {
         self._text = text
         self._isWikiLinkActive = isWikiLinkActive
@@ -131,6 +135,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         self.header = header
         self.headerCollapsedHeight = headerCollapsedHeight
         self.headerExpanded = headerExpanded
+        self.retainedScrollDocumentIds = retainedScrollDocumentIds
     }
 
     public func makeNSView(context: Context) -> NSScrollView {
@@ -291,6 +296,20 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         reconcileHeader(textView: textView, context: context)
 
         let isNodeSwitch = context.coordinator.documentId != documentId
+
+        // Drop remembered offsets for documents no longer retained (always keep
+        // the current one). Only rebuilds the dict when something must go.
+        if let retained = retainedScrollDocumentIds {
+            let needsPrune = context.coordinator.scrollOffsets.keys.contains { key in
+                key != documentId && !retained.contains(key)
+            }
+            if needsPrune {
+                context.coordinator.scrollOffsets = context.coordinator.scrollOffsets.filter {
+                    $0.key == documentId || retained.contains($0.key)
+                }
+            }
+        }
+
         let wtActive: Bool = {
             if #available(macOS 15.0, *), textView.isWritingToolsActive { return true }
             return context.coordinator.isWritingToolsActive
@@ -375,6 +394,12 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             context.coordinator.didInitialFormatting = false
         }
         if isNodeSwitch {
+            // Save the outgoing document's scroll position — unless it just left
+            // the retained set, in which case let it reset to top next time.
+            if let outgoingId = context.coordinator.documentId,
+               retainedScrollDocumentIds?.contains(outgoingId) ?? true {
+                context.coordinator.scrollOffsets[outgoingId] = nsView.contentView.bounds.origin.y
+            }
             context.coordinator.documentId = documentId
             textView.undoManager?.removeAllActions()
             context.coordinator.didInitialFormatting = false
@@ -382,8 +407,8 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             context.coordinator.resetImageEmbedState()
             // Drop old document's wide-table overlays synchronously.
             textView.removeAllWideTableOverlays()
-            // Reset scroll to top of content so the previous file's scrollY
-            // doesn't leak into a (potentially shorter) new file.
+            // Park at top during the rebuild; the new document's own saved offset
+            // (if any) is restored after its height is known (see below).
             nsView.contentView.scroll(to: NSPoint(x: 0, y: -nsView.contentInsets.top))
             nsView.reflectScrolledClipView(nsView.contentView)
             (nsView as? ClampedScrollView)?.clampToInsets()
@@ -406,6 +431,13 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         )
         textView.recalcOverscroll(for: nsView)
         (nsView as? ClampedScrollView)?.clampToInsets()
+        // Height is measured now, so restore the saved offset; clampToInsets keeps
+        // it in range if the document got shorter.
+        if isNodeSwitch, let savedY = context.coordinator.scrollOffsets[documentId] {
+            nsView.contentView.scroll(to: NSPoint(x: nsView.contentView.bounds.origin.x, y: savedY))
+            nsView.reflectScrolledClipView(nsView.contentView)
+            (nsView as? ClampedScrollView)?.clampToInsets()
+        }
         // Document rebuilds bypass textDidChange — re-derive emptiness here.
         textView.refreshPlaceholderVisibility()
         DispatchQueue.main.async {
