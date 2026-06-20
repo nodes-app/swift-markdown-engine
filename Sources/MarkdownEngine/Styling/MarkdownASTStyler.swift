@@ -342,8 +342,9 @@ enum MarkdownASTStyler {
             let para = NSMutableParagraphStyle()
             para.firstLineHeadIndent = textIndent
             para.headIndent = textIndent
-            para.minimumLineHeight = ctx.baseLineHeight
-            para.maximumLineHeight = ctx.baseLineHeight
+            let lineHeight = ctx.baseLineHeight + ctx.config.blockquote.extraLineHeight
+            para.minimumLineHeight = lineHeight
+            para.maximumLineHeight = lineHeight
             // Inner quote lines stay tight (0); the LAST line gets the normal
             para.paragraphSpacing = (lineEnd >= end) ? ctx.baseParagraphSpacing : 0
             para.paragraphSpacingBefore = 0
