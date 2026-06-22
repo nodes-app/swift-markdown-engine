@@ -16,6 +16,24 @@ import AppKit
 
 extension NativeTextViewCoordinator {
 
+    /// Supplies a per-document `UndoManager` to the text view.
+    ///
+    /// AppKit reuses one `NSTextView` across every open document, so the built-in
+    /// view-wide undo manager would blend files together (and used to be wiped on
+    /// each switch). Returning a manager keyed on the current `documentId` gives
+    /// each file its own undo stack that survives switching away and back.
+    /// Returning the *same* instance for a given document on every call is
+    /// required — a fresh manager per call breaks undo.
+    public func undoManager(for view: NSTextView) -> UndoManager? {
+        let key = documentId ?? "__default__"
+        if let existing = undoManagers[key] {
+            return existing
+        }
+        let manager = UndoManager()
+        undoManagers[key] = manager
+        return manager
+    }
+
     /// Force base typingAttributes on every change so AppKit's auto-inheritance
     /// can't bleed a heading paragraphStyle into the trailing extra-line
     /// fragment's metrics.

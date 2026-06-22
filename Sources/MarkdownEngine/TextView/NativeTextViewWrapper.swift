@@ -367,6 +367,16 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
                     $0.key == documentId || retained.contains($0.key)
                 }
             }
+            // Evict undo stacks for documents no longer retained (keep the
+            // current one). removeAllActions() first so a stale registered undo
+            // can't later fire against a swapped-out document.
+            let staleUndoKeys = context.coordinator.undoManagers.keys.filter { key in
+                key != documentId && key != "__default__" && !retained.contains(key)
+            }
+            for key in staleUndoKeys {
+                context.coordinator.undoManagers[key]?.removeAllActions()
+                context.coordinator.undoManagers.removeValue(forKey: key)
+            }
         }
 
         let wtActive: Bool = {
@@ -479,8 +489,13 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
                retainedScrollDocumentIds?.contains(outgoingId) ?? true {
                 context.coordinator.scrollOffsets[outgoingId] = nsView.contentView.bounds.origin.y
             }
+            // Per-document undo: close the OUTGOING document's open coalescing group
+            // (while its manager is still active), then switch the active documentId so
+            // `undoManager(for:)` starts vending the INCOMING document's own manager. We
+            // no longer clear undo here — that `removeAllActions()` is what killed Cmd+Z
+            // across a file switch.
+            textView.breakUndoCoalescing()
             context.coordinator.documentId = documentId
-            textView.undoManager?.removeAllActions()
             context.coordinator.didInitialFormatting = false
             context.coordinator.didEnsureLayoutForCurrentDocument = false
             context.coordinator.resetImageEmbedState()

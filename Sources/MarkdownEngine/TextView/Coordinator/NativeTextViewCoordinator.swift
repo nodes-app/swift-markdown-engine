@@ -22,6 +22,12 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     /// Remembered scroll offset (`bounds.origin.y`) per `documentId` — saved on
     /// switch-away, restored on switch-back.
     var scrollOffsets: [String: CGFloat] = [:]
+    /// Per-`documentId` undo manager. AppKit reuses a single `NSTextView` across
+    /// all open documents, so its built-in (view-wide) undo manager would mix
+    /// files together. Keying a manager on the current document gives each file
+    /// its own undo stack that survives switching away and back. Vended through
+    /// the `undoManager(for:)` delegate method; pruned alongside `scrollOffsets`.
+    var undoManagers: [String: UndoManager] = [:]
     @Binding var text: String
     @Binding var isWikiLinkActive: Bool
     var fontName: String
