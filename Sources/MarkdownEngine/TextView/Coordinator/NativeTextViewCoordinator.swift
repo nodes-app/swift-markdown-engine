@@ -28,6 +28,10 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     /// its own undo stack that survives switching away and back. Vended through
     /// the `undoManager(for:)` delegate method; pruned alongside `scrollOffsets`.
     var undoManagers: [String: UndoManager] = [:]
+    /// Per-`documentId` content snapshot (storage form) taken on switch-away. On
+    /// switch-back a mismatch means the file was rewritten while backgrounded, so
+    /// the now-stale undo stack is dropped. Pruned alongside `undoManagers`.
+    var undoContentSnapshots: [String: String] = [:]
     @Binding var text: String
     @Binding var isWikiLinkActive: Bool
     var fontName: String

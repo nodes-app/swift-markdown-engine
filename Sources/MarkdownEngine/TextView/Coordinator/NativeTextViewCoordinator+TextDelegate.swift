@@ -34,6 +34,19 @@ extension NativeTextViewCoordinator {
         return manager
     }
 
+    /// Drops `documentId`'s undo stack when its switch-away snapshot no longer
+    /// matches the text now being loaded (the file was rewritten while switched
+    /// away). AppKit's range-based text undo would otherwise corrupt the reloaded
+    /// content. Returns `true` if a stack was cleared.
+    @discardableResult
+    func invalidateUndoIfContentDiverged(for documentId: String, incomingText: String) -> Bool {
+        guard let snapshot = undoContentSnapshots[documentId], snapshot != incomingText else {
+            return false
+        }
+        undoManagers[documentId]?.removeAllActions()
+        return true
+    }
+
     /// Force base typingAttributes on every change so AppKit's auto-inheritance
     /// can't bleed a heading paragraphStyle into the trailing extra-line
     /// fragment's metrics.

@@ -64,10 +64,10 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     /// Base font size in points. Headings, code blocks, and LaTeX are scaled
     /// off this value via ``MarkdownEditorConfiguration``.
     public var fontSize: CGFloat
-    /// Opaque document identifier. Changing this invalidates undo history
-    /// and resets per-document editor state. Set a stable, unique value
-    /// per document when displaying multiple editors so pending
-    /// replacements and undo stay scoped to each editor.
+    /// Opaque document identifier. Each value keeps its own undo stack and
+    /// per-document editor state across switching away and back; the undo stack is
+    /// dropped only if the document's text changes while it is switched away. Set a
+    /// stable, unique value per document so undo/replacements stay scoped.
     public var documentId: String
     /// When `false` the editor renders read-only with no caret.
     public var isEditable: Bool
@@ -367,15 +367,17 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
                     $0.key == documentId || retained.contains($0.key)
                 }
             }
-            // Evict undo stacks for documents no longer retained (keep the
-            // current one). removeAllActions() first so a stale registered undo
-            // can't later fire against a swapped-out document.
-            let staleUndoKeys = context.coordinator.undoManagers.keys.filter { key in
-                key != documentId && key != "__default__" && !retained.contains(key)
-            }
+            // Evict undo stacks + content snapshots for documents no longer
+            // retained (keep the current one); clear actions before dropping.
+            let staleUndoKeys = Set(context.coordinator.undoManagers.keys)
+                .union(context.coordinator.undoContentSnapshots.keys)
+                .filter { key in
+                    key != documentId && key != "__default__" && !retained.contains(key)
+                }
             for key in staleUndoKeys {
                 context.coordinator.undoManagers[key]?.removeAllActions()
                 context.coordinator.undoManagers.removeValue(forKey: key)
+                context.coordinator.undoContentSnapshots.removeValue(forKey: key)
             }
         }
 
@@ -489,6 +491,12 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
                retainedScrollDocumentIds?.contains(outgoingId) ?? true {
                 context.coordinator.scrollOffsets[outgoingId] = nsView.contentView.bounds.origin.y
             }
+            // Snapshot the outgoing document's content (storage form) so a later
+            // switch-back can detect a file rewritten while it was backgrounded.
+            // `lastSyncedText` still holds the outgoing content here.
+            if let outgoingId = context.coordinator.documentId {
+                context.coordinator.undoContentSnapshots[outgoingId] = context.coordinator.lastSyncedText
+            }
             // Per-document undo: close the OUTGOING document's open coalescing group
             // (while its manager is still active), then switch the active documentId so
             // `undoManager(for:)` starts vending the INCOMING document's own manager. We
@@ -496,6 +504,9 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             // across a file switch.
             textView.breakUndoCoalescing()
             context.coordinator.documentId = documentId
+            // Drop the incoming document's undo stack if its text changed while
+            // switched away — its recorded ranges are now stale.
+            context.coordinator.invalidateUndoIfContentDiverged(for: documentId, incomingText: text)
             context.coordinator.didInitialFormatting = false
             context.coordinator.didEnsureLayoutForCurrentDocument = false
             context.coordinator.resetImageEmbedState()

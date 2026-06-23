@@ -67,6 +67,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   checking is enabled.
 
 ### Fixed
+- Undo is now kept per `documentId`, so Cmd+Z keeps working after switching
+  files. The single reused `NSTextView` previously wiped its undo manager on
+  every document switch; the editor now vends a per-document `UndoManager`
+  (via the new `undoManager(for:)` delegate method) whose undo/redo stack
+  survives switching away and back. (#77)
+- A document's surviving undo stack is dropped when its text is reloaded
+  *changed* while it was switched away (e.g. renaming a node rewrites the
+  `[[label]]` in every file that links it), so Cmd+Z can no longer replay
+  stale ranges against the rewritten content.
 - `NativeTextViewWrapper` keeps links clickable and text selectable
   when `isEditable: false`; `isSelectable` is no longer coupled to
   `isEditable`. (#31)
