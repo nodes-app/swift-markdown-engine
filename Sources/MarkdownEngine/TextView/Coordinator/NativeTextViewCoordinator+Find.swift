@@ -14,13 +14,51 @@
 import AppKit
 
 extension NativeTextViewCoordinator {
+    /// Legacy path: the host computes match ranges and posts them. Kept for compatibility, but
+    /// it trusts SOURCE-coordinate ranges, which misalign wherever the displayed text is shorter
+    /// than the source (node links etc.). Prefer `handleFindQuery`.
     @objc func handleFindScrollToRange(_ notification: Notification) {
-        guard let tv = textView,
-              let info = notification.userInfo,
-              let range = info["range"] as? NSRange,
+        guard let info = notification.userInfo,
               let currentIndex = info["currentIndex"] as? Int,
               let allRanges = info["allRanges"] as? [NSRange] else { return }
+        renderFindMatches(allRanges, currentIndex: currentIndex)
+    }
 
+    /// Find against the engine's OWN displayed text (`tv.string`). Matches are computed in
+    /// DISPLAY coordinates, so highlights land correctly even where the displayed text differs
+    /// from the source (node links rendered shorter than `[[Name|UUID]]`, LaTeX, images). Posts
+    /// the match count back via `bus.findResults` so the host can show "x of y".
+    @objc func handleFindQuery(_ notification: Notification) {
+        guard let tv = textView,
+              let info = notification.userInfo,
+              let query = info["query"] as? String else { return }
+        let requestedIndex = info["currentIndex"] as? Int ?? 0
+
+        var allRanges: [NSRange] = []
+        if !query.isEmpty {
+            let haystack = tv.string as NSString
+            let opts: NSString.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+            var searchStart = 0
+            while searchStart < haystack.length {
+                let scope = NSRange(location: searchStart, length: haystack.length - searchStart)
+                let found = haystack.range(of: query, options: opts, range: scope)
+                if found.location == NSNotFound { break }
+                allRanges.append(found)
+                searchStart = found.location + max(found.length, 1)
+            }
+        }
+
+        let currentIndex = allRanges.isEmpty ? 0 : min(max(requestedIndex, 0), allRanges.count - 1)
+        renderFindMatches(allRanges, currentIndex: currentIndex)
+
+        if let resultsName = configuration.services.bus.findResults {
+            NotificationCenter.default.post(name: resultsName, object: nil, userInfo: ["count": allRanges.count])
+        }
+    }
+
+    /// Highlight all matches (current one stronger) and scroll the current match into view.
+    private func renderFindMatches(_ allRanges: [NSRange], currentIndex: Int) {
+        guard let tv = textView else { return }
         let storage = tv.textStorage
         let fullRange = NSRange(location: 0, length: (tv.string as NSString).length)
 
@@ -44,6 +82,8 @@ extension NativeTextViewCoordinator {
         }
 
         // Scroll the current match into view.
+        guard allRanges.indices.contains(currentIndex) else { return }
+        let range = allRanges[currentIndex]
         guard range.location + range.length <= fullRange.length else { return }
         // Default (text view IS documentView): native reveal — unchanged for non-readingWidth embedders.
         guard configuration.readingWidth != nil,

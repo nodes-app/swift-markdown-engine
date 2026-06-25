@@ -5,6 +5,16 @@ All notable changes to swift-markdown-engine are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `MarkdownEditorBus.findQuery` / `findResults`: query-based in-document find. The host posts a
+  search string (+ current index) and the engine matches against its OWN displayed text,
+  highlighting in display coordinates and posting the match count back. This is correct where the
+  displayed text differs from the source — e.g. node links rendered shorter than `[[Name|UUID]]`,
+  LaTeX, or images — which the legacy `findScrollToRange` (host-computed source-coordinate ranges)
+  highlighted at the wrong offset. Opt-in; `findScrollToRange` is unchanged for existing embedders.
+
 ## [0.7.1] - 2026-06-20
 
 ### Added

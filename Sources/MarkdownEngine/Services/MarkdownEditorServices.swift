@@ -205,6 +205,16 @@ public struct MarkdownEditorBus: Sendable {
     public var findScrollToRange: Notification.Name?
     /// Posted by the host UI to clear all in-document find highlights.
     public var findClearHighlights: Notification.Name?
+    /// Posted by the host UI to run an in-document find against the engine's OWN displayed
+    /// text. Expected `userInfo["query"] as? String`, optional `userInfo["currentIndex"] as? Int`.
+    /// The engine matches in DISPLAY coordinates, so highlights land correctly even where the
+    /// displayed text differs from the source (e.g. node links rendered shorter than
+    /// `[[Name|UUID]]`, LaTeX, images). Preferred over `findScrollToRange`, which trusts
+    /// host-computed (source-coordinate) ranges.
+    public var findQuery: Notification.Name?
+    /// Posted by the engine in response to `findQuery` with `userInfo["count"] as? Int`
+    /// (number of matches in the displayed text), so the host can show "x of y".
+    public var findResults: Notification.Name?
 
     public init(
         applyBoldRequest: Notification.Name? = nil,
@@ -213,7 +223,9 @@ public struct MarkdownEditorBus: Sendable {
         selectionBoldDidChange: Notification.Name? = nil,
         selectionItalicDidChange: Notification.Name? = nil,
         findScrollToRange: Notification.Name? = nil,
-        findClearHighlights: Notification.Name? = nil
+        findClearHighlights: Notification.Name? = nil,
+        findQuery: Notification.Name? = nil,
+        findResults: Notification.Name? = nil
     ) {
         self.applyBoldRequest = applyBoldRequest
         self.applyItalicRequest = applyItalicRequest
@@ -222,6 +234,8 @@ public struct MarkdownEditorBus: Sendable {
         self.selectionItalicDidChange = selectionItalicDidChange
         self.findScrollToRange = findScrollToRange
         self.findClearHighlights = findClearHighlights
+        self.findQuery = findQuery
+        self.findResults = findResults
     }
 
     public static let `default` = MarkdownEditorBus()
