@@ -226,6 +226,51 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
                 self?.handleHeadingNotification(notification)
             })
         }
+        if let name = bus.applyStrikethroughRequest {
+            busObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                self?.handleStrikethroughNotification(notification)
+            })
+        }
+        if let name = bus.applyInlineCodeRequest {
+            busObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                self?.handleInlineCodeNotification(notification)
+            })
+        }
+        if let name = bus.applyBlockquoteRequest {
+            busObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                self?.handleBlockquoteNotification(notification)
+            })
+        }
+        if let name = bus.applyUnorderedListRequest {
+            busObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                self?.handleUnorderedListNotification(notification)
+            })
+        }
+        if let name = bus.applyOrderedListRequest {
+            busObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                self?.handleOrderedListNotification(notification)
+            })
+        }
+        if let name = bus.applyLinkRequest {
+            busObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                self?.handleLinkNotification(notification)
+            })
+        }
+        if let name = bus.applyCodeBlockRequest {
+            busObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                self?.handleCodeBlockNotification(notification)
+            })
+        }
+        if let name = bus.applyHorizontalRuleRequest {
+            busObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                self?.handleHorizontalRuleNotification(notification)
+            })
+        }
+        if let name = bus.applyImageRequest {
+            busObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                self?.handleImageNotification(notification)
+            })
+        }
         if let name = bus.findScrollToRange {
             busObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
                 self?.handleFindScrollToRange(notification)

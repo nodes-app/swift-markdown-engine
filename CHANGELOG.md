@@ -20,6 +20,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `true`, `mouseMoved:` skips calling `super.mouseMoved` to avoid NSTextView's
   built-in I-beam cursor, setting the arrow cursor instead. Exposed through
   `NativeTextViewWrapper.isCursorExcluded`.
+- `MarkdownEditorBus` extended with nine new notification types for
+  formatting toolbar integration: `applyStrikethroughRequest`,
+  `applyInlineCodeRequest`, `applyBlockquoteRequest`,
+  `applyUnorderedListRequest`, `applyOrderedListRequest`,
+  `applyLinkRequest`, `applyCodeBlockRequest`,
+  `applyHorizontalRuleRequest`, `applyImageRequest`. Embedders wire
+  these into `NotificationCenter` to trigger formatting from
+  external UI (toolbars, menus) without reaching into the editor's
+  view hierarchy.
+- New formatting actions on the coordinator (callable directly or
+  via the bus above): `didMarkdownStrikethrough`, `didMarkdownInlineCode`,
+  `didMarkdownBlockquote`, `didMarkdownLink`, `didMarkdownCodeBlock`,
+  `didMarkdownHorizontalRule`, `didMarkdownImage`.
+- Word-boundary detection in inline formatting: when the cursor is
+  placed inside an English word with no active text selection, bold,
+  italic, strikethrough, and inline-code actions now auto-select the
+  containing word before wrapping. If no word character is adjacent
+  to the cursor, empty markers are inserted as before. The cursor's
+  relative offset within the word is preserved after wrapping
+  (e.g. `wo|rd` → `**wo|rd**`).
+- Headless test suite for formatting actions (`FormattingActionTests`
+  — 21 tests covering bold, strikethrough, inline code, blockquote,
+  link, code block, horizontal rule, and image insertion).
+
+### Fixed
+- Blockquote removal no longer doubles trailing newlines when the
+  original line already carries one.
 
 ## [0.7.1] - 2026-06-20
 
@@ -89,7 +116,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A document's surviving undo stack is dropped when its text is reloaded
   *changed* while it was switched away (e.g. renaming a node rewrites the
   `[[label]]` in every file that links it), so Cmd+Z can no longer replay
-  stale ranges against the rewritten content.
+  stale ranges against the rewritten content. (#78)
 - `NativeTextViewWrapper` keeps links clickable and text selectable
   when `isEditable: false`; `isSelectable` is no longer coupled to
   `isEditable`. (#31)

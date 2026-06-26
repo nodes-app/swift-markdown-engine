@@ -195,6 +195,26 @@ public struct MarkdownEditorBus: Sendable {
     /// Posted by the host UI to request the engine apply a heading level.
     /// Expected `userInfo["level"] as? Int`.
     public var applyHeadingRequest: Notification.Name?
+    /// Posted by the host UI to request the engine apply strikethrough styling.
+    public var applyStrikethroughRequest: Notification.Name?
+    /// Posted by the host UI to request the engine apply inline code styling.
+    public var applyInlineCodeRequest: Notification.Name?
+    /// Posted by the host UI to request the engine apply blockquote styling.
+    public var applyBlockquoteRequest: Notification.Name?
+    /// Posted by the host UI to request the engine apply unordered list styling.
+    public var applyUnorderedListRequest: Notification.Name?
+    /// Posted by the host UI to request the engine apply ordered list styling.
+    public var applyOrderedListRequest: Notification.Name?
+    /// Posted by the host UI to insert a Markdown link.
+    /// Expected `userInfo["url"] as? String`.
+    public var applyLinkRequest: Notification.Name?
+    /// Posted by the host UI to insert a fenced code block at the cursor.
+    public var applyCodeBlockRequest: Notification.Name?
+    /// Posted by the host UI to insert a horizontal rule (`---`) at the cursor.
+    public var applyHorizontalRuleRequest: Notification.Name?
+    /// Posted by the host UI to insert an image embed.
+    /// Expected `userInfo["url"] as? String`.
+    public var applyImageRequest: Notification.Name?
     /// Posted by the engine after every selection change with `userInfo["isBold"] as? Bool`.
     public var selectionBoldDidChange: Notification.Name?
     /// Posted by the engine after every selection change with `userInfo["isItalic"] as? Bool`.
@@ -220,6 +240,15 @@ public struct MarkdownEditorBus: Sendable {
         applyBoldRequest: Notification.Name? = nil,
         applyItalicRequest: Notification.Name? = nil,
         applyHeadingRequest: Notification.Name? = nil,
+        applyStrikethroughRequest: Notification.Name? = nil,
+        applyInlineCodeRequest: Notification.Name? = nil,
+        applyBlockquoteRequest: Notification.Name? = nil,
+        applyUnorderedListRequest: Notification.Name? = nil,
+        applyOrderedListRequest: Notification.Name? = nil,
+        applyLinkRequest: Notification.Name? = nil,
+        applyCodeBlockRequest: Notification.Name? = nil,
+        applyHorizontalRuleRequest: Notification.Name? = nil,
+        applyImageRequest: Notification.Name? = nil,
         selectionBoldDidChange: Notification.Name? = nil,
         selectionItalicDidChange: Notification.Name? = nil,
         findScrollToRange: Notification.Name? = nil,
@@ -230,6 +259,15 @@ public struct MarkdownEditorBus: Sendable {
         self.applyBoldRequest = applyBoldRequest
         self.applyItalicRequest = applyItalicRequest
         self.applyHeadingRequest = applyHeadingRequest
+        self.applyStrikethroughRequest = applyStrikethroughRequest
+        self.applyInlineCodeRequest = applyInlineCodeRequest
+        self.applyBlockquoteRequest = applyBlockquoteRequest
+        self.applyUnorderedListRequest = applyUnorderedListRequest
+        self.applyOrderedListRequest = applyOrderedListRequest
+        self.applyLinkRequest = applyLinkRequest
+        self.applyCodeBlockRequest = applyCodeBlockRequest
+        self.applyHorizontalRuleRequest = applyHorizontalRuleRequest
+        self.applyImageRequest = applyImageRequest
         self.selectionBoldDidChange = selectionBoldDidChange
         self.selectionItalicDidChange = selectionItalicDidChange
         self.findScrollToRange = findScrollToRange
