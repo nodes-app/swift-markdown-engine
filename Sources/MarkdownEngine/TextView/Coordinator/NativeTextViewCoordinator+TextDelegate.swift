@@ -476,6 +476,33 @@ extension NativeTextViewCoordinator {
     }
 
     public func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+        // Edit zone: a click on the outer ~30% of a node link's first/last name char places the caret
+        // just outside the markers (before '[[' / after ']]') to reveal the source for editing instead
+        // of navigating. Editable views only — read-only links must stay navigable.
+        if textView.isEditable, let storage = textView.textStorage {
+            var linkRange = NSRange(location: NSNotFound, length: 0)
+            let editZoneMinNameLength = 3   // 1–2 char names stay fully clickable for navigation
+            if storage.attribute(.link, at: charIndex, longestEffectiveRange: &linkRange,
+                                 in: NSRange(location: 0, length: storage.length)) != nil,
+               linkRange.length >= editZoneMinNameLength {
+                // Caret lands on the token's markers (no .link there, so the mouse-on-link guard in
+                // textViewDidChangeSelection doesn't suppress the reveal).
+                let token = parsedDocument(for: textView.string).tokens
+                    .first { $0.kind == .wikiLink && NSLocationInRange(charIndex, $0.range) }
+                let edgeFraction: CGFloat = 0.3
+                let frac = clickFractionThroughGlyph(textView, charIndex: charIndex)
+                if charIndex == linkRange.location, frac.map({ $0 <= edgeFraction }) ?? true {
+                    let caret = token?.range.location ?? linkRange.location          // before '[['
+                    textView.setSelectedRange(NSRange(location: caret, length: 0))
+                    return true
+                }
+                if charIndex == NSMaxRange(linkRange) - 1, frac.map({ $0 >= 1 - edgeFraction }) ?? true {
+                    let caret = token.map { NSMaxRange($0.range) } ?? NSMaxRange(linkRange)  // after ']]'
+                    textView.setSelectedRange(NSRange(location: caret, length: 0))
+                    return true
+                }
+            }
+        }
         guard let target = WikiLinkService.resolveIdentifier(link: link, textView: textView, at: charIndex) else {
             return false
         }
@@ -485,6 +512,26 @@ extension NativeTextViewCoordinator {
             self.onLinkClick?(target)
         }
         return true
+    }
+
+    /// Horizontal fraction (0 = leading, 1 = trailing) of the current click through the glyph at
+    /// `charIndex`, or nil if unresolved. Coordinates mirror NativeTextView+CursorRects.
+    private func clickFractionThroughGlyph(_ textView: NSTextView, charIndex: Int) -> CGFloat? {
+        guard let event = NSApp.currentEvent,
+              let tlm = textView.textLayoutManager,
+              let tcm = tlm.textContentManager,
+              let start = tcm.location(tlm.documentRange.location, offsetBy: charIndex),
+              let end = tcm.location(start, offsetBy: 1),
+              let range = NSTextRange(location: start, end: end) else { return nil }
+        let viewPoint = textView.convert(event.locationInWindow, from: nil)
+        let containerX = viewPoint.x - textView.textContainerOrigin.x
+        var glyphFrame: CGRect?
+        tlm.enumerateTextSegments(in: range, type: .standard, options: []) { _, segFrame, _, _ in
+            glyphFrame = segFrame
+            return false
+        }
+        guard let f = glyphFrame, f.width > 0 else { return nil }
+        return (containerX - f.minX) / f.width
     }
 
     func updateSelectionStates(_ tv: NSTextView) {
