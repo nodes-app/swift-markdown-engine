@@ -29,6 +29,7 @@ extension MarkdownStyler {
         let codeBackgroundColor: NSColor
         let latexMarkerFont: NSFont
         let configuration: MarkdownEditorConfiguration
+        let wikiLinkIDProvider: (NSRange) -> String?
 
         var services: MarkdownEditorServices { configuration.services }
     }
@@ -73,7 +74,8 @@ enum MarkdownStyler {
             codeBackgroundColor: codeBackgroundColor,
             latexMarkerFont: NSFont(name: fontName, size: hiddenMarkerSize)
                 ?? NSFont.systemFont(ofSize: hiddenMarkerSize),
-            configuration: configuration
+            configuration: configuration,
+            wikiLinkIDProvider: wikiLinkIDProvider
         )
 
         var result: [StyledRange] = []

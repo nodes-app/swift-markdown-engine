@@ -325,10 +325,25 @@ extension NativeTextView {
         tlm.enumerateTextLayoutFragments(from: start, options: [.ensuresLayout]) { fragment in
             let cv = scrollView.contentView
             let insetsTop = scrollView.contentInsets.top
-            // Fragment frames are text-view-local; the scroll offset below is in
-            // document-view space, so lift them by the text view's offset inside the
-            // container (the header band).
-            let frame = fragment.layoutFragmentFrame.offsetBy(dx: 0, dy: self.frame.origin.y)
+            // Reveal the CARET's line, not the whole layout fragment. An active image/latex embed
+            // renders its block below the source line via paragraphSpacing, so layoutFragmentFrame is
+            // as tall as the image; revealing its maxY would scroll the viewport down by the block
+            // height even though the caret sits on the source line at the top. Frames are text-view-
+            // local; lift by the text view's offset inside the container (the header band).
+            var revealRect = fragment.layoutFragmentFrame
+            // Reveal the ACTUAL caret location's segment (not the stepped-back revealOffset), so a
+            // freshly soft-wrapped last line at the document end still scrolls into view; fall back to
+            // the stepped-back offset only when the true end-of-document has no segment of its own.
+            for segOffset in [min(range.location, docLength), revealOffset] {
+                guard let segLoc = tlm.textContentManager?.location(tlm.documentRange.location, offsetBy: segOffset) else { continue }
+                var found = false
+                tlm.enumerateTextSegments(in: NSTextRange(location: segLoc), type: .standard, options: []) { _, segFrame, _, _ in
+                    if segFrame.height > 0 { revealRect = segFrame; found = true }   // caret rect = its line, not the block
+                    return false
+                }
+                if found { break }
+            }
+            let frame = revealRect.offsetBy(dx: 0, dy: self.frame.origin.y)
             let visibleTop = cv.bounds.origin.y + insetsTop
             let visibleBottom = cv.bounds.origin.y + cv.bounds.height
             let margin: CGFloat = 24

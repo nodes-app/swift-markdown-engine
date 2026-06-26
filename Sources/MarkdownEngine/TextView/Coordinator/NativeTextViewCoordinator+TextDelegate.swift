@@ -218,6 +218,43 @@ extension NativeTextViewCoordinator {
         let prevActive = activeTokenIndices
         activeTokenIndices = MarkdownDetection.computeActiveTokenIndices(selectionRange: selRange, tokens: tokens, in: nsText, suppressed: !tv.isEditable)
         filterImageEmbedActiveTokens(parsed: parsed, text: nsText, selectionLocation: selRange.location)
+
+        // Snap-back: when the caret LEFT a wiki/image token, re-sync its displayed name to the live target name.
+        if selRange.length == 0,
+           currentEventType != .leftMouseDragged, currentEventType != .periodic,
+           !isProgrammaticEdit, !tv.hasMarkedText() {
+            let leftTokens = prevActive.subtracting(activeTokenIndices)
+            for idx in leftTokens.sorted() where idx >= 0 && idx < tokens.count {
+                let token = tokens[idx]
+                guard token.kind == .wikiLink || token.kind == .imageEmbed else { continue }
+                if let newCaret = resyncWikiLinkNameOnLeave(tv, token: token, caretLoc: selRange.location) {
+                    // Dismiss any inline preview before the early return (the nested setSelectedRange
+                    // re-entry recomputes it for the final caret, but clear it here too — mirrors :203-205).
+                    isImageEmbedActive = false
+                    isWikiLinkActive = false
+                    onInlineSelectionChange?(nil)
+                    let clamped = min(max(newCaret, 0), (tv.string as NSString).length)
+                    // Only re-settle (and suppress the reveal) when the caret actually moved. If the
+                    // link was AFTER the caret the location is unchanged → setSelectedRange would be a
+                    // no-op that never consumes suppressAutoRevealOnce, leaking it onto the next reveal.
+                    if clamped != selRange.location {
+                        (tv as? NativeTextView)?.suppressAutoRevealOnce = true
+                        tv.setSelectedRange(NSRange(location: clamped, length: 0))
+                    }
+                    // The snap-back's didChangeText restyles the CARET's paragraph, not the LINK's, so
+                    // the link keeps its pre-leave ACTIVE styling (raw [[ ]] stays visible). Restyle the
+                    // link's own paragraph (token.range.location is before the in-name edit, so it's
+                    // stable) — the caret is now outside, so its markers collapse to a rendered link.
+                    let healedNS = tv.string as NSString
+                    if healedNS.length > 0 {
+                        let linkPara = healedNS.paragraphRange(for: NSRange(location: min(token.range.location, healedNS.length - 1), length: 0))
+                        restyleParagraphs([linkPara], in: tv)
+                    }
+                    return
+                }
+            }
+        }
+
         updateAutocorrectSettings(
             tv,
             caretLocation: selLoc,
@@ -336,7 +373,20 @@ extension NativeTextViewCoordinator {
         if let inlineContext {
             let openingMarkerLength = inlineContext.selectionKind == .imageEmbed ? 3 : 2
             let displayRange = selectionDisplayRange(for: inlineContext.token, openingMarkerLength: openingMarkerLength)
-            let placeholder = nsString.substring(with: displayRange)
+            // Image embeds: rebuild the placeholder as the STORAGE form (`![[Name|uuid|width]]`) so
+            // NodeLinkPreview's ImageEmbedReference.parse can recover the width on re-pick. The width
+            // no longer lives in the editor text — it sits in the `.wikiLinkID` side-channel.
+            let placeholder: String
+            if case .imageEmbed(let token) = inlineContext {
+                let embedName = nsString.substring(with: token.contentRange)
+                if let suffix = wikiLinkID(for: token.range), !suffix.isEmpty {
+                    placeholder = "![[\(embedName)|\(suffix)]]"
+                } else {
+                    placeholder = "![[\(embedName)]]"
+                }
+            } else {
+                placeholder = nsString.substring(with: displayRange)
+            }
             let storageRange = inlineContext.selectionKind == .wikiLink
                 ? storageRange(containingDisplayLocation: selLocation) ?? storageRange(forDisplayRange: displayRange)
                 : nil

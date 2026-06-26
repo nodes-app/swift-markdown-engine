@@ -97,7 +97,6 @@ extension NativeTextViewWrapper.Coordinator {
             tv.didChangeText()
             let newSelectionLocation = token.range.location + leftReplacement.count
             tv.setSelectedRange(NSRange(location: newSelectionLocation, length: content.count))
-            DispatchQueue.main.async { self.text = tv.string }
         }
     }
 
@@ -136,7 +135,6 @@ extension NativeTextViewWrapper.Coordinator {
             tv.didChangeText()
             let newSel = NSRange(location: lineRange.location + prefix.count, length: content.count)
             tv.setSelectedRange(newSel)
-            DispatchQueue.main.async { self.text = tv.string }
         }
     }
 
@@ -163,7 +161,6 @@ extension NativeTextViewWrapper.Coordinator {
             tv.didChangeText()
             let newSel = NSRange(location: startLine.location + prefix.count, length: content.count)
             tv.setSelectedRange(newSel)
-            DispatchQueue.main.async { self.text = tv.string }
         }
     }
 
@@ -221,7 +218,6 @@ extension NativeTextViewWrapper.Coordinator {
             tv.replaceCharacters(in: range, with: insertion)
             tv.didChangeText()
             tv.setSelectedRange(NSRange(location: range.location + marker.count, length: 0))
-            DispatchQueue.main.async { self.text = tv.string }
         }
     }
 
@@ -243,7 +239,6 @@ extension NativeTextViewWrapper.Coordinator {
             tv.didChangeText()
             let newRange = NSRange(location: range.location + leadingWS + marker.count, length: core.count)
             tv.setSelectedRange(newRange)
-            DispatchQueue.main.async { self.text = tv.string }
         }
     }
 }

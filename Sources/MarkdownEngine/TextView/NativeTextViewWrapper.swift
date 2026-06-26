@@ -230,7 +230,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         textView.isEditable = isEditable
         textView.isSelectable = true
         textView.isRichText = true
-        let initialState = WikiLinkService.makeDisplayState(from: text)
+        let initialState = WikiLinkService.makeDisplayState(from: text) { configuration.services.wikiLinks.name(forID: $0) }
         textView.string = initialState.display
         textView.delegate = context.coordinator
         textView.isVerticallyResizable = true

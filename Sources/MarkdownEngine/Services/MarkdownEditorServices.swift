@@ -32,6 +32,10 @@ public protocol WikiLinkResolver: Sendable {
     /// - Returns: A resolution if the link points at known content; `nil` otherwise.
     func resolve(displayName: String, range: NSRange) -> WikiLinkResolution?
 
+    /// Returns the target's CURRENT display name for a stable id, nil if unknown
+    /// (renderer falls back to the stored label).
+    func name(forID id: String) -> String?
+
     /// Coarse fingerprint of the resolver's known targets (typically IDs + names).
     /// A different value triggers a wiki-link restyle, so a rename refreshes link
     /// clickability/display without waiting for the next keystroke.
@@ -40,6 +44,7 @@ public protocol WikiLinkResolver: Sendable {
 
 public extension WikiLinkResolver {
     func fingerprint() -> AnyHashable { 0 }
+    func name(forID id: String) -> String? { nil }
 }
 
 /// The result of resolving a wiki-link.

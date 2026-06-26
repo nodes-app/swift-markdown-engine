@@ -20,7 +20,8 @@ extension NativeTextViewCoordinator {
         invalidateLayout: Bool = false
     ) {
         // Storage is raw Markdown; only wiki links transform on display.
-        let displayState = WikiLinkService.makeDisplayState(from: text)
+        let services = configuration.services
+        let displayState = WikiLinkService.makeDisplayState(from: text) { services.wikiLinks.name(forID: $0) }
         let displayText = displayState.display
         wikiLinkMetadata = displayState.metadata
 
@@ -63,6 +64,11 @@ extension NativeTextViewCoordinator {
             layoutBridge: layoutBridge,
             caretLocation: caretLocation,
             activeTokenIndices: activeTokenIndices,
+            // FIX: apply .wikiLinkID attributes on load/node-switch too. Without this the uuid
+            // survived only in the range-keyed wikiLinkMetadata; once a later writeback shifted a
+            // link's range the metadata key missed and makeStorageState wrote [[Name]] (uuid lost).
+            // wikiLinkMetadata was just refreshed by makeDisplayState above, so ranges match here.
+            wikiLinkIDProvider: { [weak self] range in self?.wikiLinkID(for: range) },
             precomputedTokens: tokens,
             configuration: configuration
         )
@@ -249,16 +255,11 @@ extension NativeTextViewCoordinator {
             return
         }
 
-        let replacementDisplay: String
-        let linkID: String?
-        if request.isImageEmbedMode {
-            replacementDisplay = request.storageFragment
-            linkID = nil
-        } else {
-            let replacementInfo = WikiLinkService.displayFragmentAndID(from: request.storageFragment)
-            replacementDisplay = replacementInfo.display
-            linkID = replacementInfo.id
-        }
+        // Image embeds and node links share one path: insert DISPLAY form `![[Name]]` / `[[Name]]`
+        // with the opaque suffix on the `.wikiLinkID` side-channel (displayFragmentAndID handles `!`).
+        let replacementInfo = WikiLinkService.displayFragmentAndID(from: request.storageFragment)
+        let replacementDisplay = replacementInfo.display
+        let linkID = replacementInfo.id
 
         let undoActionName = request.isImageEmbedMode ? "Insert Image Embed" : "Insert Link"
         textView.breakUndoCoalescing()
@@ -273,9 +274,11 @@ extension NativeTextViewCoordinator {
         textView.textStorage?.replaceCharacters(in: range, with: replacementDisplay)
 
         if let linkID, !linkID.isEmpty {
-            let contentLength = max(0, (replacementDisplay as NSString).length - 4)
+            let isImage = replacementDisplay.hasPrefix("![[")
+            let openLen = isImage ? 3 : 2
+            let contentLength = max(0, (replacementDisplay as NSString).length - (openLen + 2))
             if contentLength > 0 {
-                let contentRange = NSRange(location: range.location + 2, length: contentLength)
+                let contentRange = NSRange(location: range.location + openLen, length: contentLength)
                 textView.textStorage?.addAttribute(.wikiLinkID, value: linkID, range: contentRange)
             }
         }
