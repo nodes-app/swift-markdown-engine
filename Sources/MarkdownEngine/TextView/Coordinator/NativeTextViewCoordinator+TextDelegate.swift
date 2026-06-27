@@ -482,7 +482,7 @@ extension NativeTextViewCoordinator {
             switch commandSelector {
             case #selector(NSResponder.moveUp(_:)): key = .moveUp
             case #selector(NSResponder.moveDown(_:)): key = .moveDown
-            case #selector(NSResponder.insertNewline(_:)): key = .confirm
+            case #selector(NSResponder.insertNewline(_:)): key = .confirm   // ⌘↵ → handled in performKeyEquivalent
             case #selector(NSResponder.cancelOperation(_:)): key = .cancel
             default: key = nil
             }

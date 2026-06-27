@@ -54,7 +54,7 @@ public struct InlineSelectionState: Sendable {
 /// via ``NativeTextViewWrapper/onInlinePreviewKey``. The embedder returns `true` to
 /// consume the key (it drove its list), or `false` to let the editor handle it normally.
 public enum InlinePreviewKey: Sendable {
-    case moveUp, moveDown, confirm, cancel
+    case moveUp, moveDown, confirm, confirmAndOpen, cancel
 }
 
 /// Request to replace an inline token's source with a new storage fragment.
