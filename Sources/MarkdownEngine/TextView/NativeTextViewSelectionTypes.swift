@@ -50,6 +50,13 @@ public struct InlineSelectionState: Sendable {
     }
 }
 
+/// A keyboard command forwarded to an open inline preview (the `[[…]]` autocomplete)
+/// via ``NativeTextViewWrapper/onInlinePreviewKey``. The embedder returns `true` to
+/// consume the key (it drove its list), or `false` to let the editor handle it normally.
+public enum InlinePreviewKey: Sendable {
+    case moveUp, moveDown, confirm, cancel
+}
+
 /// Request to replace an inline token's source with a new storage fragment.
 ///
 /// Embedders push one of these into

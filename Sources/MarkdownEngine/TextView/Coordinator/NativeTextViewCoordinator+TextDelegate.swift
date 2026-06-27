@@ -393,8 +393,11 @@ extension NativeTextViewCoordinator {
             let previewRect = tv.viewRect(forCharacterRange: displayRange, using: layoutBridge)
                 ?? tv.viewRect(forCharacterRange: tv.selectedRange(), using: layoutBridge)
 
+            // Only autocomplete while TYPING — not when the caret merely lands in an existing link via
+            // a click (mirrors the image-embed gate). Clicking into a complete [[Name]] shouldn't pop
+            // the picker; typing a name does.
             let shouldShowInlinePreview =
-                inlineContext.selectionKind == .wikiLink
+                (inlineContext.selectionKind == .wikiLink && isTyping)
                 || (inlineContext.selectionKind == .imageEmbed && imageEmbedShowsInlinePreview)
             if shouldShowInlinePreview, let previewRect {
                 let selection = WikiLinkSelection(
@@ -471,6 +474,19 @@ extension NativeTextViewCoordinator {
     public func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         if commandSelector == #selector(NSResponder.insertBacktab(_:)) {
             return handleBacktab(textView)
+        }
+        // While an inline [[…]] / ![[…]] preview is open, route ↑/↓/Enter/Esc to the embedder's
+        // autocomplete list (it returns true to consume the key; false → normal editor handling).
+        if (isWikiLinkActive || isImageEmbedActive), let handler = onInlinePreviewKey {
+            let key: InlinePreviewKey?
+            switch commandSelector {
+            case #selector(NSResponder.moveUp(_:)): key = .moveUp
+            case #selector(NSResponder.moveDown(_:)): key = .moveDown
+            case #selector(NSResponder.insertNewline(_:)): key = .confirm
+            case #selector(NSResponder.cancelOperation(_:)): key = .cancel
+            default: key = nil
+            }
+            if let key, handler(key) { return true }
         }
         return false
     }

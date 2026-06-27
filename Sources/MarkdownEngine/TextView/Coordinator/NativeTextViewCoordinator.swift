@@ -61,6 +61,7 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var onLinkClick: ((String) -> Void)?
     var onCaretRectChange: ((CGRect) -> Void)?
     var onInlineSelectionChange: ((InlineSelectionState?) -> Void)?
+    var onInlinePreviewKey: ((InlinePreviewKey) -> Bool)?
     var onCodeBlockSelectionChange: (([CodeBlockSelection]) -> Void)?
     var didInitialFormatting: Bool = false
     /// One-shot guard so `updateCodeBlockSelection` only forces a full-document layout once per document.
