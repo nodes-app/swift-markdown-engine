@@ -18,6 +18,16 @@ extension NativeTextViewWrapper.Coordinator {
                          menu: NSMenu,
                          for event: NSEvent,
                          at charIndex: Int) -> NSMenu? {
+        // Drop the system rich-text "Font" submenu (Bold/Italic/Show Colors…). Those apply
+        // NSFont traits/colors that do nothing in a markdown editor (the engine owns styling),
+        // so showing them would mislead. Identified by its font-panel action (locale-independent),
+        // with a title fallback.
+        if let fontIndex = menu.items.firstIndex(where: { item in
+            if item.title == "Font" { return true }
+            return item.submenu?.items.contains { $0.action == Selector("orderFrontFontPanel:") } ?? false
+        }) {
+            menu.removeItem(at: fontIndex)
+        }
         guard let build = onBuildContextMenu else { return menu }
         return build(menu, textView.selectedRange())
     }
