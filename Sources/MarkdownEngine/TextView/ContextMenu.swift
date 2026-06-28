@@ -11,50 +11,15 @@ import Cocoa
 import SwiftUI
 
 extension NativeTextViewWrapper.Coordinator {
+    // The engine ships no built-in menu (API-only). It hands the default NSMenu + the
+    // current selection to the embedder's onBuildContextMenu hook, which returns the menu
+    // to show. The didMarkdown* actions below stay so embedders can drive them via the bus.
     public func textView(_ textView: NSTextView,
-                  menu: NSMenu,
-                  for event: NSEvent,
-                  at charIndex: Int) -> NSMenu? {
-        let customMenu = menu.copy() as? NSMenu ?? NSMenu()
-
-        if let fontIndex = customMenu.items.firstIndex(where: { $0.title == "Font" }) {
-            customMenu.removeItem(at: fontIndex)
-            let formatItem = NSMenuItem(title: "Format", action: nil, keyEquivalent: "")
-            let formatSubmenu = NSMenu(title: "Format")
-            let boldItem = NSMenuItem(title: "Bold", action: #selector(didMarkdownBold(_:)), keyEquivalent: "")
-            boldItem.target = self
-            formatSubmenu.addItem(boldItem)
-            let italicItem = NSMenuItem(title: "Italic", action: #selector(didMarkdownItalic(_:)), keyEquivalent: "")
-            italicItem.target = self
-            formatSubmenu.addItem(italicItem)
-            formatItem.submenu = formatSubmenu
-            customMenu.insertItem(formatItem, at: fontIndex)
-
-            let headingItem = NSMenuItem(title: "Heading", action: nil, keyEquivalent: "")
-            let headingSubmenu = NSMenu(title: "Heading")
-            for level in 1...3 {
-                let item = NSMenuItem(title: "H\(level)", action: #selector(didMarkdownHeading(_:)), keyEquivalent: "")
-                item.target = self
-                item.tag = level
-                headingSubmenu.addItem(item)
-            }
-            headingItem.submenu = headingSubmenu
-            customMenu.insertItem(headingItem, at: fontIndex + 1)
-
-            let listItem = NSMenuItem(title: "Lists", action: nil, keyEquivalent: "")
-            let listSubmenu = NSMenu(title: "Lists")
-            let unorderedItem = NSMenuItem(title: "Bullet", action: #selector(didMarkdownUnorderedList(_:)), keyEquivalent: "")
-            unorderedItem.target = self
-            listSubmenu.addItem(unorderedItem)
-            let orderedItem = NSMenuItem(title: "Numbered", action: #selector(didMarkdownOrderedList(_:)), keyEquivalent: "")
-            orderedItem.target = self
-            listSubmenu.addItem(orderedItem)
-            listItem.submenu = listSubmenu
-            customMenu.insertItem(listItem, at: fontIndex + 2)
-            customMenu.insertItem(NSMenuItem.separator(), at: fontIndex + 3)
-        }
-
-        return customMenu
+                         menu: NSMenu,
+                         for event: NSEvent,
+                         at charIndex: Int) -> NSMenu? {
+        guard let build = onBuildContextMenu else { return menu }
+        return build(menu, textView.selectedRange())
     }
 
     /// Returns the smallest bold or boldItalic token that fully contains the selection, or nil when the selection isn't enclosed by emphasis with a bold trait.
@@ -464,34 +429,6 @@ extension NativeTextViewWrapper.Coordinator {
     }
 }
 
-// MARK: - Menu Item Validation
-extension NativeTextViewWrapper.Coordinator: NSMenuItemValidation {
-    public func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
-        guard let tv = textView else { return true }
-        let nsText = tv.string as NSString
-        let range = tv.selectedRange()
-        switch menuItem.action {
-        case #selector(didMarkdownBold(_:)):
-            menuItem.state = enclosingBoldToken(for: range, in: tv.string) != nil ? .on : .off
-            return true
-        case #selector(didMarkdownItalic(_:)):
-            menuItem.state = enclosingItalicToken(for: range, in: tv.string) != nil ? .on : .off
-            return true
-        case #selector(didMarkdownStrikethrough(_:)):
-            menuItem.state = isSelectionStrikethrough(in: nsText, range: range) ? .on : .off
-            return true
-        case #selector(didMarkdownInlineCode(_:)):
-            menuItem.state = isSelectionInlineCode(in: nsText, range: range) ? .on : .off
-            return true
-        case #selector(didMarkdownBlockquote(_:)):
-            return !isSelectionBlockquote(in: nsText, range: range)
-        case #selector(didMarkdownHeading(_:)):
-            return !isSelectionHeading(level: menuItem.tag, in: nsText, range: range)
-        case #selector(didMarkdownUnorderedList(_:)),
-             #selector(didMarkdownOrderedList(_:)):
-            return !isSelectionList(in: nsText, range: range)
-        default:
-            return true
-        }
-    }
-}
+// Menu Item Validation (checkmark state) removed together with the built-in menu —
+// engine ships no UI. Expose the isSelection* checks as a query API if embedders
+// need menu state.
