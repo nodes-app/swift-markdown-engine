@@ -74,6 +74,11 @@ public struct MarkdownEditorTheme: Sendable {
     /// (e.g. completed task list items, horizontal rules).
     public var strikethroughColor: NSColor
 
+    // MARK: Highlight
+
+    /// Background color used for `==highlight==` inline markup.
+    public var highlightColor: NSColor
+
     // MARK: Init
 
     public init(
@@ -87,7 +92,8 @@ public struct MarkdownEditorTheme: Sendable {
         findCurrentMatchHighlight: NSColor = .systemYellow,
         latexLightModeText: NSColor = .black,
         latexDarkModeText: NSColor = .white,
-        strikethroughColor: NSColor = .labelColor
+        strikethroughColor: NSColor = .labelColor,
+        highlightColor: NSColor = .systemOrange.withAlphaComponent(0.4)
     ) {
         self.bodyText = bodyText
         self.mutedText = mutedText
@@ -100,6 +106,7 @@ public struct MarkdownEditorTheme: Sendable {
         self.latexLightModeText = latexLightModeText
         self.latexDarkModeText = latexDarkModeText
         self.strikethroughColor = strikethroughColor
+        self.highlightColor = highlightColor
     }
 
     /// System-native palette built from `NSColor` dynamic system colors.

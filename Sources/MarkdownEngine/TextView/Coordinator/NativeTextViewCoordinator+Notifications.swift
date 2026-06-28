@@ -21,6 +21,10 @@ extension NativeTextViewCoordinator {
         didMarkdownItalic(nil)
     }
 
+    @objc func handleHighlightNotification(_ notification: Notification) {
+        didMarkdownHighlight(nil)
+    }
+
     @objc func handleHeadingNotification(_ notification: Notification) {
         guard let level = notification.userInfo?["level"] as? Int else { return }
         let item = NSMenuItem()

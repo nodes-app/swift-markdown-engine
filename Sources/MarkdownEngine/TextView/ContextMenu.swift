@@ -81,6 +81,18 @@ extension NativeTextViewWrapper.Coordinator {
         return enclosingItalicToken(for: range, in: nsText as String) != nil
     }
 
+    /// Returns the smallest highlight token that fully contains the selection, or nil.
+    func enclosingHighlightToken(for selection: NSRange, in text: String) -> MarkdownToken? {
+        let tokens = parsedDocument(for: text).tokens
+        return tokens.first { token in
+            token.kind == .highlight && tokenEncloses(token, selection: selection)
+        }
+    }
+
+    func isSelectionHighlight(in nsText: NSString, range: NSRange) -> Bool {
+        return enclosingHighlightToken(for: range, in: nsText as String) != nil
+    }
+
     private func tokenEncloses(_ token: MarkdownToken, selection: NSRange) -> Bool {
         return selection.location >= token.range.location
             && NSMaxRange(selection) <= NSMaxRange(token.range)
@@ -213,6 +225,23 @@ extension NativeTextViewWrapper.Coordinator {
         wrapSelection(with: "*")
     }
 
+    @objc func didMarkdownHighlight(_ sender: Any?) {
+        guard let tv = textView else { return }
+        let range = tv.selectedRange()
+
+        if let token = enclosingHighlightToken(for: range, in: tv.string) {
+            unwrapToken(token, leftReplacement: "", rightReplacement: "")
+            return
+        }
+
+        if range.length == 0 {
+            insertEmptyMarkers("==")
+            return
+        }
+
+        wrapSelection(with: "==")
+    }
+
     private func insertEmptyMarkers(_ marker: String) {
         guard let tv = textView else { return }
         let range = tv.selectedRange()
@@ -260,6 +289,9 @@ extension NativeTextViewWrapper.Coordinator: NSMenuItemValidation {
             return true
         case #selector(didMarkdownItalic(_:)):
             menuItem.state = enclosingItalicToken(for: range, in: tv.string) != nil ? .on : .off
+            return true
+        case #selector(didMarkdownHighlight(_:)):
+            menuItem.state = enclosingHighlightToken(for: range, in: tv.string) != nil ? .on : .off
             return true
         case #selector(didMarkdownHeading(_:)):
             return !isSelectionHeading(level: menuItem.tag, in: nsText, range: range)

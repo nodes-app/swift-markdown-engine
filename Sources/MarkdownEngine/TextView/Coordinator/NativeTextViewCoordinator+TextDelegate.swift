@@ -454,6 +454,12 @@ extension NativeTextViewCoordinator {
                 userInfo: ["isItalic": isSelectionItalic(in: nsText, range: selRange)]
             )
         }
+        if let name = bus.selectionHighlightDidChange {
+            center.post(
+                name: name, object: nil,
+                userInfo: ["isHighlight": isSelectionHighlight(in: nsText, range: selRange)]
+            )
+        }
     }
 
     func handleBacktab(_ textView: NSTextView) -> Bool {

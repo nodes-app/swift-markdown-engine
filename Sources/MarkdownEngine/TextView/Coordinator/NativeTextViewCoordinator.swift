@@ -226,6 +226,11 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
                 self?.handleHeadingNotification(notification)
             })
         }
+        if let name = bus.applyHighlightRequest {
+            busObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                self?.handleHighlightNotification(notification)
+            })
+        }
         if let name = bus.findScrollToRange {
             busObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
                 self?.handleFindScrollToRange(notification)

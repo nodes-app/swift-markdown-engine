@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `true`, `mouseMoved:` skips calling `super.mouseMoved` to avoid NSTextView's
   built-in I-beam cursor, setting the arrow cursor instead. Exposed through
   `NativeTextViewWrapper.isCursorExcluded`.
+- `==highlight==` inline markup: double-equals markers around text apply a
+  background color (configurable via `MarkdownEditorTheme.highlightColor`,
+  default `.systemOrange.withAlphaComponent(0.4)`). Content is recursively parsed so nested emphasis,
+  code, etc. work inside highlights.
+- `MarkdownEditorBus.applyHighlightRequest` /
+  `selectionHighlightDidChange`: bus notification names for driving a
+  highlight toolbar button from host UI.
 
 ## [0.7.1] - 2026-06-20
 

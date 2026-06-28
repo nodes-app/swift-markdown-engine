@@ -61,6 +61,12 @@ struct TableCellTests {
         #expect(s.attribute(.strikethroughStyle, at: 0, effectiveRange: nil) != nil)
     }
 
+    @Test func highlightIsApplied() {
+        let s = cell("==note==")
+        #expect(s.string == "note")
+        #expect(s.attribute(.backgroundColor, at: 0, effectiveRange: nil) != nil)
+    }
+
     @Test func headerCellStartsBold() {
         #expect(traits(cell("h", header: true), "h").contains(.bold))
     }

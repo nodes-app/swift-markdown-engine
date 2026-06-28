@@ -230,6 +230,13 @@ extension MarkdownStyler {
                         .strikethroughColor: theme.bodyText
                     ], range: NSRange(location: start, length: out.length - start))
                 }
+            case .highlight(_, _, let children):
+                let start = out.length
+                recurse(children, font)
+                if out.length > start {
+                    out.addAttribute(.backgroundColor, value: theme.highlightColor,
+                                     range: NSRange(location: start, length: out.length - start))
+                }
             case .code(_, let content):
                 out.append(NSAttributedString(string: ns.substring(with: content), attributes: [
                     .font: codeFont, .backgroundColor: codeBackgroundColor, .foregroundColor: theme.bodyText

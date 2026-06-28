@@ -24,7 +24,7 @@ checkboxes.
 
 ## Features
 
-- **Live Markdown styling** — bold, italic, strikethrough, headings, lists, blockquotes, GFM tables, code, links, task checkboxes, horizontal rules 
+- **Live Markdown styling** — bold, italic, strikethrough, highlight, headings, lists, blockquotes, GFM tables, code, links, task checkboxes, horizontal rules 
 - **Wiki-style linking** with two-form storage / display roundtripping
   (`[[Name|<id>]]` ↔ `[[Name]]`)
 - **Image embeds** — both `![[Name]]` (Obsidian-style, embedder supplies the                           

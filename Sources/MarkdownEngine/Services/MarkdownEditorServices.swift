@@ -195,10 +195,14 @@ public struct MarkdownEditorBus: Sendable {
     /// Posted by the host UI to request the engine apply a heading level.
     /// Expected `userInfo["level"] as? Int`.
     public var applyHeadingRequest: Notification.Name?
+    /// Posted by the host UI to request the engine apply highlight styling.
+    public var applyHighlightRequest: Notification.Name?
     /// Posted by the engine after every selection change with `userInfo["isBold"] as? Bool`.
     public var selectionBoldDidChange: Notification.Name?
     /// Posted by the engine after every selection change with `userInfo["isItalic"] as? Bool`.
     public var selectionItalicDidChange: Notification.Name?
+    /// Posted by the engine after every selection change with `userInfo["isHighlight"] as? Bool`.
+    public var selectionHighlightDidChange: Notification.Name?
     /// Posted by the host UI to scroll an in-document find match into view
     /// and highlight all matches. Expected `userInfo["range"] as? NSRange`,
     /// `userInfo["currentIndex"] as? Int`, `userInfo["allRanges"] as? [NSRange]`.
@@ -220,8 +224,10 @@ public struct MarkdownEditorBus: Sendable {
         applyBoldRequest: Notification.Name? = nil,
         applyItalicRequest: Notification.Name? = nil,
         applyHeadingRequest: Notification.Name? = nil,
+        applyHighlightRequest: Notification.Name? = nil,
         selectionBoldDidChange: Notification.Name? = nil,
         selectionItalicDidChange: Notification.Name? = nil,
+        selectionHighlightDidChange: Notification.Name? = nil,
         findScrollToRange: Notification.Name? = nil,
         findClearHighlights: Notification.Name? = nil,
         findQuery: Notification.Name? = nil,
@@ -230,8 +236,10 @@ public struct MarkdownEditorBus: Sendable {
         self.applyBoldRequest = applyBoldRequest
         self.applyItalicRequest = applyItalicRequest
         self.applyHeadingRequest = applyHeadingRequest
+        self.applyHighlightRequest = applyHighlightRequest
         self.selectionBoldDidChange = selectionBoldDidChange
         self.selectionItalicDidChange = selectionItalicDidChange
+        self.selectionHighlightDidChange = selectionHighlightDidChange
         self.findScrollToRange = findScrollToRange
         self.findClearHighlights = findClearHighlights
         self.findQuery = findQuery

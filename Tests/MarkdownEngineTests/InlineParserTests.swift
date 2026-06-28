@@ -229,6 +229,37 @@ struct InlineParserTests {
         ])
     }
 
+    // MARK: - Highlight
+
+    @Test("highlight, content recursively parsed")
+    func highlight() {
+        #expect(InlineParser.parse("==x==") == [
+            .highlight(range: r(0, 5), markers: [r(0, 2), r(3, 2)], children: [.text(r(2, 1))]),
+        ])
+    }
+
+    @Test("triple equals do not highlight")
+    func tripleEqualsNotHighlight() {
+        #expect(InlineParser.parse("===x===") == [.text(r(0, 7))])
+    }
+
+    @Test("==abc=== matches ==abc==, trailing = is plain text")
+    func highlightToleratesTrailingTripleEquals() {
+        #expect(InlineParser.parse("==abc===") == [
+            .highlight(range: r(0, 7), markers: [r(0, 2), r(5, 2)], children: [.text(r(2, 3))]),
+            .text(r(7, 1)),
+        ])
+    }
+
+    @Test("highlight wraps emphasis")
+    func highlightWrapsEmphasis() {
+        #expect(InlineParser.parse("==*x*==") == [
+            .highlight(range: r(0, 7), markers: [r(0, 2), r(5, 2)], children: [
+                .emphasis(.italic, range: r(2, 3), markers: [r(2, 1), r(4, 1)], children: [.text(r(3, 1))]),
+            ]),
+        ])
+    }
+
     // MARK: - Backslash escapes
 
     @Test("escaped punctuation becomes an escape node")

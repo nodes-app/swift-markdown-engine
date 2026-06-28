@@ -49,6 +49,8 @@ indirect enum InlineNode: Equatable {
     case imageEmbed(range: NSRange, target: NSRange, markers: [NSRange])
     /// `~~text~~`. `markers` is `[openMarker, closeMarker]`; content recursively parsed.
     case strikethrough(range: NSRange, markers: [NSRange], children: [InlineNode])
+    /// `==text==`. `markers` is `[openMarker, closeMarker]`; content recursively parsed.
+    case highlight(range: NSRange, markers: [NSRange], children: [InlineNode])
     /// `$math$` — opaque. `markers` is `[ "$", "$" ]`.
     case inlineLatex(range: NSRange, content: NSRange, markers: [NSRange])
     /// Backslash escape `\x`; `marker` is the `\`, `character` the now-literal punctuation.
@@ -69,6 +71,7 @@ enum InlineParser {
     private static let pipe: unichar = 0x7C
     private static let backslash: unichar = 0x5C
     private static let tilde: unichar = 0x7E
+    private static let equals: unichar = 0x3D
     private static let dollar: unichar = 0x24
 
     // MARK: - Entry point
@@ -100,6 +103,7 @@ enum InlineParser {
         case wikiLink(range: NSRange, name: NSRange, id: NSRange?, markers: [NSRange])
         case imageEmbed(range: NSRange, target: NSRange, markers: [NSRange])
         case strikethrough(range: NSRange, contentRange: NSRange, markers: [NSRange])
+        case highlight(range: NSRange, contentRange: NSRange, markers: [NSRange])
         case inlineLatex(range: NSRange, content: NSRange, markers: [NSRange])
         case escape(range: NSRange, character: NSRange, marker: NSRange)
 
@@ -107,7 +111,7 @@ enum InlineParser {
             switch self {
             case .code(let r, _), .emphasis(_, let r, _, _), .link(let r, _, _, _),
                  .image(let r, _, _, _), .wikiLink(let r, _, _, _), .imageEmbed(let r, _, _),
-                 .strikethrough(let r, _, _), .inlineLatex(let r, _, _), .escape(let r, _, _):
+                 .strikethrough(let r, _, _), .highlight(let r, _, _), .inlineLatex(let r, _, _), .escape(let r, _, _):
                 return r
             }
         }
@@ -216,6 +220,7 @@ enum InlineParser {
         if c == bang, c1 == lbracket { return matchImage(ns, len, start: i) }
         if c == lbracket { return matchLink(ns, len, start: i) }
         if c == tilde, c1 == tilde { return matchStrikethrough(ns, len, start: i) }
+        if c == equals, c1 == equals { return matchHighlight(ns, len, start: i) }
         if c == dollar, c1 != dollar { return matchInlineLatex(ns, len, start: i) }
         return nil
     }
@@ -329,6 +334,28 @@ enum InlineParser {
     }
 
     /// `$ math $` — single dollars, content has no `$`, passes the math heuristic.
+    /// `== text ==` — text has no `=`; not part of a longer `=` run.
+    private static func matchHighlight(_ ns: NSString, _ len: Int, start i: Int) -> Span? {
+        if i > 0, ns.character(at: i - 1) == equals { return nil }
+        let contentStart = i + 2
+        var k = contentStart
+        while k < len {
+            let ch = ns.character(at: k)
+            if ch == newline { return nil }
+            if ch == equals {
+                guard peek(ns, k + 1, len) == equals else { return nil }
+                guard k > contentStart else { return nil }
+                return .highlight(
+                    range: NSRange(location: i, length: (k + 2) - i),
+                    contentRange: NSRange(location: contentStart, length: k - contentStart),
+                    markers: [NSRange(location: i, length: 2), NSRange(location: k, length: 2)]
+                )
+            }
+            k += 1
+        }
+        return nil
+    }
+
     private static func matchInlineLatex(_ ns: NSString, _ len: Int, start i: Int) -> Span? {
         if i > 0, ns.character(at: i - 1) == dollar { return nil }
         let contentStart = i + 1
@@ -592,6 +619,9 @@ enum InlineParser {
             case .strikethrough(let range, let contentRange, let markers):
                 result.append(.strikethrough(range: range, markers: markers,
                                              children: reparse(contentRange, ns: ns)))
+            case .highlight(let range, let contentRange, let markers):
+                result.append(.highlight(range: range, markers: markers,
+                                         children: reparse(contentRange, ns: ns)))
             case .inlineLatex(let range, let content, let markers):
                 result.append(.inlineLatex(range: range, content: content, markers: markers))
             case .escape(let range, let character, let marker):
@@ -627,6 +657,7 @@ enum InlineParser {
         case .wikiLink(let r, let n, let id, let m): return .wikiLink(range: s(r), name: s(n), id: id.map(s), markers: m.map(s))
         case .imageEmbed(let r, let t, let m): return .imageEmbed(range: s(r), target: s(t), markers: m.map(s))
         case .strikethrough(let r, let m, let ch): return .strikethrough(range: s(r), markers: m.map(s), children: offsetNodes(ch, by: d))
+        case .highlight(let r, let m, let ch): return .highlight(range: s(r), markers: m.map(s), children: offsetNodes(ch, by: d))
         case .inlineLatex(let r, let c, let m): return .inlineLatex(range: s(r), content: s(c), markers: m.map(s))
         case .escape(let r, let c, let m): return .escape(range: s(r), character: s(c), marker: s(m))
         }
