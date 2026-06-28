@@ -83,6 +83,9 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     /// Fires whenever the caret rect inside an active wiki-link changes,
     /// so embedders can position a follow-the-caret UI.
     public var onCaretRectChange: ((CGRect) -> Void)?
+    /// Build the editor's right-click menu (the engine ships no menu). Receives the default
+    /// NSMenu + the current selection range; return the menu to display (or unchanged).
+    public var onBuildContextMenu: ((NSMenu, NSRange) -> NSMenu)?
     /// Fires when the caret enters or leaves a `[[Name]]` or `![[…]]`
     /// token. `nil` means the caret is no longer inside such a token.
     public var onInlineSelectionChange: ((InlineSelectionState?) -> Void)?
@@ -134,6 +137,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         onPasteImage: ((NSPasteboard) -> String?)? = nil,
         onLinkClick: ((String) -> Void)? = nil,
         onCaretRectChange: ((CGRect) -> Void)? = nil,
+        onBuildContextMenu: ((NSMenu, NSRange) -> NSMenu)? = nil,
         onInlineSelectionChange: ((InlineSelectionState?) -> Void)? = nil,
         onCodeBlockSelectionChange: (([CodeBlockSelection]) -> Void)? = nil,
         onSpellCheckingPolicyChanged: ((SpellCheckingPolicy) -> Void)? = nil,
@@ -155,6 +159,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         self.onPasteImage = onPasteImage
         self.onLinkClick = onLinkClick
         self.onCaretRectChange = onCaretRectChange
+        self.onBuildContextMenu = onBuildContextMenu
         self.onInlineSelectionChange = onInlineSelectionChange
         self.onCodeBlockSelectionChange = onCodeBlockSelectionChange
         self.onSpellCheckingPolicyChanged = onSpellCheckingPolicyChanged
@@ -296,6 +301,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.textView = textView
         context.coordinator.wikiLinkMetadata = initialState.metadata
         context.coordinator.onCaretRectChange = onCaretRectChange
+        context.coordinator.onBuildContextMenu = onBuildContextMenu
         context.coordinator.onInlineSelectionChange = onInlineSelectionChange
         context.coordinator.onCodeBlockSelectionChange = onCodeBlockSelectionChange
 
@@ -559,6 +565,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         }
 
         context.coordinator.onCaretRectChange = onCaretRectChange
+        context.coordinator.onBuildContextMenu = onBuildContextMenu
         context.coordinator.onInlineSelectionChange = onInlineSelectionChange
         context.coordinator.onCodeBlockSelectionChange = onCodeBlockSelectionChange
         context.coordinator.didInitialFormatting = true

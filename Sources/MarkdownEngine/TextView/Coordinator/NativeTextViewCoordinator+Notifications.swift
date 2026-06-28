@@ -32,6 +32,42 @@ extension NativeTextViewCoordinator {
         didMarkdownHeading(item)
     }
 
+    @objc func handleStrikethroughNotification(_ notification: Notification) {
+        didMarkdownStrikethrough(nil)
+    }
+
+    @objc func handleInlineCodeNotification(_ notification: Notification) {
+        didMarkdownInlineCode(nil)
+    }
+
+    @objc func handleBlockquoteNotification(_ notification: Notification) {
+        didMarkdownBlockquote(nil)
+    }
+
+    @objc func handleUnorderedListNotification(_ notification: Notification) {
+        didMarkdownUnorderedList(nil)
+    }
+
+    @objc func handleOrderedListNotification(_ notification: Notification) {
+        didMarkdownOrderedList(nil)
+    }
+
+    @objc func handleLinkNotification(_ notification: Notification) {
+        didMarkdownLink(notification)
+    }
+
+    @objc func handleCodeBlockNotification(_ notification: Notification) {
+        didMarkdownCodeBlock(nil)
+    }
+
+    @objc func handleHorizontalRuleNotification(_ notification: Notification) {
+        didMarkdownHorizontalRule(nil)
+    }
+
+    @objc func handleImageNotification(_ notification: Notification) {
+        didMarkdownImage(notification)
+    }
+
     @objc func handleAppearanceChange(_ notification: Notification) {
         guard let tv = textView else { return }
         // Only react if the notification came from our own text view or from nil (system-wide)

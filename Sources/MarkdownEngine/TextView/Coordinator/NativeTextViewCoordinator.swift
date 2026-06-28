@@ -60,6 +60,9 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var layoutDelegate: MarkdownLayoutManagerDelegate?
     var onLinkClick: ((String) -> Void)?
     var onCaretRectChange: ((CGRect) -> Void)?
+    /// Embedder hook to build the right-click menu (the engine ships none). Gets the
+    /// default menu + current selection range, returns the menu to show.
+    var onBuildContextMenu: ((NSMenu, NSRange) -> NSMenu)?
     var onInlineSelectionChange: ((InlineSelectionState?) -> Void)?
     var onCodeBlockSelectionChange: (([CodeBlockSelection]) -> Void)?
     var didInitialFormatting: Bool = false
@@ -229,6 +232,51 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
         if let name = bus.applyHighlightRequest {
             busObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
                 self?.handleHighlightNotification(notification)
+            })
+        }
+        if let name = bus.applyStrikethroughRequest {
+            busObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                self?.handleStrikethroughNotification(notification)
+            })
+        }
+        if let name = bus.applyInlineCodeRequest {
+            busObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                self?.handleInlineCodeNotification(notification)
+            })
+        }
+        if let name = bus.applyBlockquoteRequest {
+            busObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                self?.handleBlockquoteNotification(notification)
+            })
+        }
+        if let name = bus.applyUnorderedListRequest {
+            busObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                self?.handleUnorderedListNotification(notification)
+            })
+        }
+        if let name = bus.applyOrderedListRequest {
+            busObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                self?.handleOrderedListNotification(notification)
+            })
+        }
+        if let name = bus.applyLinkRequest {
+            busObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                self?.handleLinkNotification(notification)
+            })
+        }
+        if let name = bus.applyCodeBlockRequest {
+            busObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                self?.handleCodeBlockNotification(notification)
+            })
+        }
+        if let name = bus.applyHorizontalRuleRequest {
+            busObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                self?.handleHorizontalRuleNotification(notification)
+            })
+        }
+        if let name = bus.applyImageRequest {
+            busObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                self?.handleImageNotification(notification)
             })
         }
         if let name = bus.findScrollToRange {
