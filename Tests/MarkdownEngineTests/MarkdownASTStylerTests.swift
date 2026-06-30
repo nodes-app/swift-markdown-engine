@@ -101,6 +101,83 @@ struct MarkdownASTStylerTests {
         #expect(spellingStates(intersecting: inlineSpan).contains(0))
         #expect(spellingStates(intersecting: prose).isEmpty)
     }
+
+    /// Effective color at `pos`: the last styled range covering it that sets `.foregroundColor`.
+    private func color(in attrs: [StyledRange], at pos: Int) -> NSColor? {
+        var result: NSColor?
+        for (range, a) in attrs where NSLocationInRange(pos, range) {
+            if let c = a[.foregroundColor] as? NSColor { result = c }
+        }
+        return result
+    }
+
+    /// Whether the last `.font` attribute covering `pos` is the hidden marker font.
+    private func isHiddenMarkerFont(in attrs: [StyledRange], at pos: Int, configuration: MarkdownEditorConfiguration = .default) -> Bool {
+        let hiddenSize = configuration.markers.hiddenMarkerFontSize
+        let hiddenFont = NSFont(name: fontName, size: hiddenSize) ?? .systemFont(ofSize: hiddenSize)
+        var result: NSFont?
+        for (range, a) in attrs where NSLocationInRange(pos, range) {
+            if let f = a[.font] as? NSFont { result = f }
+        }
+        return result?.pointSize == hiddenFont.pointSize
+    }
+
+    @Test("highlight == markers use mutedText while the caret is inside")
+    func highlightMarkersAreMutedWhenActive() {
+        let text = "==text=="
+        let attrs = MarkdownASTStyler.styleAttributes(
+            text: text, fontName: fontName, fontSize: base, caretLocation: 4, configuration: .default
+        )
+        #expect(color(in: attrs, at: 0) == MarkdownEditorTheme.default.mutedText)
+        #expect(color(in: attrs, at: 1) == MarkdownEditorTheme.default.mutedText)
+        #expect(color(in: attrs, at: 6) == MarkdownEditorTheme.default.mutedText)
+        #expect(color(in: attrs, at: 7) == MarkdownEditorTheme.default.mutedText)
+    }
+
+    @Test("bold ** markers use mutedText while the caret is inside")
+    func boldMarkersAreMutedWhenActive() {
+        let text = "**bold**"
+        let attrs = MarkdownASTStyler.styleAttributes(
+            text: text, fontName: fontName, fontSize: base, caretLocation: 4, configuration: .default
+        )
+        #expect(color(in: attrs, at: 0) == MarkdownEditorTheme.default.mutedText)
+        #expect(color(in: attrs, at: 1) == MarkdownEditorTheme.default.mutedText)
+        #expect(color(in: attrs, at: 6) == MarkdownEditorTheme.default.mutedText)
+        #expect(color(in: attrs, at: 7) == MarkdownEditorTheme.default.mutedText)
+    }
+
+    @Test("italic * marker uses mutedText while the caret is inside")
+    func italicMarkerIsMutedWhenActive() {
+        let text = "*italic*"
+        let attrs = MarkdownASTStyler.styleAttributes(
+            text: text, fontName: fontName, fontSize: base, caretLocation: 4, configuration: .default
+        )
+        #expect(color(in: attrs, at: 0) == MarkdownEditorTheme.default.mutedText)
+        #expect(color(in: attrs, at: 7) == MarkdownEditorTheme.default.mutedText)
+    }
+
+    @Test("strikethrough ~~ markers use mutedText while the caret is inside")
+    func strikethroughMarkersAreMutedWhenActive() {
+        let text = "~~strike~~"
+        let attrs = MarkdownASTStyler.styleAttributes(
+            text: text, fontName: fontName, fontSize: base, caretLocation: 5, configuration: .default
+        )
+        #expect(color(in: attrs, at: 0) == MarkdownEditorTheme.default.mutedText)
+        #expect(color(in: attrs, at: 1) == MarkdownEditorTheme.default.mutedText)
+        #expect(color(in: attrs, at: 8) == MarkdownEditorTheme.default.mutedText)
+        #expect(color(in: attrs, at: 9) == MarkdownEditorTheme.default.mutedText)
+    }
+
+    @Test("inline markers shrink instead of taking muted color when the caret is outside")
+    func inactiveMarkersShrinkInsteadOfColored() {
+        let text = "a ==text== b **bold** c ~~strike~~ d *italic* e"
+        let attrs = MarkdownASTStyler.styleAttributes(
+            text: text, fontName: fontName, fontSize: base, caretLocation: 0, configuration: .default
+        )
+        for pos in [2, 3, 8, 9, 13, 14, 19, 20, 24, 25, 32, 33, 37, 44] {
+            #expect(isHiddenMarkerFont(in: attrs, at: pos), "marker at \(pos) should be shrunk")
+        }
+    }
 }
 
 /// Canonical, order-independent string of styled ranges so two style runs can be

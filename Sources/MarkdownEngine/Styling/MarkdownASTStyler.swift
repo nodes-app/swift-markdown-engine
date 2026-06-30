@@ -420,22 +420,31 @@ enum MarkdownASTStyler {
             case .text:
                 break
 
-            case .emphasis(let kind, _, let markers, let children):
+            case .emphasis(let kind, let range, let markers, let children):
                 let composed = adding(traits(for: kind), to: font)
                 attrs.append((content(of: markers), [.font: composed]))
+                if ctx.isActive(range) {
+                    for marker in markers { attrs.append((marker, [.foregroundColor: ctx.theme.mutedText])) }
+                }
                 styleInlines(children, font: composed, ctx: ctx, into: &attrs)
 
-            case .strikethrough(_, let markers, let children):
+            case .strikethrough(let range, let markers, let children):
                 attrs.append((content(of: markers), [
                     .strikethroughStyle: NSUnderlineStyle.single.rawValue,
                     .strikethroughColor: ctx.theme.strikethroughColor,
                 ]))
+                if ctx.isActive(range) {
+                    for marker in markers { attrs.append((marker, [.foregroundColor: ctx.theme.mutedText])) }
+                }
                 styleInlines(children, font: font, ctx: ctx, into: &attrs)
 
-            case .highlight(_, let markers, let children):
+            case .highlight(let range, let markers, let children):
                 attrs.append((content(of: markers), [
                     .backgroundColor: ctx.theme.highlightColor,
                 ]))
+                if ctx.isActive(range) {
+                    for marker in markers { attrs.append((marker, [.foregroundColor: ctx.theme.mutedText])) }
+                }
                 styleInlines(children, font: font, ctx: ctx, into: &attrs)
 
             case .code(let range, let contentRange):
