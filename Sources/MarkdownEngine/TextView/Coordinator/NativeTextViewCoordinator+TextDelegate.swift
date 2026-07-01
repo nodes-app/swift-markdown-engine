@@ -492,28 +492,32 @@ extension NativeTextViewCoordinator {
     }
 
     public func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
-        // Edit zone: a click on the outer ~30% of a node link's first/last name char places the caret
-        // just outside the markers (before '[[' / after ']]') to reveal the source for editing instead
-        // of navigating. Editable views only — read-only links must stay navigable.
+        // Edit zone: a click on the outer ~30% of a link's first/last visible char places the caret
+        // just outside the markers (before '[[' / '[' , after ']]' / ')') to reveal the source for
+        // editing instead of navigating. Applies to both wiki links [[…]] and web links [text](url).
+        // Editable views only — read-only links must stay navigable.
         if textView.isEditable, let storage = textView.textStorage {
             var linkRange = NSRange(location: NSNotFound, length: 0)
             let editZoneMinNameLength = 3   // 1–2 char names stay fully clickable for navigation
             if storage.attribute(.link, at: charIndex, longestEffectiveRange: &linkRange,
                                  in: NSRange(location: 0, length: storage.length)) != nil,
                linkRange.length >= editZoneMinNameLength {
-                // Caret lands on the token's markers (no .link there, so the mouse-on-link guard in
-                // textViewDidChangeSelection doesn't suppress the reveal).
+                // Caret lands on the token's outer markers ('[['/'[' or ']]'/')'), which carry no
+                // .link, so the mouse-on-link guard in textViewDidChangeSelection doesn't suppress
+                // the reveal. Web links (.link) get the same edit zone as wiki links (.wikiLink); the
+                // .link attribute only spans the visible text, so without the full token range a web
+                // link would drop the caret between its brackets instead of just outside them.
                 let token = parsedDocument(for: textView.string).tokens
-                    .first { $0.kind == .wikiLink && NSLocationInRange(charIndex, $0.range) }
+                    .first { ($0.kind == .wikiLink || $0.kind == .link) && NSLocationInRange(charIndex, $0.range) }
                 let edgeFraction: CGFloat = 0.3
                 let frac = clickFractionThroughGlyph(textView, charIndex: charIndex)
                 if charIndex == linkRange.location, frac.map({ $0 <= edgeFraction }) ?? true {
-                    let caret = token?.range.location ?? linkRange.location          // before '[['
+                    let caret = token?.range.location ?? linkRange.location          // before '[[' / '['
                     textView.setSelectedRange(NSRange(location: caret, length: 0))
                     return true
                 }
                 if charIndex == NSMaxRange(linkRange) - 1, frac.map({ $0 >= 1 - edgeFraction }) ?? true {
-                    let caret = token.map { NSMaxRange($0.range) } ?? NSMaxRange(linkRange)  // after ']]'
+                    let caret = token.map { NSMaxRange($0.range) } ?? NSMaxRange(linkRange)  // after ']]' / ')'
                     textView.setSelectedRange(NSRange(location: caret, length: 0))
                     return true
                 }
