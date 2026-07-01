@@ -74,7 +74,8 @@ enum MarkdownASTStyler {
         // Text/regex passes (AST-agnostic); AST code ranges drive the "skip inside code" checks.
         let codeRanges = collectCodeRanges(in: blocks)
         let checkboxRanges = collectCheckboxRanges(in: blocks)
-        styleAutoLinks(ctx: ctx, codeRanges: codeRanges, into: &attrs)
+        let linkRanges = collectLinkRanges(in: blocks)
+        styleAutoLinks(ctx: ctx, codeRanges: codeRanges, linkRanges: linkRanges, into: &attrs)
         styleIncompleteLinkBrackets(ctx: ctx, codeRanges: codeRanges, checkboxRanges: checkboxRanges, into: &attrs)
         return attrs
     }
@@ -108,6 +109,39 @@ enum MarkdownASTStyler {
 
     private static func isInCode(_ range: NSRange, _ codeRanges: [NSRange]) -> Bool {
         codeRanges.contains { NSIntersectionRange($0, range).length > 0 }
+    }
+
+    /// Full ranges of markdown links `[text](url)` and wiki links `[[…]]`. The NSDataDetector
+    /// auto-link pass skips URLs inside these, so a link's own `(url)` isn't independently
+    /// linkified into a second, competing `.link` region overlapping the link (which offsets
+    /// the click edit-zone and makes the raw URL navigable).
+    private static func collectLinkRanges(in blocks: [BlockNode]) -> [NSRange] {
+        var ranges: [NSRange] = []
+        func walk(_ nodes: [InlineNode]) {
+            for node in nodes {
+                switch node {
+                case .link(let range, _, _, _, let children):
+                    ranges.append(range)
+                    walk(children)
+                case .wikiLink(let range, _, _, _):
+                    ranges.append(range)
+                case .emphasis(_, _, _, let children), .strikethrough(_, _, let children),
+                     .highlight(_, _, let children):
+                    walk(children)
+                default: break
+                }
+            }
+        }
+        for block in blocks {
+            switch block {
+            case .paragraph(_, let inlines), .heading(_, _, _, let inlines), .blockquote(_, let inlines):
+                walk(inlines)
+            case .list(_, let items):
+                for item in items { walk(item.inlines) }
+            default: break
+            }
+        }
+        return ranges
     }
 
     /// Checkbox boxes (`[ ]`/`[x]`), excluded so the incomplete-link pass doesn't repaint their brackets.
@@ -197,11 +231,15 @@ enum MarkdownASTStyler {
         }
     }
 
-    private static func styleAutoLinks(ctx: Ctx, codeRanges: [NSRange], into attrs: inout [StyledRange]) {
+    private static func styleAutoLinks(ctx: Ctx, codeRanges: [NSRange], linkRanges: [NSRange], into attrs: inout [StyledRange]) {
         guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { return }
         for scan in ctx.scanRanges {
             detector.enumerateMatches(in: ctx.text, range: scan) { match, _, _ in
-                guard let match, let url = match.url, !isInCode(match.range, codeRanges) else { return }
+                // Skip URLs inside code and inside a markdown/wiki link's own range — a link's
+                // `(url)` must not become a second `.link` region competing with the link itself.
+                guard let match, let url = match.url,
+                      !isInCode(match.range, codeRanges),
+                      !isInCode(match.range, linkRanges) else { return }
                 attrs.append((match.range, [.link: url]))
             }
         }

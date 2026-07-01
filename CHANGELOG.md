@@ -12,6 +12,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   color while the caret is inside the corresponding span, matching the existing
   behavior of inline code backticks and link/wiki-link brackets. This makes
   highlight `==` markers visually distinct from body text in edit state.
+- Web links `[text](url)` now share the wiki-link "edit zone": clicking the outer
+  ~30% of the link's first/last visible character places the caret just outside the
+  markers (before `[` / after `)`) and reveals the source for editing instead of
+  navigating, matching `[[…]]` behavior. Previously the edit zone only resolved
+  `.wikiLink` tokens, so a web link dropped the caret between its brackets and did
+  not reveal. Middle-of-link clicks still navigate; read-only links stay navigable.
+- Auto-linking (`NSDataDetector`) no longer linkifies a URL that sits inside a
+  markdown or wiki link's own range. A link's `(url)` previously got its own
+  competing `.link` attribute on top of the link — making the raw URL independently
+  navigable and offsetting the click edit zone. Bare URLs outside links still
+  autolink; URLs inside code were already excluded.
 
 ## [0.8.0] - 2026-06-28
 
