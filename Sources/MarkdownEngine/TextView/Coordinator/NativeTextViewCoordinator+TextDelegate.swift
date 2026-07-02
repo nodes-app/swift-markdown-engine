@@ -13,6 +13,12 @@
 //
 
 import AppKit
+import os
+
+/// DIAG (temporary): link-click diagnostics for the intermittent
+/// caret-instead-of-navigate bug. notice-level → persisted, retrievable
+/// after the fact via `log show --predicate 'subsystem == "nodes.linkdiag"'`.
+let linkDiag = Logger(subsystem: "nodes.linkdiag", category: "engine")
 
 extension NativeTextViewCoordinator {
 
@@ -200,6 +206,7 @@ extension NativeTextViewCoordinator {
         if currentEventType != .keyDown,
            selRange.location < (tv.string as NSString).length,
            tv.textStorage?.attribute(.link, at: selRange.location, effectiveRange: nil) != nil {
+            linkDiag.notice("guard caret-on-link loc=\(selRange.location) evt=\(currentEventType?.rawValue ?? 0)")
             isImageEmbedActive = false
             isWikiLinkActive = false
             onInlineSelectionChange?(nil)
@@ -492,6 +499,7 @@ extension NativeTextViewCoordinator {
     }
 
     public func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+        linkDiag.notice("click enter charIndex=\(charIndex) editable=\(textView.isEditable) evt=\(NSApp.currentEvent?.type.rawValue ?? 0)")
         // Edit zone: a click on the outer ~30% of a link's first/last visible char places the caret
         // just outside the markers (before '[[' / '[' , after ']]' / ')') to reveal the source for
         // editing instead of navigating. Applies to both wiki links [[…]] and web links [text](url).
@@ -513,20 +521,24 @@ extension NativeTextViewCoordinator {
                 let frac = clickFractionThroughGlyph(textView, charIndex: charIndex)
                 if charIndex == linkRange.location, frac.map({ $0 <= edgeFraction }) ?? true {
                     let caret = token?.range.location ?? linkRange.location          // before '[[' / '['
+                    linkDiag.notice("click editzone-left caret=\(caret) frac=\(frac.map { String(format: "%.2f", $0) } ?? "nil", privacy: .public)")
                     textView.setSelectedRange(NSRange(location: caret, length: 0))
                     return true
                 }
                 if charIndex == NSMaxRange(linkRange) - 1, frac.map({ $0 >= 1 - edgeFraction }) ?? true {
                     let caret = token.map { NSMaxRange($0.range) } ?? NSMaxRange(linkRange)  // after ']]' / ')'
+                    linkDiag.notice("click editzone-right caret=\(caret) frac=\(frac.map { String(format: "%.2f", $0) } ?? "nil", privacy: .public)")
                     textView.setSelectedRange(NSRange(location: caret, length: 0))
                     return true
                 }
             }
         }
         guard let target = WikiLinkService.resolveIdentifier(link: link, textView: textView, at: charIndex) else {
+            linkDiag.notice("click resolve-nil charIndex=\(charIndex)")
             return false
         }
         // Direkt deaktivieren, bevor der Navigation-Callback läuft.
+        linkDiag.notice("click navigate target=\(target, privacy: .public)")
         self.isWikiLinkActive = false
         DispatchQueue.main.async {
             self.onLinkClick?(target)

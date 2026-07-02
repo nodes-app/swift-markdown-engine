@@ -50,8 +50,12 @@ extension NativeTextView {
         let fragStart = tcs.offset(from: tcs.documentRange.location, to: chosenFragment.rangeInElement.location)
         guard fragStart != NSNotFound else { return false }
         let docLen = (string as NSString).length
+        let remapped = min(max(fragStart + clampedInFrag, 0), docLen)
+        let onLink = remapped < docLen
+            && textStorage?.attribute(.link, at: remapped, effectiveRange: nil) != nil
+        linkDiag.notice("remap consumed caret=\(remapped) onLink=\(onLink)")
         window?.makeFirstResponder(self)
-        setSelectedRange(NSRange(location: min(max(fragStart + clampedInFrag, 0), docLen), length: 0))
+        setSelectedRange(NSRange(location: remapped, length: 0))
         return true
     }
 }

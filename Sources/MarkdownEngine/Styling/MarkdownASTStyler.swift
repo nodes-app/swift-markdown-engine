@@ -546,6 +546,7 @@ enum MarkdownASTStyler {
             if exists {
                 contentAttrs[.link] = linkID ?? nodeName
             } else {
+                linkDiag.notice("resolveFail name=\(nodeName, privacy: .public) hasID=\(linkID != nil)")
                 contentAttrs[.foregroundColor] = ctx.theme.disabledText
             }
         }

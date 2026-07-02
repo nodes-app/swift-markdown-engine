@@ -405,6 +405,14 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             if #available(macOS 15.0, *), textView.isWritingToolsActive { return true }
             return context.coordinator.isWritingToolsActive
         }()
+        if context.coordinator.lastLoggedWTGate != wtActive {
+            context.coordinator.lastLoggedWTGate = wtActive
+            let appleFlag: Bool = {
+                if #available(macOS 15.0, *) { return textView.isWritingToolsActive }
+                return false
+            }()
+            linkDiag.notice("wtGate active=\(wtActive) apple=\(appleFlag) coord=\(context.coordinator.isWritingToolsActive) nodeSwitch=\(isNodeSwitch)")
+        }
 
         if wtActive && isNodeSwitch {
             // User switched files while Writing Tools was active — discard the

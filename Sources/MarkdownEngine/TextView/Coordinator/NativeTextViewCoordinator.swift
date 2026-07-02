@@ -72,6 +72,9 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var lastSyncedText: String
     var isProgrammaticEdit: Bool = false
     var isWritingToolsActive: Bool = false
+    /// DIAG (temporary): last wtActive value logged by updateNSView, so the
+    /// WT gate is logged once per transition instead of per update.
+    var lastLoggedWTGate: Bool?
     var wtStartDocumentId: String?
     weak var wtChildWindow: NSWindow?
     var wtInitialChildOrigin: CGPoint?
