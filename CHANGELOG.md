@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `MarkdownEditorConfiguration.rawSourceMode`: present the document as raw
+  Markdown source — no syntax hiding, no markdown styling, and no wiki-link
+  display transform (`[[Name|UUID]]` shows verbatim). The editor keeps base
+  font/paragraph styling and stays fully editable; smart Markdown input
+  handling (list continuation, `$$`/`![[` auto-wrap, ⇧⇥ outdent) is disabled
+  while raw. Runtime switching is supported and rebuilds the document
+  immediately; the current document's undo stack is dropped on a switch
+  because undo actions recorded against the other mode's display text would
+  replay at stale ranges. Default `false` — existing embedders are unaffected.
+
 ### Fixed
 - Inline syntax markers (`**`, `*`, `~~`, `==`) now use `mutedText` foreground
   color while the caret is inside the corresponding span, matching the existing

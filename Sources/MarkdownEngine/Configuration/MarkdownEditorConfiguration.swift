@@ -64,6 +64,12 @@ public struct MarkdownEditorConfiguration: Sendable {
     ///
     /// - SeeAlso: ``HeightBehavior``
     public var heightBehavior: HeightBehavior
+    /// Present the document as raw Markdown source: no syntax hiding, no
+    /// styling, no wiki-link display transform (`[[Name|UUID]]` shows verbatim).
+    /// Stays editable, but smart input (list continuation, auto-wrap, ⇧⇥) is off.
+    /// Runtime-switchable; a flip rebuilds immediately and drops the document's
+    /// undo stack (actions from the other mode would replay at stale ranges).
+    public var rawSourceMode: Bool
 
     public init(
         theme: MarkdownEditorTheme = .default,
@@ -87,7 +93,8 @@ public struct MarkdownEditorConfiguration: Sendable {
         textInsets: TextInsets = .default,
         readingWidth: CGFloat? = nil,
         spellChecking: SpellCheckingPolicy = .default,
-        heightBehavior: HeightBehavior = .scrolls
+        heightBehavior: HeightBehavior = .scrolls,
+        rawSourceMode: Bool = false
     ) {
         self.theme = theme
         self.services = services
@@ -111,6 +118,7 @@ public struct MarkdownEditorConfiguration: Sendable {
         self.readingWidth = readingWidth
         self.spellChecking = spellChecking
         self.heightBehavior = heightBehavior
+        self.rawSourceMode = rawSourceMode
     }
 
     public static let `default` = MarkdownEditorConfiguration()

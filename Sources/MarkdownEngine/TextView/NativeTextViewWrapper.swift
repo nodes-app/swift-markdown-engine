@@ -449,6 +449,18 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             (nsView as? ClampedScrollView)?.clampToInsets()
             nsView.invalidateIntrinsicContentSize()
         }
+        // Sync rawSourceMode; a flip rebuilds in the new presentation. It
+        // changes display text ([[Name]] ↔ [[Name|UUID]]), so drop the doc's
+        // undo stack — surviving actions would replay at stale ranges.
+        let rawSourceModeChanged = context.coordinator.configuration.rawSourceMode != configuration.rawSourceMode
+        if rawSourceModeChanged {
+            context.coordinator.configuration.rawSourceMode = configuration.rawSourceMode
+            textView.configuration.rawSourceMode = configuration.rawSourceMode
+            textView.breakUndoCoalescing()
+            context.coordinator.undoManagers[documentId]?.removeAllActions()
+            context.coordinator.isWikiLinkActive = false
+            context.coordinator.didInitialFormatting = false
+        }
         // Reading column centers by POSITION (container subview), so the text inset is constant.
         let desiredTextInset = NSSize(
             width: configuration.textInsets.horizontal,
@@ -553,7 +565,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.rebuildTextStorageAndStyle(
             textView,
             from: text,
-            invalidateLayout: isNodeSwitch
+            invalidateLayout: isNodeSwitch || rawSourceModeChanged
         )
         textView.recalcOverscroll(for: nsView)
         (nsView as? ClampedScrollView)?.clampToInsets()
