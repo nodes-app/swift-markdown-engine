@@ -206,7 +206,7 @@ extension NativeTextViewCoordinator {
         if currentEventType != .keyDown,
            selRange.location < (tv.string as NSString).length,
            tv.textStorage?.attribute(.link, at: selRange.location, effectiveRange: nil) != nil {
-            linkDiag.notice("guard caret-on-link loc=\(selRange.location) evt=\(currentEventType?.rawValue ?? 0)")
+            linkDiag.notice("guard caret-on-link loc=\(selRange.location) evt=\(currentEventType?.rawValue ?? 0) marked=\(tv.hasMarkedText()) key=\(tv.window?.isKeyWindow ?? false) first=\(tv.window?.firstResponder === tv)")
             isImageEmbedActive = false
             isWikiLinkActive = false
             onInlineSelectionChange?(nil)
@@ -499,7 +499,7 @@ extension NativeTextViewCoordinator {
     }
 
     public func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
-        linkDiag.notice("click enter charIndex=\(charIndex) editable=\(textView.isEditable) evt=\(NSApp.currentEvent?.type.rawValue ?? 0)")
+        linkDiag.notice("click enter charIndex=\(charIndex) editable=\(textView.isEditable) evt=\(NSApp.currentEvent?.type.rawValue ?? 0) marked=\(textView.hasMarkedText())")
         // Edit zone: a click on the outer ~30% of a link's first/last visible char places the caret
         // just outside the markers (before '[[' / '[' , after ']]' / ')') to reveal the source for
         // editing instead of navigating. Applies to both wiki links [[…]] and web links [text](url).
