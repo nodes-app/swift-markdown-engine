@@ -458,8 +458,11 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             textView.configuration.rawSourceMode = configuration.rawSourceMode
             textView.breakUndoCoalescing()
             context.coordinator.undoManagers[documentId]?.removeAllActions()
-            context.coordinator.isWikiLinkActive = false
             context.coordinator.didInitialFormatting = false
+            // isWikiLinkActive is a SwiftUI binding — defer off the update pass
+            // to avoid "Modifying state during view update".
+            let coordinator = context.coordinator
+            DispatchQueue.main.async { coordinator.isWikiLinkActive = false }
         }
         // Reading column centers by POSITION (container subview), so the text inset is constant.
         let desiredTextInset = NSSize(
