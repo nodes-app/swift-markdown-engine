@@ -20,10 +20,18 @@ extension NativeTextViewCoordinator {
         invalidateLayout: Bool = false
     ) {
         // Storage is raw Markdown; only wiki links transform on display.
+        // In raw source mode display IS storage — no transform, no metadata.
         let services = configuration.services
-        let displayState = WikiLinkService.makeDisplayState(from: text) { services.wikiLinks.name(forID: $0) }
-        let displayText = displayState.display
-        wikiLinkMetadata = displayState.metadata
+        let rawMode = configuration.rawSourceMode
+        let displayText: String
+        if rawMode {
+            displayText = text
+            wikiLinkMetadata = [:]
+        } else {
+            let displayState = WikiLinkService.makeDisplayState(from: text) { services.wikiLinks.name(forID: $0) }
+            displayText = displayState.display
+            wikiLinkMetadata = displayState.metadata
+        }
 
         if textView.string != displayText {
             textView.string = displayText
@@ -47,34 +55,39 @@ extension NativeTextViewCoordinator {
         textView.textStorage?.removeAttribute(.link, range: fullRange)
         textView.textStorage?.setAttributes(baseAttrs, range: fullRange)
 
-        let tokens = parsedDocument(for: displayText).tokens
-        // Hide caret from styling when read-only, else clicks reveal raw token syntax.
-        let caretLocation = textView.isEditable ? textView.selectedRange().location : -1
-        activeTokenIndices = MarkdownDetection.computeActiveTokenIndices(
-            selectionRange: textView.selectedRange(),
-            tokens: tokens,
-            in: nsDisplay,
-            suppressed: !textView.isEditable
-        )
+        if rawMode {
+            // Base attributes only — the source stays verbatim and unstyled.
+            activeTokenIndices = []
+        } else {
+            let tokens = parsedDocument(for: displayText).tokens
+            // Hide caret from styling when read-only, else clicks reveal raw token syntax.
+            let caretLocation = textView.isEditable ? textView.selectedRange().location : -1
+            activeTokenIndices = MarkdownDetection.computeActiveTokenIndices(
+                selectionRange: textView.selectedRange(),
+                tokens: tokens,
+                in: nsDisplay,
+                suppressed: !textView.isEditable
+            )
 
-        let ranges = MarkdownStyler.styleAttributes(
-            text: displayText,
-            fontName: fontName,
-            fontSize: fontSize,
-            layoutBridge: layoutBridge,
-            caretLocation: caretLocation,
-            activeTokenIndices: activeTokenIndices,
-            // FIX: apply .wikiLinkID attributes on load/node-switch too. Without this the uuid
-            // survived only in the range-keyed wikiLinkMetadata; once a later writeback shifted a
-            // link's range the metadata key missed and makeStorageState wrote [[Name]] (uuid lost).
-            // wikiLinkMetadata was just refreshed by makeDisplayState above, so ranges match here.
-            wikiLinkIDProvider: { [weak self] range in self?.wikiLinkID(for: range) },
-            precomputedTokens: tokens,
-            configuration: configuration
-        )
-        for (range, attrs) in ranges {
-            for (key, value) in attrs {
-                textView.textStorage?.addAttribute(key, value: value, range: range)
+            let ranges = MarkdownStyler.styleAttributes(
+                text: displayText,
+                fontName: fontName,
+                fontSize: fontSize,
+                layoutBridge: layoutBridge,
+                caretLocation: caretLocation,
+                activeTokenIndices: activeTokenIndices,
+                // FIX: apply .wikiLinkID attributes on load/node-switch too. Without this the uuid
+                // survived only in the range-keyed wikiLinkMetadata; once a later writeback shifted a
+                // link's range the metadata key missed and makeStorageState wrote [[Name]] (uuid lost).
+                // wikiLinkMetadata was just refreshed by makeDisplayState above, so ranges match here.
+                wikiLinkIDProvider: { [weak self] range in self?.wikiLinkID(for: range) },
+                precomputedTokens: tokens,
+                configuration: configuration
+            )
+            for (range, attrs) in ranges {
+                for (key, value) in attrs {
+                    textView.textStorage?.addAttribute(key, value: value, range: range)
+                }
             }
         }
         textView.textStorage?.endEditing()
@@ -105,6 +118,8 @@ extension NativeTextViewCoordinator {
         paragraphCandidates: [NSRange],
         tokens: [MarkdownToken]? = nil
     ) {
+        // Raw mode: no restyling; typing keeps base attrs via the typing shim.
+        guard !configuration.rawSourceMode else { return }
         let (baseFont, paragraphStyle) = TextStylingService.makeBaseFontAndStyle(
             fontName: fontName,
             fontSize: fontSize,

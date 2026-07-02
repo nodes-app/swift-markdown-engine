@@ -72,6 +72,23 @@ extension NativeTextViewCoordinator {
         guard let tv = notification.object as? NSTextView else { return }
         // Before the early returns: the first keystroke must hide the placeholder.
         (tv as? NativeTextView)?.refreshPlaceholderVisibility()
+        // Raw mode: display IS storage — sync the binding, skip the restyle.
+        if configuration.rawSourceMode {
+            guard !tv.hasMarkedText() else { return }
+            if tv.string != lastSyncedText {
+                let rawText = tv.string
+                DispatchQueue.main.async {
+                    self.lastSyncedText = rawText
+                    self.text = rawText
+                }
+            }
+            if let bottomTextView = tv as? NativeTextView,
+               let scrollView = tv.enclosingScrollView {
+                bottomTextView.recalcOverscroll(for: scrollView, debugTag: "textDidChange")
+                (scrollView as? ClampedScrollView)?.clampToInsets()
+            }
+            return
+        }
         let wtActive = isWritingToolsActive
         if wtActive, wtDetectedMode == .unknown {
             let firstEditLen = tv.textStorage?.editedRange.length ?? 0
@@ -193,6 +210,8 @@ extension NativeTextViewCoordinator {
 
     public func textViewDidChangeSelection(_ notification: Notification) {
         guard let tv = notification.object as? NSTextView else { return }
+        // Raw mode: plain source — no reveal, snap-back, or inline previews.
+        if configuration.rawSourceMode { return }
         if isWritingToolsActive { return }
         let selRange = tv.selectedRange()
         let currentEventType = NSApp.currentEvent?.type
@@ -430,6 +449,8 @@ extension NativeTextViewCoordinator {
     public func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool {
         if isProgrammaticEdit { return true }
         if isWritingToolsActive { return true }
+        // Raw mode: plain-text editing — no smart Markdown input.
+        if configuration.rawSourceMode { return true }
         pendingEditedRange = NSRange(location: affectedCharRange.location, length: replacementString?.utf16.count ?? 0)
         let currentLen = (textView.string as NSString).length
         let maxR = affectedCharRange.location + affectedCharRange.length
@@ -472,6 +493,8 @@ extension NativeTextViewCoordinator {
     }
 
     public func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        // Raw mode: default key handling (no ⇧⇥ outdent, no preview routing).
+        if configuration.rawSourceMode { return false }
         if commandSelector == #selector(NSResponder.insertBacktab(_:)) {
             return handleBacktab(textView)
         }
