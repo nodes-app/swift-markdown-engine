@@ -30,8 +30,26 @@ extension MarkdownStyler {
         let latexMarkerFont: NSFont
         let configuration: MarkdownEditorConfiguration
         let wikiLinkIDProvider: (NSRange) -> String?
+        /// Union bounds of the restyle's paragraph scope; nil = whole document
+        /// (initial load). Attribute application clips per paragraph anyway,
+        /// so the NSImage passes can skip tokens wholly outside these bounds
+        /// instead of walking every token in the document per keystroke.
+        var scopeBounds: (lo: Int, hi: Int)? = nil
 
         var services: MarkdownEditorServices { configuration.services }
+
+        /// True when `range` lies entirely outside the restyle scope — its
+        /// attributes would be clipped away at application time.
+        func outsideScope(_ range: NSRange) -> Bool {
+            guard let scopeBounds else { return false }
+            return NSMaxRange(range) <= scopeBounds.lo || range.location >= scopeBounds.hi
+        }
+
+        /// True when iteration (over location-sorted tokens) is past the scope.
+        func pastScope(_ range: NSRange) -> Bool {
+            guard let scopeBounds else { return false }
+            return range.location >= scopeBounds.hi
+        }
     }
 }
 
@@ -55,6 +73,12 @@ enum MarkdownStyler {
     ) -> [StyledRange] {
         let tokens = precomputedTokens ?? MarkdownTokenizer.parseTokensViaAST(in: text)
         let nsText = text as NSString
+        let scopeBounds: (lo: Int, hi: Int)? = scopedRanges.flatMap { ranges in
+            let valid = ranges.filter { $0.location != NSNotFound && $0.length > 0 }
+            guard let lo = valid.map(\.location).min(),
+                  let hi = valid.map({ NSMaxRange($0) }).max() else { return nil }
+            return (lo, hi)
+        }
         let codeTokens = tokens.filter { $0.kind == .codeBlock || $0.kind == .inlineCode }
         let baseFont = NSFont(name: fontName, size: fontSize) ?? NSFont.systemFont(ofSize: fontSize)
         let baseDefaultLineHeight = ceil(
@@ -75,7 +99,8 @@ enum MarkdownStyler {
             latexMarkerFont: NSFont(name: fontName, size: hiddenMarkerSize)
                 ?? NSFont.systemFont(ofSize: hiddenMarkerSize),
             configuration: configuration,
-            wikiLinkIDProvider: wikiLinkIDProvider
+            wikiLinkIDProvider: wikiLinkIDProvider,
+            scopeBounds: scopeBounds
         )
 
         var result: [StyledRange] = []

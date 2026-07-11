@@ -215,12 +215,7 @@ extension NativeTextViewCoordinator {
         pendingPreEditActiveTokenIndices = nil
 
         activeTokenIndices = PerfTrace.measure("activeTok") {
-            MarkdownDetection.computeActiveTokenIndices(
-                selectionRange: safeSelRange,
-                tokens: tokens,
-                in: fullText,
-                suppressed: !tv.isEditable
-            )
+            activeTokenIndices(parsed: parsed, selection: safeSelRange, in: fullText, suppressed: !tv.isEditable)
         }
         filterImageEmbedActiveTokens(parsed: parsed, text: fullText, selectionLocation: safeSelRange.location)
         updateAutocorrectSettings(
@@ -245,9 +240,15 @@ extension NativeTextViewCoordinator {
         // that merges into an existing table), the styler re-emits the anchor
         // against the FULL block — restyling only the edited rows would clip
         // that anchor away and the table goes blank until a full restyle.
-        let editedTableParagraphs = tokens
-            .filter { $0.kind == .table && NSIntersectionRange($0.range, safeEditedRange).length > 0 }
-            .map { fullText.paragraphRange(for: $0.range) }
+        // Location-sorted classified tables: early-exit past the edit instead
+        // of a full-token filter per keystroke.
+        var editedTableParagraphs: [NSRange] = []
+        for token in parsed.tableTokens {
+            if token.range.location > NSMaxRange(safeEditedRange) { break }
+            if NSIntersectionRange(token.range, safeEditedRange).length > 0 {
+                editedTableParagraphs.append(fullText.paragraphRange(for: token.range))
+            }
+        }
         effectiveParagraphCandidates.append(contentsOf: editedTableParagraphs)
         if !editedTableParagraphs.isEmpty {
             PerfTrace.note { "📐 TABLE-RESTYLE blocks=\(editedTableParagraphs.map { "\($0.location)+\($0.length)" }.joined(separator: ",")) editedRange=\(safeEditedRange.location),\(safeEditedRange.length)" }
@@ -260,7 +261,7 @@ extension NativeTextViewCoordinator {
         ))
 
         PerfTrace.measure("restyle") { restyleTextView(tv, paragraphCandidates: effectiveParagraphCandidates, tokens: tokens) }
-        PerfTrace.measure("codeSel") { updateCodeBlockSelection(textView: tv, tokens: tokens) }
+        PerfTrace.measure("codeSel") { updateCodeBlockSelection(textView: tv, parsed: parsed) }
         if wtActive {
             previousActiveTokenIndices = activeTokenIndices
             PerfTrace.end()
@@ -313,7 +314,7 @@ extension NativeTextViewCoordinator {
         let nsText = tv.string as NSString
 
         let prevActive = activeTokenIndices
-        activeTokenIndices = MarkdownDetection.computeActiveTokenIndices(selectionRange: selRange, tokens: tokens, in: nsText, suppressed: !tv.isEditable)
+        activeTokenIndices = activeTokenIndices(parsed: parsed, selection: selRange, in: nsText, suppressed: !tv.isEditable)
         filterImageEmbedActiveTokens(parsed: parsed, text: nsText, selectionLocation: selRange.location)
 
         // Snap-back: when the caret LEFT a wiki/image token, re-sync its displayed name to the live target name.
@@ -520,7 +521,7 @@ extension NativeTextViewCoordinator {
 
         // Skip during a pending edit — viewRect is stale until textDidChange's restyle runs; otherwise the overlay flashes to the old Y before settling.
         if !shouldSkipSelectionRestyle {
-            updateCodeBlockSelection(textView: tv, tokens: tokens)
+            updateCodeBlockSelection(textView: tv, parsed: parsed)
         }
     }
 
@@ -587,9 +588,9 @@ extension NativeTextViewCoordinator {
             return true
         }
         let parsed = parsedDocument(for: textView.string)
-        pendingPreEditActiveTokenIndices = MarkdownDetection.computeActiveTokenIndices(
-            selectionRange: textView.selectedRange(),
-            tokens: parsed.tokens,
+        pendingPreEditActiveTokenIndices = activeTokenIndices(
+            parsed: parsed,
+            selection: textView.selectedRange(),
             in: textView.string as NSString,
             suppressed: !textView.isEditable
         )

@@ -18,6 +18,7 @@ extension MarkdownStyler {
         var attrs: [StyledRange] = []
         let blockLatexTokens = ctx.tokens.enumerated().filter { $0.element.kind == .blockLatex }
         for (idx, token) in blockLatexTokens {
+            if ctx.outsideScope(token.range) { continue }   // clipped at application anyway
             if MarkdownDetection.isInsideCodeBlock(range: token.range, codeTokens: ctx.codeTokens) { continue }
             let isActive = ctx.activeTokenIndices.contains(idx)
             let rawLatexContent = ctx.nsText.substring(with: token.contentRange)
@@ -71,6 +72,7 @@ extension MarkdownStyler {
         // Quote lines mute their text via foregroundColor, which the LaTeX *image* ignores — render it in mutedText instead so it matches the grey.
         let blockquoteRanges = ctx.tokens.filter { $0.kind == .blockquote }.map(\.range)
         for (idx, token) in ctx.tokens.enumerated() where token.kind == .inlineLatex {
+            if ctx.outsideScope(token.range) { continue }   // clipped at application anyway
             if MarkdownDetection.isInsideCodeBlock(range: token.range, codeTokens: ctx.codeTokens) { continue }
             if tableRanges.contains(where: { tableRange in
                 token.range.location >= tableRange.location

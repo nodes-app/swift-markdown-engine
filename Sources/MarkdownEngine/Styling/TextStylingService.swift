@@ -124,12 +124,14 @@ struct TextStylingService {
     }
 
     private static func normalize(_ candidates: [NSRange]) -> [NSRange] {
+        // Exact-duplicate drop in one pass (was O(n²) via contains); order and
+        // overlapping-but-unequal ranges are preserved exactly as before.
+        var seen = Set<Int>()
+        seen.reserveCapacity(candidates.count)
         var result: [NSRange] = []
         for candidate in candidates where candidate.location != NSNotFound && candidate.length > 0 {
-            if result.contains(where: { $0.location == candidate.location && $0.length == candidate.length }) {
-                continue
-            }
-            result.append(candidate)
+            let key = candidate.location &* 1_000_003 &+ candidate.length
+            if seen.insert(key).inserted { result.append(candidate) }
         }
         return result
     }

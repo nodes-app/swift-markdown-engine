@@ -72,12 +72,13 @@ extension NativeTextViewCoordinator {
             // Base attributes only — the source stays verbatim and unstyled.
             activeTokenIndices = []
         } else {
-            let tokens = parsedDocument(for: displayText).tokens
+            let parsed = parsedDocument(for: displayText)
+            let tokens = parsed.tokens
             // Hide caret from styling when read-only, else clicks reveal raw token syntax.
             let caretLocation = textView.isEditable ? textView.selectedRange().location : -1
-            activeTokenIndices = MarkdownDetection.computeActiveTokenIndices(
-                selectionRange: textView.selectedRange(),
-                tokens: tokens,
+            activeTokenIndices = activeTokenIndices(
+                parsed: parsed,
+                selection: textView.selectedRange(),
                 in: nsDisplay,
                 suppressed: !textView.isEditable
             )
@@ -189,16 +190,21 @@ extension NativeTextViewCoordinator {
         var blockLatexTokens: [MarkdownToken] = []
         var wikiLinkTokens: [MarkdownToken] = []
         var imageEmbedTokens: [MarkdownToken] = []
+        var tableTokens: [MarkdownToken] = []
+        var codeBlockTokensWithIndices: [(index: Int, token: MarkdownToken)] = []
 
         codeTokens.reserveCapacity(tokens.count / 2)
         latexTokens.reserveCapacity(tokens.count / 4)
         blockLatexTokens.reserveCapacity(tokens.count / 4)
         wikiLinkTokens.reserveCapacity(tokens.count / 4)
 
-        for token in tokens {
+        for (index, token) in tokens.enumerated() {
             switch token.kind {
             case .codeBlock, .inlineCode:
                 codeTokens.append(token)
+                if token.kind == .codeBlock {
+                    codeBlockTokensWithIndices.append((index, token))
+                }
             case .inlineLatex:
                 latexTokens.append(token)
             case .blockLatex:
@@ -207,24 +213,46 @@ extension NativeTextViewCoordinator {
                 wikiLinkTokens.append(token)
             case .imageEmbed:
                 imageEmbedTokens.append(token)
+            case .table:
+                tableTokens.append(token)
             default:
                 break
             }
         }
 
+        parsedDocumentVersion &+= 1
         let parsed = ParsedDocument(
             tokens: tokens,
             codeTokens: codeTokens,
             latexTokens: latexTokens,
             blockLatexTokens: blockLatexTokens,
             wikiLinkTokens: wikiLinkTokens,
-            imageEmbedTokens: imageEmbedTokens
+            imageEmbedTokens: imageEmbedTokens,
+            tableTokens: tableTokens,
+            codeBlockTokensWithIndices: codeBlockTokensWithIndices,
+            version: parsedDocumentVersion
         )
         cachedParsedText = text
         cachedParsedLength = length
         cachedParseGeneration = parseGeneration
         cachedParsedDocument = parsed
         return parsed
+    }
+
+
+    /// Memoized computeActiveTokenIndices — a pure function of
+    /// (parsed.version, selection, suppressed) that otherwise runs up to
+    /// three times per keystroke on identical inputs (pre-edit ask,
+    /// selection change, textDidChange).
+    func activeTokenIndices(parsed: ParsedDocument, selection: NSRange, in text: NSString, suppressed: Bool) -> Set<Int> {
+        if let memo = activeTokenMemo, memo.version == parsed.version,
+           memo.selection == selection, memo.suppressed == suppressed {
+            return memo.result
+        }
+        let result = MarkdownDetection.computeActiveTokenIndices(
+            selectionRange: selection, tokens: parsed.tokens, in: text, suppressed: suppressed)
+        activeTokenMemo = (parsed.version, selection, suppressed, result)
+        return result
     }
 
     func paragraphRanges(
@@ -282,9 +310,9 @@ extension NativeTextViewCoordinator {
         let parsed = parsedDocument(for: textView.string)
         let tokens = parsed.tokens
         let nsText = textView.string as NSString
-        activeTokenIndices = MarkdownDetection.computeActiveTokenIndices(
-            selectionRange: textView.selectedRange(),
-            tokens: tokens,
+        activeTokenIndices = activeTokenIndices(
+            parsed: parsed,
+            selection: textView.selectedRange(),
             in: nsText,
             suppressed: !textView.isEditable
         )

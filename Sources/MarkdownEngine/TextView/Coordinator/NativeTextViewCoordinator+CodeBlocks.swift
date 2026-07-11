@@ -13,16 +13,16 @@
 import AppKit
 
 extension NativeTextViewCoordinator {
-    func updateCodeBlockSelection(textView: NSTextView, tokens: [MarkdownToken]? = nil) {
+    func updateCodeBlockSelection(textView: NSTextView, parsed: ParsedDocument? = nil) {
         guard let textContainer = textView.textContainer else {
             onCodeBlockSelectionChange?([])
             return
         }
 
-        if let tokens = tokens {
-            cachedCodeBlockTokens = tokens.enumerated()
-                .filter { $0.element.kind == .codeBlock }
-                .map { (index: $0.offset, token: $0.element) }
+        if let parsed {
+            // Indexed pairs come from the parse's single classification pass —
+            // no per-call full-token filter.
+            cachedCodeBlockTokens = parsed.codeBlockTokensWithIndices
         } else if cachedCodeBlockTokens.isEmpty {
             onCodeBlockSelectionChange?([])
             return
@@ -30,6 +30,30 @@ extension NativeTextViewCoordinator {
 
         let nsText = textView.string as NSString
         let scrollOffset = textView.enclosingScrollView?.contentView.bounds.origin ?? .zero
+
+        // Identical inputs → identical selections. The delegate path calls
+        // this twice per keystroke (selection change + textDidChange) and on
+        // every caret move; skip the substring/language/viewRect work when
+        // nothing relevant changed. Calls without `parsed` (document switch,
+        // scroll hooks) always recompute.
+        //
+        // The key must include the FULL active-token set, not just its code
+        // intersection: a caret move INTO a standalone block (block-LaTeX /
+        // table) toggles that block between its rendered image and raw source
+        // — a real height change that shifts a code block below it to a new Y
+        // — while leaving version, scroll, width, and the code∩active set
+        // unchanged. Keying on the whole active set makes any such toggle
+        // (the only same-version event that moves layout) recompute. Text
+        // edits are covered by the bumped version; the twice-per-keystroke
+        // redundancy still dedupes because both calls share one active set.
+        if let parsed {
+            let key = (parsed.version, scrollOffset.y, textContainer.containerSize.width,
+                       activeTokenIndices)
+            if let last = lastCodeSelKey, last == key { return }
+            lastCodeSelKey = key
+        } else {
+            lastCodeSelKey = nil
+        }
 
         // One-shot full-document layout per document; fixes stale Y from TextKit 2's lazy layout without per-update cost.
         if !didEnsureLayoutForCurrentDocument, let tlm = textView.textLayoutManager {

@@ -94,6 +94,36 @@ extension MarkdownStyler {
         return prefix
     }
 
+    /// Parse + content-hash for a table source, memoized: both are pure in
+    /// the source text but were recomputed for every table on every keystroke
+    /// (the non-render share of styleTables). FIFO-capped like the block
+    /// token memo.
+    private static let tableMetaLock = NSLock()
+    private static var tableMetaCache: [String: (parsed: ParsedTable?, hash: Int)] = [:]
+    private static var tableMetaOrder: [String] = []
+
+    static func tableMeta(for source: String) -> (parsed: ParsedTable?, hash: Int) {
+        tableMetaLock.lock()
+        if let cached = tableMetaCache[source] {
+            tableMetaLock.unlock()
+            return cached
+        }
+        tableMetaLock.unlock()
+
+        let computed = (parseTableSource(source), stableTableContentHash(for: source))
+
+        tableMetaLock.lock()
+        if tableMetaCache[source] == nil {
+            tableMetaCache[source] = computed
+            tableMetaOrder.append(source)
+            if tableMetaOrder.count > 512 {
+                tableMetaCache[tableMetaOrder.removeFirst()] = nil
+            }
+        }
+        tableMetaLock.unlock()
+        return computed
+    }
+
     /// Returns the rendered image for `source`, from cache when possible.
     /// `rendered` is true only when a fresh render actually happened.
     static func tableImage(
@@ -132,12 +162,13 @@ extension MarkdownStyler {
             attrs.append((token.range, [.spellingState: 0]))
 
             let source = ctx.nsText.substring(with: token.range)
-            guard let parsed = parseTableSource(source) else { continue }
+            let meta = tableMeta(for: source)
+            guard let parsed = meta.parsed else { continue }
 
-            // Advance occurrence index even for active tables so inactive duplicates stay stable.
-            let contentHash = stableTableContentHash(for: source)
-            let occurrenceIndex = occurrenceByContentHash[contentHash, default: 0]
-            occurrenceByContentHash[contentHash] = occurrenceIndex + 1
+            // Advance occurrence index even for active/out-of-scope tables so
+            // inactive duplicates keep stable sourceIDs.
+            let occurrenceIndex = occurrenceByContentHash[meta.hash, default: 0]
+            occurrenceByContentHash[meta.hash] = occurrenceIndex + 1
 
             let isActive = ctx.activeTokenIndices.contains(idx)
             if isActive {
@@ -155,6 +186,14 @@ extension MarkdownStyler {
                     }
                     i += 1
                 }
+                continue
+            }
+
+            // Outside the restyle scope the anchor attrs would be clipped away
+            // at application time — skip the render lookup and anchor build.
+            // (Occurrence bookkeeping above already ran, keeping IDs stable.)
+            if ctx.outsideScope(token.range) {
+                tableTrace.append("@\(token.range.location):skip")
                 continue
             }
 

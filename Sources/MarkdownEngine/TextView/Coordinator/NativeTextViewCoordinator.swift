@@ -98,6 +98,12 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     /// Incremental parse state for this editor (buffer + blocks + tokens
     /// evolve together under the edit descriptor).
     let parseState = DocumentParseState()
+    /// Monotonic stamp for fresh ParsedDocument builds (see ParsedDocument.version).
+    var parsedDocumentVersion: UInt64 = 0
+    /// Single-slot memo for computeActiveTokenIndices — it runs up to three
+    /// times per keystroke on identical inputs (pre-edit ask, selection
+    /// change, textDidChange). Pure function of (version, selection, suppressed).
+    var activeTokenMemo: (version: UInt64, selection: NSRange, suppressed: Bool, result: Set<Int>)?
 
     /// Display-text length after the previous textDidChange — yields the edit's
     /// length delta without retaining the previous text.
@@ -120,6 +126,10 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var needsRestyleAfterDrag = false
 
     var cachedCodeBlockTokens: [(index: Int, token: MarkdownToken)] = []
+    /// Dedupe key of the last emitted code-block selections — identical
+    /// (parse version, scroll, width, active-code set) means identical output,
+    /// so the second per-keystroke invocation can skip the geometry work.
+    var lastCodeSelKey: (UInt64, CGFloat, CGFloat, Set<Int>)?
     var cachedParsedText: String?
     var cachedParsedDocument: ParsedDocument?
     /// Monotonic edit counter: bumped whenever the text storage can have
@@ -173,6 +183,15 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
         let blockLatexTokens: [MarkdownToken]
         let wikiLinkTokens: [MarkdownToken]
         let imageEmbedTokens: [MarkdownToken]
+        let tableTokens: [MarkdownToken]
+        /// Code-block tokens with their index into `tokens` (active-token
+        /// checks need the original index) — collected in the same single
+        /// classification pass instead of a per-call full-token filter.
+        let codeBlockTokensWithIndices: [(index: Int, token: MarkdownToken)]
+        /// Bumped only when a FRESH parse builds this document — cache-hit
+        /// returns share the version, so (version, selection, suppressed) is
+        /// an exact memo key for pure derivations like active-token indices.
+        let version: UInt64
     }
 
     enum InlineTokenContext {

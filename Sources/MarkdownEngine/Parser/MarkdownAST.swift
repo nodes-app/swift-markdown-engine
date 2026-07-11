@@ -57,7 +57,25 @@ enum DocumentAST {
         let ns = text as NSString
         let blocks = BlockParser.parse(text)
         // Scoped mode: skip building BlockNodes for blocks outside the edit.
-        let relevant = scopedRanges == nil ? blocks : blocks.filter { inScope($0.range, scopedRanges) }
+        // Blocks tile the document in order, so one sweep over sorted candidate
+        // ranges replaces scanning every candidate per block (which went
+        // quadratic in formula-rich documents with dozens of candidates).
+        let relevant: [Block]
+        if let scopedRanges {
+            let sorted = scopedRanges
+                .filter { $0.location != NSNotFound && $0.length > 0 }
+                .sorted { $0.location < $1.location }
+            var out: [Block] = []
+            var ci = 0
+            for block in blocks {
+                while ci < sorted.count, NSMaxRange(sorted[ci]) <= block.range.location { ci += 1 }
+                guard ci < sorted.count else { break }
+                if sorted[ci].location < NSMaxRange(block.range) { out.append(block) }
+            }
+            relevant = out
+        } else {
+            relevant = blocks
+        }
         return relevant.map { node(for: $0, ns: ns, scopedRanges: scopedRanges) }
     }
 
