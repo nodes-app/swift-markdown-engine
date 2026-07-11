@@ -195,6 +195,11 @@ extension NativeTextViewCoordinator {
                                       lengthDelta: lengthDelta, trusted: singleTrackedEdit)
         }
         let codeBlockStructureChanged = backtickCount != previousBacktickCount
+#if DEBUG
+        if codeBlockStructureChanged {
+            print("🔄 FULL-RESTYLE trigger: backtickCount \(previousBacktickCount)→\(backtickCount) (editedRange=\(editedRange), delta=\(lengthDelta), trusted=\(singleTrackedEdit))")
+        }
+#endif
         previousBacktickCount = backtickCount
 
         let parsed = PerfTrace.measure("parse") {

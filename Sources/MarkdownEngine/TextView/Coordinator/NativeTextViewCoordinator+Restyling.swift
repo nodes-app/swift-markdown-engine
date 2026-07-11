@@ -19,6 +19,9 @@ extension NativeTextViewCoordinator {
         from text: String,
         invalidateLayout: Bool = false
     ) {
+#if DEBUG
+        print("🏗️ REBUILD len=\((text as NSString).length) invalidateLayout=\(invalidateLayout)")
+#endif
         // Storage is raw Markdown; only wiki links transform on display.
         // In raw source mode display IS storage — no transform, no metadata.
         let services = configuration.services
