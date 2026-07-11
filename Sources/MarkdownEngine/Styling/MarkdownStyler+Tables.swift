@@ -154,7 +154,6 @@ extension MarkdownStyler {
         var occurrenceByContentHash: [Int: Int] = [:]
         var tableCount = 0
         var renderedCount = 0
-        var tableTrace: [String] = []   // per-table: loc/state/height (Debug diagnosis)
         let tablesT0 = DispatchTime.now().uptimeNanoseconds
         for (idx, token) in ctx.tokens.enumerated() where token.kind == .table {
             tableCount += 1
@@ -172,7 +171,6 @@ extension MarkdownStyler {
 
             let isActive = ctx.activeTokenIndices.contains(idx)
             if isActive {
-                tableTrace.append("@\(token.range.location):ACTIVE-RAW")
                 // Caret inside the table — show editable source, pipes muted like other syntax.
                 let muted = ctx.configuration.theme.mutedText
                 let body = ctx.configuration.theme.bodyText
@@ -190,12 +188,9 @@ extension MarkdownStyler {
             }
 
             // Outside the restyle scope the anchor attrs would be clipped away
-            // at application time — skip the render lookup and anchor build.
-            // (Occurrence bookkeeping above already ran, keeping IDs stable.)
-            if ctx.outsideScope(token.range) {
-                tableTrace.append("@\(token.range.location):skip")
-                continue
-            }
+            // at application time — skip the render lookup and anchor build
+            // (occurrence bookkeeping above already ran, keeping IDs stable).
+            if ctx.outsideScope(token.range) { continue }
 
             // See renderTable: resolve table colors under the text view's real appearance.
             let renderAppearance = ctx.layoutBridge?.firstTextContainer?.textView?.effectiveAppearance
@@ -207,7 +202,6 @@ extension MarkdownStyler {
                 appearance: renderAppearance
             )
             if rendered { renderedCount += 1 }
-            tableTrace.append("@\(token.range.location):img h=\(Int(image.size.height))\(rendered ? " FRESH" : "")")
             let imageBounds = CGRect(x: 0, y: 0, width: image.size.width, height: image.size.height)
             // Wide tables → scrollable mode (NSScrollView overlay); narrow → collapsed.
             let containerWidth = effectiveContainerWidth(for: ctx)
@@ -238,7 +232,7 @@ extension MarkdownStyler {
         }
         if tableCount > 0 {
             let ms = Double(DispatchTime.now().uptimeNanoseconds - tablesT0) / 1_000_000
-            PerfTrace.note { "styleTables scanned=\(tableCount) tables, re-rendered=\(renderedCount) NSImage in \(String(format: "%.2f", ms))ms | \(tableTrace.joined(separator: " "))" }
+            PerfTrace.note { "styleTables scanned=\(tableCount) tables, re-rendered=\(renderedCount) NSImage in \(String(format: "%.2f", ms))ms" }
         }
         return attrs
     }

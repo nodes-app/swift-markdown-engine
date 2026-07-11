@@ -13,35 +13,6 @@ final class ClampedScrollView: NSScrollView {
     /// own height to SwiftUI and the enclosing scroll view owns paging.
     var fitsContent: Bool = false
 
-#if DEBUG
-    // Table-shift diagnosis: name every code path that moves the scroll by a
-    // jump-sized amount. Wheel/gesture scrolling is continuous (small deltas);
-    // a >40pt single hop during typing is the bug's signature.
-    private var lastLoggedScrollY: CGFloat = .nan
-    private var scrollWatchToken: NSObjectProtocol?
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        guard window != nil, scrollWatchToken == nil else { return }
-        contentView.postsBoundsChangedNotifications = true
-        scrollWatchToken = NotificationCenter.default.addObserver(
-            forName: NSView.boundsDidChangeNotification, object: contentView, queue: nil
-        ) { [weak self] _ in
-            guard let self else { return }
-            let y = self.contentView.bounds.origin.y
-            defer { self.lastLoggedScrollY = y }
-            guard !self.lastLoggedScrollY.isNaN, abs(y - self.lastLoggedScrollY) > 40 else { return }
-            let stack = Thread.callStackSymbols[2...8]
-                .compactMap { line -> String? in
-                    guard line.contains("MarkdownEngine") || line.contains("Nodes") else { return nil }
-                    return line.split(separator: " ").dropFirst(3).first.map(String.init)
-                }
-                .prefix(4)
-                .joined(separator: " ← ")
-            print("📜 scrollJump y=\(Int(self.lastLoggedScrollY))→\(Int(y)) via \(stack.isEmpty ? "system/AppKit" : stack)")
-        }
-    }
-#endif
-
     /// Saved at the start of every live-resize (including spurious one-click resizes triggered by edge-cursor clicks) so the position is restored when the resize ends. Without this, NSScrollView's default top-anchor-during-resize would jolt a bottom-anchored user back up by hundreds of points on a single edge click.
     private var scrollYBeforeLiveResize: CGFloat?
 

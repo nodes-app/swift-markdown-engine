@@ -111,7 +111,6 @@ extension NativeTextViewCoordinator {
         let safeSelRange = NSRange(location: safeLocation, length: 0)
         previousCaretLocation = safeSelRange.location
         PerfTrace.begin(docLength: fullLength)
-        parseGeneration &+= 1
 
         // Edit descriptor, hoisted above the wiki sync so both it and the
         // paragraph scoping below share it.
@@ -124,6 +123,17 @@ extension NativeTextViewCoordinator {
         pendingEditCount = 0
         let lengthDelta = previousDisplayLength >= 0 ? fullLength - previousDisplayLength : Int.min
         previousDisplayLength = fullLength
+
+        // Parse-cache generation. shouldChangeTextIn already bumped for this
+        // mutation and the selection-change re-parsed the post-edit text at
+        // that generation; bumping again would force parsedDocument onto its
+        // O(doc) byte-compare VERIFY. A trusted length-CHANGING edit already
+        // invalidated the pre-edit cache by length, so keep the generation and
+        // hit O(1). Same-length/untracked edits still bump — the byte-compare
+        // then catches a same-length content change the length check misses.
+        if !(singleTrackedEdit && lengthDelta != 0 && lengthDelta != Int.min) {
+            parseGeneration &+= 1
+        }
 
         if !wtActive {
             let storageState = PerfTrace.measure("wiki") {
@@ -195,11 +205,6 @@ extension NativeTextViewCoordinator {
                                       lengthDelta: lengthDelta, trusted: singleTrackedEdit)
         }
         let codeBlockStructureChanged = backtickCount != previousBacktickCount
-#if DEBUG
-        if codeBlockStructureChanged {
-            print("🔄 FULL-RESTYLE trigger: backtickCount \(previousBacktickCount)→\(backtickCount) (editedRange=\(editedRange), delta=\(lengthDelta), trusted=\(singleTrackedEdit))")
-        }
-#endif
         previousBacktickCount = backtickCount
 
         let parsed = PerfTrace.measure("parse") {
@@ -250,9 +255,6 @@ extension NativeTextViewCoordinator {
             }
         }
         effectiveParagraphCandidates.append(contentsOf: editedTableParagraphs)
-        if !editedTableParagraphs.isEmpty {
-            PerfTrace.note { "📐 TABLE-RESTYLE blocks=\(editedTableParagraphs.map { "\($0.location)+\($0.length)" }.joined(separator: ",")) editedRange=\(safeEditedRange.location),\(safeEditedRange.length)" }
-        }
         effectiveParagraphCandidates.append(contentsOf: tokenRestyleParagraphs(
             in: fullText,
             tokens: tokens,

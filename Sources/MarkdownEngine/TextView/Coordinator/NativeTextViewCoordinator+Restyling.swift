@@ -19,9 +19,6 @@ extension NativeTextViewCoordinator {
         from text: String,
         invalidateLayout: Bool = false
     ) {
-#if DEBUG
-        print("🏗️ REBUILD len=\((text as NSString).length) invalidateLayout=\(invalidateLayout)")
-#endif
         // Storage is raw Markdown; only wiki links transform on display.
         // In raw source mode display IS storage — no transform, no metadata.
         let services = configuration.services
@@ -164,27 +161,20 @@ extension NativeTextViewCoordinator {
     }
 
     func parsedDocument(for text: String, edit: ParseEditDescriptor? = nil) -> ParsedDocument {
-        let t0 = DispatchTime.now().uptimeNanoseconds
         let length = (text as NSString).length
         if let cachedParsedDocument, cachedParsedLength == length {
             // O(1) hit: nothing has edited the storage since the cached parse.
-            if cachedParseGeneration == parseGeneration {
-                PerfTrace.note { "📊 parsedDoc GEN-HIT" }
-                return cachedParsedDocument
-            }
+            if cachedParseGeneration == parseGeneration { return cachedParsedDocument }
             // Generation moved but the text may still be identical (e.g. an
-            // attribute-only pass): verify once, then it's O(1) again.
-            // NSString.isEqual is a byte compare; the bridged Swift `==` walked
-            // the 139k text character-wise at ~6ms per keystroke.
+            // attribute-only pass): confirm via NSString.isEqual (a byte
+            // compare — the bridged Swift `==` walked 139k chars per keystroke).
             if let cachedParsedText, (cachedParsedText as NSString).isEqual(to: text) {
                 cachedParseGeneration = parseGeneration
-                PerfTrace.note { "📊 parsedDoc VERIFY-HIT \(String(format: "%.2f", Double(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000))ms" }
                 return cachedParsedDocument
             }
         }
 
         let tokens = parseState.tokens(for: text, edit: edit)
-        PerfTrace.note { "📊 parsedDoc MISS edit=\(edit != nil) stateTokens=\(String(format: "%.2f", Double(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000))ms" }
         var codeTokens: [MarkdownToken] = []
         var latexTokens: [MarkdownToken] = []
         var blockLatexTokens: [MarkdownToken] = []

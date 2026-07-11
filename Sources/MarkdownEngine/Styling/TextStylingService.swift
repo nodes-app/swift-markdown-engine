@@ -93,13 +93,6 @@ struct TextStylingService {
         }
 
         textView.textStorage?.beginEditing()
-#if DEBUG
-        // Flicker diagnosis: how much of the document does this pass rewrite?
-        let appliedSpan = paragraphs.reduce(0) { $0 + $1.length }
-        if paragraphs.count > 10 || appliedSpan > 2500 {
-            print("🎨 BIG-APPLY paragraphs=\(paragraphs.count) span=\(appliedSpan) of \(textView.textStorage?.length ?? -1)")
-        }
-#endif
         for disabledRange in spellingDisabledRanges {
             textView.textStorage?.addAttribute(.spellingState, value: 0, range: disabledRange)
         }

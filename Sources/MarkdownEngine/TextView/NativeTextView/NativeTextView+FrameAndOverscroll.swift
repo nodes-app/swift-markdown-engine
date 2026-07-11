@@ -40,11 +40,6 @@ extension NativeTextView {
 
         let baseHeightChanged = abs(measured - baseContentHeight) > 0.5
         let overscrollChanged = abs(resolvedOverscroll - activeBottomOverscroll) > 0.5
-#if DEBUG
-        if baseHeightChanged {
-            print("📐 recalc[\(debugTag)] base \(Int(baseContentHeight))→\(Int(measured)) over \(Int(activeBottomOverscroll))→\(Int(resolvedOverscroll)) fullLayout=\(pendingFullLayoutMeasure)")
-        }
-#endif
         // Height settled → stop forcing full layout (until the next switch/resize).
         if !(baseHeightChanged || overscrollChanged) { pendingFullLayoutMeasure = false }
         guard baseHeightChanged || overscrollChanged else { return }
@@ -145,14 +140,6 @@ extension NativeTextView {
         }
 
         var rawHeight = max(segmentMaxY, fragmentMaxY)
-#if DEBUG
-        // Height-jitter diagnosis: which measurement component moves between
-        // keystrokes. lastFragY moving with constant content = fragments ABOVE
-        // shifted (estimated heights above the viewport changed).
-        let dbgFrag = Int(fragmentMaxY), dbgSeg = Int(segmentMaxY)
-        let dbgLastY = Int(lastFragmentFrame.minY)
-        print("📐 measure frag=\(dbgFrag) seg=\(dbgSeg) lastFragY=\(dbgLastY) full=\(forceFullLayout)")
-#endif
 
         // With a trailing "\n", the last line is TextKit's extra line fragment.
         // Its metrics follow the final newline's attributes — not the body style a
@@ -222,15 +209,6 @@ extension NativeTextView {
         guard abs(targetSize.width - frame.size.width) > 0.5 || abs(targetSize.height - frame.size.height) > 0.5 else {
             return
         }
-#if DEBUG
-        // A frame SHRINK below the current scroll extent forces AppKit to clamp
-        // the scroll offset — visible as content jumping upward.
-        let dbgScrollY = enclosingScrollView?.contentView.bounds.origin.y ?? -1
-        let dbgViewH = enclosingScrollView?.contentView.bounds.height ?? -1
-        let clampRisk = targetSize.height < frame.size.height
-            && dbgScrollY + dbgViewH > targetSize.height
-        print("📐 frame h=\(Int(frame.size.height))→\(Int(targetSize.height)) scrollY=\(Int(dbgScrollY)) viewH=\(Int(dbgViewH))\(clampRisk ? " ⚠️CLAMP" : "")")
-#endif
         isApplyingManagedFrameSize = true
         super.setFrameSize(targetSize)
         isApplyingManagedFrameSize = false
@@ -375,14 +353,13 @@ extension NativeTextView {
             let visibleBottom = cv.bounds.origin.y + cv.bounds.height
             let margin: CGFloat = 24
             if frame.minY < visibleTop || frame.maxY > visibleBottom {
-                // The caret's Y is the sum of every fragment height above it.
-                // While invalidated fragments above are estimate-only (a table
-                // image estimates as one text line, ~250pt short), the caret
-                // computes far too high and typing "reveals" upward — content
-                // visibly jumps. Settle layout up to the caret before trusting
-                // an out-of-view verdict: spurious ones dissolve, and genuine
-                // jumps get the CORRECT target. Costs nothing when the caret
-                // is visible (the common per-keystroke case never gets here).
+                // The caret's Y is the sum of the fragment heights above it;
+                // while any of those are estimate-only (a table image estimates
+                // as one text line, ~250pt short), the caret reads far too high
+                // and typing "reveals" upward. Settle layout up to the caret
+                // before trusting an out-of-view verdict — spurious ones then
+                // dissolve, genuine jumps get the correct target. Free when the
+                // caret is already visible (the common per-keystroke case).
                 if let end = tlm.textContentManager?.location(tlm.documentRange.location, offsetBy: min(range.location + 1, docLength)),
                    let settleRange = NSTextRange(location: tlm.documentRange.location, end: end) {
                     tlm.ensureLayout(for: settleRange)
@@ -398,9 +375,6 @@ extension NativeTextView {
             } else {
                 return false   // already visible (or a spurious verdict, corrected)
             }
-#if DEBUG
-            print("🎯 reveal scroll y=\(Int(cv.bounds.origin.y))→\(Int(targetY)) caret=\(Int(frame.minY))..\(Int(frame.maxY)) vis=\(Int(visibleTop))..\(Int(visibleBottom)) loc=\(range.location)")
-#endif
             cv.scroll(to: NSPoint(x: cv.bounds.origin.x, y: targetY))
             scrollView.reflectScrolledClipView(cv)
             (scrollView as? ClampedScrollView)?.clampToInsets()
@@ -444,26 +418,17 @@ extension NativeTextView {
     }
 
     /// Force TextKit 2 to lay out all fragments within the current visible rect.
-    /// Walks from the DOCUMENT HEAD, not the viewport: every fragment's Y is
-    /// the sum of the heights above it, so anything merely estimated above the
-    /// viewport shifts the visible content when it settles. Keeping everything
-    /// up to the viewport settled on every keystroke is the invariant that
-    /// makes the visible geometry (and the height measure) stable — a
-    /// viewport-scoped walk (tried as a perf win) caused content shifts,
-    /// spurious caret reveals, and a bistable frame height. Steady-state cost
-    /// is an enumeration over already-laid-out fragments.
+    /// Walks from the document head, not the viewport: a fragment's Y is the
+    /// sum of the heights above it, so leaving anything above merely estimated
+    /// shifts the visible content when it later settles. A viewport-scoped walk
+    /// (tried as a perf win) caused content shifts, spurious caret reveals, and
+    /// a bistable frame height; steady-state cost here is an enumeration over
+    /// already-laid-out fragments.
     func ensureVisibleLayout() {
         guard let tlm = textLayoutManager else { return }
         let visBot = visibleRect.maxY
-        var walked = 0
         tlm.enumerateTextLayoutFragments(from: tlm.documentRange.location, options: [.ensuresLayout]) { fragment in
-            walked += 1
-            return fragment.layoutFragmentFrame.minY <= visBot
-        }
-        PerfTrace.note {
-            let docH = String(format: "%.0f", self.frame.height)
-            let scrollY = String(format: "%.0f", self.visibleRect.minY)
-            return "ensureVisibleLayout walked=\(walked) frags | docH=\(docH) scrollY=\(scrollY)"
+            fragment.layoutFragmentFrame.minY <= visBot
         }
     }
 }

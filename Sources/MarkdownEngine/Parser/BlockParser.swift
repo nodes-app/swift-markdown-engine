@@ -77,24 +77,18 @@ enum BlockParser {
         let prevBlocks = cachedBlocks
         cacheLock.unlock()
 
-        let t0 = DispatchTime.now().uptimeNanoseconds
         if let prevChars, let prevBlocks {
             // Identical text → memcmp hit (the scan below would walk O(doc)).
-            if equalBuffers(prevChars, newChars) {
-                PerfTrace.note { "🧱 BlockParser.static EQUAL \(String(format: "%.2f", Double(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000))ms" }
-                return prevBlocks
-            }
+            if equalBuffers(prevChars, newChars) { return prevBlocks }
             if let diff = scanDiff(old: prevChars, new: newChars),
                let (incr, _) = incrementalParse(oldChars: prevChars, oldBlocks: prevBlocks, newChars: newChars, newNS: textNS, diff: diff) {
                 cacheLock.lock(); cachedChars = newChars; cachedBlocks = incr; cacheLock.unlock()
-                PerfTrace.note { "🧱 BlockParser.static INCR \(String(format: "%.2f", Double(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000))ms" }
                 return incr
             }
         }
 
         let blocks = computeBlocks(text)
         cacheLock.lock(); cachedChars = newChars; cachedBlocks = blocks; cacheLock.unlock()
-        PerfTrace.note { "🧱 BlockParser.static FULL \(String(format: "%.2f", Double(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000))ms" }
         return blocks
     }
 

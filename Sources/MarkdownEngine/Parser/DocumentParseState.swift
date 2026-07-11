@@ -44,7 +44,6 @@ final class DocumentParseState {
     /// O(edit + touched blocks + suffix shift); without one, a single shared
     /// O(doc) diff scan replaces the two independent scans of the static path.
     func tokens(for text: String, edit: ParseEditDescriptor?) -> [MarkdownToken] {
-        let tStart = DispatchTime.now().uptimeNanoseconds
         let ns = text as NSString
         let newLen = ns.length
 
@@ -96,8 +95,6 @@ final class DocumentParseState {
             }
         }
 
-        let tBlocks = DispatchTime.now().uptimeNanoseconds
-
         // 2. Blocks: window splice on the shared diff, full reparse fallback.
         var newBlocks: [Block]?
         if wasValid, let diff {
@@ -107,7 +104,6 @@ final class DocumentParseState {
             )?.blocks
         }
         let resolvedBlocks = newBlocks ?? BlockParser.computeBlocks(text)
-        let tTokens = DispatchTime.now().uptimeNanoseconds
 
         // 3. Tokens: prefix/suffix reuse on the same diff, full fallback.
         var newTokens: [MarkdownToken]?
@@ -118,13 +114,6 @@ final class DocumentParseState {
             )?.tokens
         }
         let resolvedTokens = newTokens ?? MarkdownTokenizer.fullTokens(blocks: resolvedBlocks, ns: ns)
-        let tEnd = DispatchTime.now().uptimeNanoseconds
-        PerfTrace.note {
-            let path = !wasValid ? "INVALID" : (edit != nil ? "SPLICE" : "SCAN")
-            let blocksPath = newBlocks != nil ? "incr" : "FULL"
-            let tokensPath = newTokens != nil ? "incr" : "FULL"
-            return "🧩 parseState \(path) blocks=\(blocksPath):\(String(format: "%.2f", Double(tTokens - tBlocks) / 1_000_000))ms tokens=\(tokensPath):\(String(format: "%.2f", Double(tEnd - tTokens) / 1_000_000))ms buffer=\(String(format: "%.2f", Double(tBlocks - tStart) / 1_000_000))ms"
-        }
 
         lock.lock()
         chars = newChars
