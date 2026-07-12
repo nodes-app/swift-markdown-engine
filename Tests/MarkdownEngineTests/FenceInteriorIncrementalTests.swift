@@ -5,11 +5,10 @@
 //  Created by Luca Chen on 12.07.26.
 //
 //  Typing INSIDE a fenced code / $$ block used to bail the incremental block
-//  parse (full O(doc) computeBlocks + fullTokens on every keystroke — the
-//  single biggest per-keystroke cliff in large documents). The edit-window
-//  delimiter guards plus the trailing-fence guard make the window splice
-//  sound for interior edits; these tests pin that, and the fence-heavy fuzz
-//  holds the equivalence contract (fallback allowed, divergence never).
+//  parse (full O(doc) reparse every keystroke). The window splice now handles
+//  interior edits; these pin the two main cases plus the indented-$$ opener
+//  regression the review caught. Broad differential coverage lives in the
+//  pre-existing ParseIncrementalEquivalenceTests fuzz (fence + $$ templates).
 //
 
 import Foundation
@@ -39,140 +38,37 @@ struct FenceInteriorIncrementalTests {
         ))
     }
 
-    @Test func interiorFenceEditSplicesIncrementally() throws {
+    /// nil = splice bailed to full parse (also correct); true/false = blocks match.
+    private func spliceEqualsFullParse(_ old: String, at loc: Int, remove: Int, insert: String) -> Bool? {
+        let (new, diff) = splice(old, at: loc, remove: remove, insert: insert)
+        guard let result = BlockParser.incrementalParse(
+            oldChars: chars(old), oldBlocks: BlockParser.computeBlocks(old),
+            newChars: chars(new), newNS: new as NSString, diff: diff
+        ) else { return nil }
+        return result.blocks == BlockParser.computeBlocks(new)
+    }
+
+    @Test func interiorFenceEditSplicesIncrementally() {
         let old = "para one\n\n```swift\nlet x = 1\nlet y = 2\n```\n\ntail paragraph"
         let editLoc = (old as NSString).range(of: "x = 1").location
-        let (new, diff) = splice(old, at: editLoc, remove: 1, insert: "value")
-
-        let result = BlockParser.incrementalParse(
-            oldChars: chars(old), oldBlocks: BlockParser.computeBlocks(old),
-            newChars: chars(new), newNS: new as NSString, diff: diff
-        )
-
-        let blocks = try #require(result?.blocks)
-        #expect(blocks == BlockParser.computeBlocks(new))
+        #expect(spliceEqualsFullParse(old, at: editLoc, remove: 1, insert: "value") == true)
     }
 
-    @Test func interiorBlockLatexEditSplicesIncrementally() throws {
+    @Test func interiorBlockLatexEditSplicesIncrementally() {
         let old = "before\n\n$$\nE = mc^2\n$$\n\nafter text"
         let editLoc = (old as NSString).range(of: "mc^2").location
-        let (new, diff) = splice(old, at: editLoc, remove: 0, insert: "k")
-
-        let result = BlockParser.incrementalParse(
-            oldChars: chars(old), oldBlocks: BlockParser.computeBlocks(old),
-            newChars: chars(new), newNS: new as NSString, diff: diff
-        )
-
-        let blocks = try #require(result?.blocks)
-        #expect(blocks == BlockParser.computeBlocks(new))
+        #expect(spliceEqualsFullParse(old, at: editLoc, remove: 0, insert: "k") == true)
     }
 
-    // Un-closing edit far from the backticks (trailing chars on the closer
-    // line): the splice must either bail (nil) or match ground truth.
-    @Test func unclosingEditStaysEquivalent() {
-        let old = "para\n\n```\ncode line\n```      \n\ntail one\n\ntail two"
-        let closerRange = (old as NSString).range(of: "```      ")
-        let editLoc = NSMaxRange(closerRange) - 1     // 6 past the backticks
-        let (new, diff) = splice(old, at: editLoc, remove: 0, insert: "x")
-
-        let result = BlockParser.incrementalParse(
-            oldChars: chars(old), oldBlocks: BlockParser.computeBlocks(old),
-            newChars: chars(new), newNS: new as NSString, diff: diff
-        )
-
-        if let result {
-            #expect(result.blocks == BlockParser.computeBlocks(new))
-        }
-    }
-
-    // Review finding (a479348): isBlockLatexOpen matches the TRIMMED line
-    // prefix, so an indented `$$` opener can be flipped by an edit in its
-    // leading whitespace — arbitrarily far from the literal `$$`, past the
-    // ±3-char delimiter guard — and the dissolved opener's former closer
-    // re-pairs with a later `$$` block OUTSIDE the splice window. The splice
-    // must bail (or match ground truth) for any edit on a line carrying a
-    // block delimiter.
+    // Review regression: isBlockLatexOpen matches the TRIMMED line prefix, so
+    // an edit in the leading whitespace of an indented `$$` opener flips its
+    // pairing from past the old ±3-char delimiter guard. The splice must bail
+    // or match ground truth.
     @Test func indentedLatexOpenerWhitespaceInsertStaysEquivalent() {
         let old = "intro\n\n   $$\n   a = 1\n   $$\nmiddle text\n\n$$\nb = 2\n$$\ntail"
         let openerLoc = (old as NSString).range(of: "   $$").location
-        let (new, diff) = splice(old, at: openerLoc, remove: 0, insert: "x")
-
-        let result = BlockParser.incrementalParse(
-            oldChars: chars(old), oldBlocks: BlockParser.computeBlocks(old),
-            newChars: chars(new), newNS: new as NSString, diff: diff
-        )
-
-        if let result {
-            #expect(result.blocks == BlockParser.computeBlocks(new))
+        if let result = spliceEqualsFullParse(old, at: openerLoc, remove: 0, insert: "x") {
+            #expect(result)
         }
-    }
-
-    @Test func indentedLatexOpenerWhitespaceDeleteStaysEquivalent() {
-        let old = "intro\n\nx   $$\n   a = 1\n   $$\nmiddle text\n\n$$\nb = 2\n$$\ntail"
-        let editLoc = (old as NSString).range(of: "x   $$").location
-        let (new, diff) = splice(old, at: editLoc, remove: 1, insert: "")
-
-        let result = BlockParser.incrementalParse(
-            oldChars: chars(old), oldBlocks: BlockParser.computeBlocks(old),
-            newChars: chars(new), newNS: new as NSString, diff: diff
-        )
-
-        if let result {
-            #expect(result.blocks == BlockParser.computeBlocks(new))
-        }
-    }
-
-    // Fence-heavy differential fuzz: edits biased into fence/latex interiors.
-    @Test(arguments: [0xFE7CE, 0x5EED5, 0xACE02, 0xB16F1] as [UInt64])
-    func fenceHeavyFuzzMatchesFullParse(seed: UInt64) {
-        var state = SplitMix(seed: seed)
-        let state1 = DocumentParseState()
-        var text = [
-            "# Doc with many fences",
-            "```swift", "let a = 1", "let b = 2", "func f() {", "  return", "}", "```",
-            "prose between the fences with **bold**",
-            "$$", "\\sum_{i=0}^n i^2", "$$",
-            "more prose here",
-            "   $$", "   e^{i\\pi} = -1", "   $$",
-            "```python", "def g():", "    pass", "```",
-            "- a list item",
-            "trailing paragraph",
-        ].joined(separator: "\n")
-        _ = state1.tokens(for: text, edit: nil)
-
-        let interiorSnippets = ["x", "ab", " ", "\n", "word", "    indent", "0"]
-        for step in 0..<300 {
-            let ns = NSMutableString(string: text)
-            let loc = state.int(ns.length + 1)
-            let removeLen = min(state.int(5), ns.length - loc)
-            let insert = state.int(5) == 0 ? "" : interiorSnippets[state.int(interiorSnippets.count)]
-            ns.replaceCharacters(in: NSRange(location: loc, length: removeLen), with: insert)
-            text = ns as String
-
-            let edit = ParseEditDescriptor(
-                editedRange: NSRange(location: loc, length: (insert as NSString).length),
-                delta: (insert as NSString).length - removeLen
-            )
-            let incremental = state1.tokens(for: text, edit: edit)
-            let full = MarkdownTokenizer.fullTokens(blocks: BlockParser.computeBlocks(text), ns: text as NSString)
-            let same = incremental.count == full.count && zip(incremental, full).allSatisfy {
-                $0.kind == $1.kind && $0.range == $1.range && $0.contentRange == $1.contentRange
-                    && $0.markerRanges == $1.markerRanges
-            }
-            #expect(same, "step \(step): fence-heavy incremental diverged (edit at \(loc), removed \(removeLen), inserted \(insert.debugDescription))")
-            if !same { return }
-        }
-    }
-
-    private struct SplitMix {
-        var seed: UInt64
-        mutating func next() -> UInt64 {
-            seed &+= 0x9E3779B97F4A7C15
-            var z = seed
-            z = (z ^ (z >> 30)) &* 0xBF58476D1CE4E5B9
-            z = (z ^ (z >> 27)) &* 0x94D049BB133111EB
-            return z ^ (z >> 31)
-        }
-        mutating func int(_ upper: Int) -> Int { upper <= 0 ? 0 : Int(next() % UInt64(upper)) }
     }
 }

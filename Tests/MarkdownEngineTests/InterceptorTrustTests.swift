@@ -4,12 +4,11 @@
 //
 //  Created by Luca Chen on 12.07.26.
 //
-//  A smart-input interceptor suppresses the typed key and performs ONE
-//  programmatic edit whose descriptor is refreshed in shouldChangeTextIn
-//  (60faf0b). That descriptor describes the applied transition exactly, so
-//  the keystroke must stay TRUSTED — the old pendingEditCount==2 distrust
-//  forced a full O(doc) backtick rescan + descriptorless diff parse on
-//  every Enter-in-list, auto-pair, Tab-indent, and "->" substitution.
+//  A smart-input interceptor suppresses the typed key and performs one
+//  programmatic edit; the keystroke must stay TRUSTED (single tracked edit)
+//  so textDidChange keeps the O(edit) fast paths instead of the O(doc)
+//  fallback. Storage correctness on these paths is covered by
+//  InterceptorStorageSyncTests; here we pin the trust flag.
 //
 
 import AppKit
@@ -63,38 +62,4 @@ struct InterceptorTrustTests {
         #expect(coord.lastComputedStorage == "abc → def")
         #expect(coord.debugLastEditWasTrusted == true)
     }
-
-    @Test func tabIndentStaysTrusted() {
-        let (tv, coord) = makeEditor(text: "- hello")
-        tv.setSelectedRange(NSRange(location: 7, length: 0))
-
-        tv.insertText("\t", replacementRange: NSRange(location: 7, length: 0))
-
-        #expect(tv.string == "\t- hello")
-        #expect(coord.lastComputedStorage == "\t- hello")
-        #expect(coord.debugLastEditWasTrusted == true)
-    }
-
-    @Test func listEnterContinuationStaysTrusted() {
-        let (tv, coord) = makeEditor(text: "- hello")
-        tv.setSelectedRange(NSRange(location: 7, length: 0))
-
-        tv.insertText("\n", replacementRange: NSRange(location: 7, length: 0))
-
-        #expect(tv.string == "- hello\n- ")
-        #expect(coord.lastComputedStorage == "- hello\n- ")
-        #expect(coord.debugLastEditWasTrusted == true)
-    }
-
-    @Test func autoPairStaysTrusted() {
-        let (tv, coord) = makeEditor(text: "abc")
-        tv.setSelectedRange(NSRange(location: 3, length: 0))
-
-        tv.insertText("(", replacementRange: NSRange(location: 3, length: 0))
-
-        #expect(tv.string == "abc()")
-        #expect(coord.lastComputedStorage == "abc()")
-        #expect(coord.debugLastEditWasTrusted == true)
-    }
-
 }

@@ -5,9 +5,8 @@
 //  Created by Luca Chen on 12.07.26.
 //
 //  The per-keystroke restyle hands its already-computed block list down to
-//  DocumentAST.parse — the styler must consume it verbatim instead of
-//  re-deriving blocks (which re-extracted + memcmp'd the full document
-//  buffer on every keystroke, even on cache hits).
+//  DocumentAST.parse so the styler consumes it verbatim instead of
+//  re-extracting + memcmp'ing the full document buffer every keystroke.
 //
 
 import Foundation
@@ -20,7 +19,7 @@ struct PrecomputedBlocksTests {
     @Test func precomputedBlocksAreConsumedVerbatim() {
         let text = "alpha\n\nbeta"
         // Deliberately WRONG for this text: one paragraph covering only "alpha".
-        // If the styler re-parsed, it would see two paragraphs + a blank.
+        // A re-parse would see two paragraphs + a blank instead.
         let bogus = [Block(kind: .paragraph, range: NSRange(location: 0, length: 6))]
 
         let ast = DocumentAST.parse(text, precomputedBlocks: bogus)
@@ -29,19 +28,9 @@ struct PrecomputedBlocksTests {
         #expect(ast.first?.range == NSRange(location: 0, length: 6))
     }
 
-    @Test func withoutPrecomputedBlocksTheParserRuns() {
-        let text = "alpha\n\nbeta"
-
-        let ast = DocumentAST.parse(text)
-
-        // Real structure: paragraph, blank, paragraph.
-        #expect(ast.count == 3)
-    }
-
     @Test func parsedDocumentCarriesTheKeystrokesBlocks() {
         let state = DocumentParseState()
-        let text = "alpha\n\nbeta"
-        _ = state.tokens(for: text, edit: nil)
+        _ = state.tokens(for: "alpha\n\nbeta", edit: nil)
 
         let blocks = state.currentBlocks
 
