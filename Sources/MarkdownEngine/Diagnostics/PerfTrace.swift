@@ -38,8 +38,8 @@ enum PerfTrace {
     private static var notes: [String] = []
     /// Summed costs for code that runs MANY times per frame or from inside
     /// AppKit callbacks (caret reveal, spell-checker callbacks) — printed as
-    /// `+label=…` after the sequential phases.
-    private static var accumulated: [(String, Double)] = []
+    /// `+label=…(×n)` after the sequential phases.
+    private static var accumulated: [(String, Double, Int)] = []
 
     private static func nowMs() -> Double {
         Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000
@@ -76,8 +76,9 @@ enum PerfTrace {
         let dt = nowMs() - t0
         if let i = accumulated.firstIndex(where: { $0.0 == label }) {
             accumulated[i].1 += dt
+            accumulated[i].2 += 1
         } else {
-            accumulated.append((label, dt))
+            accumulated.append((label, dt, 1))
         }
         return result
     }
@@ -117,7 +118,7 @@ enum PerfTrace {
         let total = Double(DispatchTime.now().uptimeNanoseconds - frameStart) / 1_000_000
         var breakdown = phases.map { String(format: "%@=%.2f", $0.0, $0.1) }.joined(separator: " ")
         if !accumulated.isEmpty {
-            breakdown += " " + accumulated.map { String(format: "+%@=%.2f", $0.0, $0.1) }.joined(separator: " ")
+            breakdown += " " + accumulated.map { String(format: "+%@=%.2f(×%d)", $0.0, $0.1, $0.2) }.joined(separator: " ")
         }
         let covered = phases.filter { !$0.0.hasPrefix("@") }.reduce(0) { $0 + $1.1 }
             + accumulated.reduce(0) { $0 + $1.1 }

@@ -615,6 +615,15 @@ final class MarkdownLayoutManagerDelegate: NSObject, NSTextLayoutManagerDelegate
         textLayoutFragmentFor location: any NSTextLocation,
         in textElement: NSTextElement
     ) -> NSTextLayoutFragment {
+        PerfTrace.accumulate("fragProv") {
+            makeFragment(textLayoutManager: textLayoutManager, textElement: textElement)
+        }
+    }
+
+    private func makeFragment(
+        textLayoutManager: NSTextLayoutManager,
+        textElement: NSTextElement
+    ) -> NSTextLayoutFragment {
         let fragment = MarkdownTextLayoutFragment(textElement: textElement, range: textElement.elementRange)
         // Seed body font + paragraphStyle so the trailing fragment doesn't inherit heading metrics (FB15131180).
         if let textView = textLayoutManager.textContainer?.textView as? NativeTextView {
