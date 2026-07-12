@@ -29,6 +29,7 @@ enum MarkdownASTStyler {
         caretLocation: Int = -1,
         wikiLinkIDProvider: @escaping (NSRange) -> String? = { _ in nil },
         scopedRanges: [NSRange]? = nil,
+        precomputedBlocks: [Block]? = nil,
         configuration: MarkdownEditorConfiguration = .default
     ) -> [StyledRange] {
         let baseFont = NSFont(name: fontName, size: fontSize) ?? .systemFont(ofSize: fontSize)
@@ -64,7 +65,7 @@ enum MarkdownASTStyler {
             wikiLinkID: wikiLinkIDProvider,
             scopedRanges: scopedRanges
         )
-        let blocks = DocumentAST.parse(text, scopedRanges: scopedRanges)
+        let blocks = DocumentAST.parse(text, scopedRanges: scopedRanges, precomputedBlocks: precomputedBlocks)
         var attrs: [StyledRange] = []
         for block in blocks where ctx.inScope(block.range) {
             styleBlock(block, font: baseFont, ctx: ctx, into: &attrs)

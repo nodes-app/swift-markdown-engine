@@ -127,6 +127,7 @@ enum MarkdownStyler {
         wikiLinkIDProvider: @escaping (NSRange) -> String? = { _ in nil },
         precomputedTokens: [MarkdownToken]? = nil,
         classified: ClassifiedStyleTokens? = nil,
+        precomputedBlocks: [Block]? = nil,
         scopedRanges: [NSRange]? = nil,
         configuration: MarkdownEditorConfiguration = .default
     ) -> [StyledRange] {
@@ -169,7 +170,8 @@ enum MarkdownStyler {
         result += MarkdownASTStyler.styleAttributes(
             text: text, fontName: fontName, fontSize: fontSize,
             caretLocation: caretLocation, wikiLinkIDProvider: wikiLinkIDProvider,
-            scopedRanges: scopedRanges, configuration: configuration
+            scopedRanges: scopedRanges, precomputedBlocks: precomputedBlocks,
+            configuration: configuration
         )
         let astMs = Double(DispatchTime.now().uptimeNanoseconds - astT0) / 1_000_000
         // NSImage rendering reuses the existing, proven machinery.

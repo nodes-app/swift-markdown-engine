@@ -178,6 +178,10 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
 
     struct ParsedDocument {
         let tokens: [MarkdownToken]
+        /// The block list the tokens were derived from — handed to the restyle
+        /// so DocumentAST.parse consumes it instead of re-deriving blocks
+        /// (full buffer re-extraction + memcmp per keystroke).
+        let blocks: [Block]
         let codeTokens: [MarkdownToken]
         let latexTokens: [MarkdownToken]
         let blockLatexTokens: [MarkdownToken]

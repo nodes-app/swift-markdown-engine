@@ -273,7 +273,7 @@ extension NativeTextViewCoordinator {
             previousActiveTokenIndices: preEditActiveTokenIndices
         ))
 
-        PerfTrace.measure("restyle") { restyleTextView(tv, paragraphCandidates: effectiveParagraphCandidates, tokens: tokens, classified: parsed.classified) }
+        PerfTrace.measure("restyle") { restyleTextView(tv, paragraphCandidates: effectiveParagraphCandidates, tokens: tokens, classified: parsed.classified, blocks: parsed.blocks) }
         PerfTrace.measure("codeSel") { updateCodeBlockSelection(textView: tv, parsed: parsed) }
         if wtActive {
             previousActiveTokenIndices = activeTokenIndices
@@ -455,7 +455,8 @@ extension NativeTextViewCoordinator {
                 previousActiveTokenIndices: previousActiveTokenIndices
             ))
             PerfTrace.measure("selRestyle") {
-                restyleTextView(tv, paragraphCandidates: paragraphCandidates, tokens: tokens, classified: parsed.classified)
+                restyleTextView(tv, paragraphCandidates: paragraphCandidates, tokens: tokens,
+                                classified: parsed.classified, blocks: parsed.blocks)
             }
         }
 

@@ -31,6 +31,13 @@ final class DocumentParseState {
     private var verifyCounter: UInt = 0
 #endif
 
+    /// The block list matching the most recent `tokens(for:edit:)` call —
+    /// handed to the restyle so DocumentAST.parse skips the block parser.
+    var currentBlocks: [Block] {
+        lock.lock(); defer { lock.unlock() }
+        return blocks
+    }
+
     /// Drop all state (document switch / full rebuild) — the next parse
     /// re-extracts and re-parses from scratch.
     func invalidate() {

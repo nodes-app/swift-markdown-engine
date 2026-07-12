@@ -53,9 +53,12 @@ enum DocumentAST {
     private static let tab: unichar = 0x09
 
     /// Build the document AST; `scopedRanges` parses inlines only for intersecting blocks.
-    static func parse(_ text: String, scopedRanges: [NSRange]? = nil) -> [BlockNode] {
+    /// `precomputedBlocks` (the keystroke's own parse state, handed down by the
+    /// restyle) skips BlockParser.parse — whose cache "hit" still re-extracts
+    /// and memcmps the full document buffer — entirely.
+    static func parse(_ text: String, scopedRanges: [NSRange]? = nil, precomputedBlocks: [Block]? = nil) -> [BlockNode] {
         let ns = text as NSString
-        let blocks = BlockParser.parse(text)
+        let blocks = precomputedBlocks ?? BlockParser.parse(text)
         // Scoped mode: skip building BlockNodes for blocks outside the edit.
         // Blocks tile the document in order, so one sweep over sorted candidate
         // ranges replaces scanning every candidate per block (which went

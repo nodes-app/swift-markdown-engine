@@ -56,6 +56,7 @@ struct TextStylingService {
         wikiLinkIDProvider: @escaping (NSRange) -> String?,
         precomputedTokens: [MarkdownToken]? = nil,
         classified: MarkdownStyler.ClassifiedStyleTokens? = nil,
+        precomputedBlocks: [Block]? = nil,
         configuration: MarkdownEditorConfiguration = .default
     ) {
         let paragraphs = normalize(paragraphCandidates)
@@ -82,6 +83,7 @@ struct TextStylingService {
             wikiLinkIDProvider: wikiLinkIDProvider,
             precomputedTokens: precomputedTokens,
             classified: classified,
+            precomputedBlocks: precomputedBlocks,
             scopedRanges: paragraphs,
             configuration: configuration
         )

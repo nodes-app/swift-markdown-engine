@@ -129,7 +129,8 @@ extension NativeTextViewCoordinator {
         _ textView: NSTextView,
         paragraphCandidates: [NSRange],
         tokens: [MarkdownToken]? = nil,
-        classified: MarkdownStyler.ClassifiedStyleTokens? = nil
+        classified: MarkdownStyler.ClassifiedStyleTokens? = nil,
+        blocks: [Block]? = nil
     ) {
         // Raw mode: no restyling; typing keeps base attrs via the typing shim.
         guard !configuration.rawSourceMode else { return }
@@ -153,6 +154,7 @@ extension NativeTextViewCoordinator {
             },
             precomputedTokens: tokens,
             classified: classified,
+            precomputedBlocks: blocks,
             configuration: configuration
         )
         // Reconcile wide-table overlays after layout settles.
@@ -227,6 +229,7 @@ extension NativeTextViewCoordinator {
         parsedDocumentVersion &+= 1
         let parsed = ParsedDocument(
             tokens: tokens,
+            blocks: parseState.currentBlocks,
             codeTokens: codeTokens,
             latexTokens: latexTokens,
             blockLatexTokens: blockLatexTokens,
@@ -314,16 +317,18 @@ extension NativeTextViewCoordinator {
     }
 
     func restyleParagraphs(_ paragraphs: [NSRange], in textView: NSTextView) {
-        let parsed = parsedDocument(for: textView.string)
+        let docText = textView.string      // one O(doc) bridge, reused below
+        let parsed = parsedDocument(for: docText)
         let tokens = parsed.tokens
-        let nsText = textView.string as NSString
+        let nsText = docText as NSString
         activeTokenIndices = activeTokenIndices(
             parsed: parsed,
             selection: textView.selectedRange(),
             in: nsText,
             suppressed: !textView.isEditable
         )
-        restyleTextView(textView, paragraphCandidates: paragraphs, tokens: tokens, classified: parsed.classified)
+        restyleTextView(textView, paragraphCandidates: paragraphs, tokens: tokens,
+                        classified: parsed.classified, blocks: parsed.blocks)
     }
 
     func applyInlineReplacement(_ request: InlineReplacementRequest, to textView: NSTextView) {
