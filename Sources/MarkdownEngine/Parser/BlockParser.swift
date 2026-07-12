@@ -162,10 +162,14 @@ enum BlockParser {
         let winFirst = max(0, min(firstIdx, lastIdx) - 1)
         let winLast = min(oldBlocks.count - 1, max(firstIdx, lastIdx) + 1)
 
-        // 3. Bail on opaque multi-line blocks — fences / block LaTeX can ripple.
-        for b in oldBlocks[winFirst...winLast] where b.kind == .fencedCode || b.kind == .blockLatex {
-            return nil
-        }
+        // 3. Opaque multi-line blocks (fences / block LaTeX) in the window are
+        // fine for INTERIOR edits: the window contains each block wholly, the
+        // ±3 delimiter guard above already bailed on any edit that creates,
+        // destroys, or touches a ``` / $$ pairing, and an edit that UN-closes
+        // a block (trailing chars on its closer line) makes the reparsed block
+        // reach the window end — caught by the trailing guard below. Typing
+        // inside a code block used to fall back to a full O(doc) reparse on
+        // every keystroke because of an unconditional bail here.
 
         // 4. Window → new-text range (window start is before the edit → unchanged).
         let winStart = oldBlocks[winFirst].range.location
