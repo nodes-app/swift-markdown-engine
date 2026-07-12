@@ -155,10 +155,20 @@ enum BlockParser {
         }
 
         // 2. Affected old-block window (±1 block margin for merges/splits).
-        var firstIdx = 0
-        while firstIdx + 1 < oldBlocks.count, oldBlocks[firstIdx + 1].range.location <= changeStart { firstIdx += 1 }
-        var lastIdx = oldBlocks.count - 1
-        while lastIdx > 0, NSMaxRange(oldBlocks[lastIdx - 1].range) >= changeEnd { lastIdx -= 1 }
+        // Blocks tile the document in order — binary search instead of the
+        // linear walks that cost O(#blocks) per keystroke in large documents.
+        var lo = 0, hi = oldBlocks.count - 1
+        while lo < hi {                       // last block starting <= changeStart
+            let m = (lo + hi + 1) / 2
+            if oldBlocks[m].range.location <= changeStart { lo = m } else { hi = m - 1 }
+        }
+        let firstIdx = lo
+        lo = 0; hi = oldBlocks.count - 1
+        while lo < hi {                       // first block ending >= changeEnd
+            let m = (lo + hi) / 2
+            if NSMaxRange(oldBlocks[m].range) >= changeEnd { hi = m } else { lo = m + 1 }
+        }
+        let lastIdx = lo
         let winFirst = max(0, min(firstIdx, lastIdx) - 1)
         let winLast = min(oldBlocks.count - 1, max(firstIdx, lastIdx) + 1)
 

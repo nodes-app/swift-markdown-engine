@@ -92,12 +92,26 @@ extension MarkdownTokenizer {
             || BlockParser.hasBlockDelimiter(n, changeStart, changeEndNew) { return nil }
 
         // New blocks touching the changed char range [changeStart, changeEndNew].
-        var lo = blocks.count, hi = -1
-        for (i, b) in blocks.enumerated()
-        where b.range.location <= changeEndNew && NSMaxRange(b.range) >= changeStart {
-            lo = min(lo, i); hi = max(hi, i)
+        // Blocks tile in order → the touching set is one contiguous run;
+        // binary search replaces the O(#blocks) full scan per keystroke.
+        var lo = 0, hi = blocks.count - 1
+        while lo < hi {                       // first block ending >= changeStart
+            let m = (lo + hi) / 2
+            if NSMaxRange(blocks[m].range) >= changeStart { hi = m } else { lo = m + 1 }
         }
-        if hi < 0 { return delta == 0 ? (prevTokens, 0) : nil }
+        var first = lo
+        lo = 0; hi = blocks.count - 1
+        while lo < hi {                       // last block starting <= changeEndNew
+            let m = (lo + hi + 1) / 2
+            if blocks[m].range.location <= changeEndNew { lo = m } else { hi = m - 1 }
+        }
+        let last = lo
+        // Validate the run actually touches (mirrors the old filter exactly).
+        if first > last || blocks[first].range.location > changeEndNew || NSMaxRange(blocks[last].range) < changeStart {
+            return delta == 0 ? (prevTokens, 0) : nil
+        }
+        lo = first
+        hi = last
 
         // Widen the window until no previous token straddles either cut (a block's extent can change in place).
         var expanded = true

@@ -53,6 +53,7 @@ final class DocumentParseState {
     func tokens(for text: String, edit: ParseEditDescriptor?) -> [MarkdownToken] {
         let ns = text as NSString
         let newLen = ns.length
+        let tStart = DispatchTime.now().uptimeNanoseconds
 
         lock.lock()
         let prevChars = chars
@@ -104,6 +105,8 @@ final class DocumentParseState {
             }
         }
 
+        let tBuffer = DispatchTime.now().uptimeNanoseconds
+
         // 2. Blocks: window splice on the shared diff, full reparse fallback.
         var newBlocks: [Block]?
         if wasValid, let diff {
@@ -113,6 +116,7 @@ final class DocumentParseState {
             )?.blocks
         }
         let resolvedBlocks = newBlocks ?? BlockParser.computeBlocks(text)
+        let tBlocks = DispatchTime.now().uptimeNanoseconds
 
         // 3. Tokens: prefix/suffix reuse on the same diff, full fallback.
         var newTokens: [MarkdownToken]?
@@ -123,6 +127,13 @@ final class DocumentParseState {
             )?.tokens
         }
         let resolvedTokens = newTokens ?? MarkdownTokenizer.fullTokens(blocks: resolvedBlocks, ns: ns)
+        let tTokens = DispatchTime.now().uptimeNanoseconds
+        PerfTrace.note {
+            let ms = { (a: UInt64, b: UInt64) in String(format: "%.2f", Double(b - a) / 1_000_000) }
+            let blockMode = newBlocks != nil ? "splice" : "FULL"
+            let tokenMode = newTokens != nil ? "incremental" : "FULL"
+            return "parseState split: buffer=\(ms(tStart, tBuffer))ms blocks(\(blockMode))=\(ms(tBuffer, tBlocks))ms tokens(\(tokenMode))=\(ms(tBlocks, tTokens))ms #blocks=\(resolvedBlocks.count) #tokens=\(resolvedTokens.count)"
+        }
 
         lock.lock()
         chars = newChars
