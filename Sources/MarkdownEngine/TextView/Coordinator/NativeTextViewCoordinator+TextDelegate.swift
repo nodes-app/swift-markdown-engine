@@ -642,7 +642,8 @@ extension NativeTextViewCoordinator {
                 return false
             }
 
-            return MarkdownInputHandler.handleListInsertion(textView: textView, affectedCharRange: affectedCharRange, replacementString: replacementString)
+            return MarkdownInputHandler.handleListInsertion(textView: textView, affectedCharRange: affectedCharRange,
+                                                            replacementString: replacementString, codeTokens: parsed.codeTokens)
         }
     }
 

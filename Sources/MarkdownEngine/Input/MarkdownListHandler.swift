@@ -87,10 +87,14 @@ struct MarkdownLists {
 
     // MARK: - Input Handling
 
-    static func handleInsertion(textView: NSTextView, affectedCharRange: NSRange, replacementString: String?) -> Bool {
+    /// `isInsideCodeBlock` is the caller's pre-parsed answer for
+    /// `affectedCharRange.location` (the coordinator derives it from the
+    /// keystroke's existing parse). `nil` — direct callers without a parse —
+    /// falls back to deriving it here, which walks the whole document.
+    static func handleInsertion(textView: NSTextView, affectedCharRange: NSRange, replacementString: String?, isInsideCodeBlock: Bool? = nil) -> Bool {
         guard let replacementString = replacementString else { return true }
 
-        // Fast path: skip the expensive isInsideCodeBlock scan for ordinary typing.
+        // Fast path: plain characters never trigger list/pair/arrow handling.
         if replacementString.count == 1,
            let ch = replacementString.first,
            ch != ">" && ch != "[" && ch != "(" && ch != "{" &&
@@ -109,9 +113,11 @@ struct MarkdownLists {
             return false
         }
 
-        let isInCodeBlock = textView.string.contains("`")
-            ? MarkdownDetection.isInsideCodeBlock(location: affectedCharRange.location, in: textView.string)
-            : false
+        let isInCodeBlock = isInsideCodeBlock ?? (
+            textView.string.contains("`")
+                ? MarkdownDetection.isInsideCodeBlock(location: affectedCharRange.location, in: textView.string)
+                : false
+        )
 
         if replacementString == ">" && affectedCharRange.length == 0 && !isInCodeBlock {
             let insertionLocation = affectedCharRange.location
@@ -204,12 +210,24 @@ struct MarkdownLists {
             // Horizontal rules render via the styler; source stays literal `---` so files round-trip.
 
             if currentLine.range(of: "^```\\w*$", options: .regularExpression) != nil {
-                let textBeforeLine = nsText.substring(to: currentLineRange.location)
-                let openingCount = textBeforeLine.components(separatedBy: "```").count - 1
+                // Non-overlapping ``` count before the line (what
+                // components(separatedBy:).count-1 computed, without
+                // materializing an O(doc) substring array).
+                var openingCount = 0
+                var searchLocation = 0
+                while searchLocation < currentLineRange.location {
+                    let found = nsText.range(of: "```", options: [],
+                                             range: NSRange(location: searchLocation,
+                                                            length: currentLineRange.location - searchLocation))
+                    if found.location == NSNotFound { break }
+                    openingCount += 1
+                    searchLocation = NSMaxRange(found)
+                }
                 let afterLineStart = currentLineRange.location + currentLineRange.length
                 let hasClosingAfter: Bool = {
                     guard afterLineStart < nsText.length else { return false }
-                    return nsText.substring(from: afterLineStart).contains("```")
+                    let after = NSRange(location: afterLineStart, length: nsText.length - afterLineStart)
+                    return nsText.range(of: "```", options: [], range: after).location != NSNotFound
                 }()
                 let lineEnd = currentLineRange.location + max(0, currentLineRange.length - 1)
                 let cursorAtLineEnd = affectedCharRange.location >= lineEnd

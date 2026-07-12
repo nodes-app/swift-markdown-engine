@@ -11,8 +11,15 @@ import AppKit
 
 enum MarkdownInputHandler {
 
-    static func handleListInsertion(textView: NSTextView, affectedCharRange: NSRange, replacementString: String?) -> Bool {
-        return MarkdownLists.handleInsertion(textView: textView, affectedCharRange: affectedCharRange, replacementString: replacementString)
+    /// `codeTokens` (codeBlock + inlineCode, from the keystroke's existing
+    /// parse) answers "is the caret in code?" without the O(doc) document
+    /// scan the handler otherwise runs on every space/Enter/Tab.
+    static func handleListInsertion(textView: NSTextView, affectedCharRange: NSRange, replacementString: String?, codeTokens: [MarkdownToken]? = nil) -> Bool {
+        let isInsideCodeBlock = codeTokens.map {
+            MarkdownDetection.isInsideCodeBlock(location: affectedCharRange.location, codeTokens: $0)
+        }
+        return MarkdownLists.handleInsertion(textView: textView, affectedCharRange: affectedCharRange,
+                                             replacementString: replacementString, isInsideCodeBlock: isInsideCodeBlock)
     }
 
     // MARK: - Block LaTeX Auto-Wrap
