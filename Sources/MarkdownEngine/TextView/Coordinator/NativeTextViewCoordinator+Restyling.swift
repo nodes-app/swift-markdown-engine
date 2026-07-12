@@ -93,6 +93,7 @@ extension NativeTextViewCoordinator {
                 // wikiLinkMetadata was just refreshed by makeDisplayState above, so ranges match here.
                 wikiLinkIDProvider: { [weak self] range in self?.wikiLinkID(for: range) },
                 precomputedTokens: tokens,
+                classified: parsed.classified,
                 configuration: configuration
             )
             for (range, attrs) in ranges {
@@ -127,7 +128,8 @@ extension NativeTextViewCoordinator {
     func restyleTextView(
         _ textView: NSTextView,
         paragraphCandidates: [NSRange],
-        tokens: [MarkdownToken]? = nil
+        tokens: [MarkdownToken]? = nil,
+        classified: MarkdownStyler.ClassifiedStyleTokens? = nil
     ) {
         // Raw mode: no restyling; typing keeps base attrs via the typing shim.
         guard !configuration.rawSourceMode else { return }
@@ -150,6 +152,7 @@ extension NativeTextViewCoordinator {
                 self?.wikiLinkID(for: range)
             },
             precomputedTokens: tokens,
+            classified: classified,
             configuration: configuration
         )
         // Reconcile wide-table overlays after layout settles.
@@ -182,6 +185,11 @@ extension NativeTextViewCoordinator {
         var imageEmbedTokens: [MarkdownToken] = []
         var tableTokens: [MarkdownToken] = []
         var codeBlockTokensWithIndices: [(index: Int, token: MarkdownToken)] = []
+        var inlineLatexIdx: [(index: Int, token: MarkdownToken)] = []
+        var blockLatexIdx: [(index: Int, token: MarkdownToken)] = []
+        var imageEmbedIdx: [(index: Int, token: MarkdownToken)] = []
+        var imageLinkIdx: [(index: Int, token: MarkdownToken)] = []
+        var tableIdx: [(index: Int, token: MarkdownToken)] = []
 
         codeTokens.reserveCapacity(tokens.count / 2)
         latexTokens.reserveCapacity(tokens.count / 4)
@@ -197,14 +205,20 @@ extension NativeTextViewCoordinator {
                 }
             case .inlineLatex:
                 latexTokens.append(token)
+                inlineLatexIdx.append((index, token))
             case .blockLatex:
                 blockLatexTokens.append(token)
+                blockLatexIdx.append((index, token))
             case .wikiLink:
                 wikiLinkTokens.append(token)
             case .imageEmbed:
                 imageEmbedTokens.append(token)
+                imageEmbedIdx.append((index, token))
+            case .imageLink:
+                imageLinkIdx.append((index, token))
             case .table:
                 tableTokens.append(token)
+                tableIdx.append((index, token))
             default:
                 break
             }
@@ -220,6 +234,10 @@ extension NativeTextViewCoordinator {
             imageEmbedTokens: imageEmbedTokens,
             tableTokens: tableTokens,
             codeBlockTokensWithIndices: codeBlockTokensWithIndices,
+            classified: MarkdownStyler.ClassifiedStyleTokens(
+                inlineLatex: inlineLatexIdx, blockLatex: blockLatexIdx,
+                imageEmbed: imageEmbedIdx, imageLink: imageLinkIdx,
+                table: tableIdx, code: codeTokens),
             version: parsedDocumentVersion
         )
         cachedParsedText = text
@@ -228,7 +246,6 @@ extension NativeTextViewCoordinator {
         cachedParsedDocument = parsed
         return parsed
     }
-
 
     /// Memoized computeActiveTokenIndices — a pure function of
     /// (parsed.version, selection, suppressed) that otherwise runs up to
@@ -306,7 +323,7 @@ extension NativeTextViewCoordinator {
             in: nsText,
             suppressed: !textView.isEditable
         )
-        restyleTextView(textView, paragraphCandidates: paragraphs, tokens: tokens)
+        restyleTextView(textView, paragraphCandidates: paragraphs, tokens: tokens, classified: parsed.classified)
     }
 
     func applyInlineReplacement(_ request: InlineReplacementRequest, to textView: NSTextView) {

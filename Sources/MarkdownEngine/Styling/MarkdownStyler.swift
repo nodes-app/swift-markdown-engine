@@ -18,6 +18,21 @@ import Foundation
 // MARK: - Styling Context
 
 extension MarkdownStyler {
+    typealias IndexedToken = (index: Int, token: MarkdownToken)
+
+    /// Per-kind token arrays (each with the token's index into the full array,
+    /// for activeTokenIndices), built ONCE in the parse classification and
+    /// reused across keystrokes. Lets the NSImage passes iterate a small,
+    /// scope-sliced array instead of walking every document token per pass.
+    struct ClassifiedStyleTokens {
+        let inlineLatex: [IndexedToken]
+        let blockLatex: [IndexedToken]
+        let imageEmbed: [IndexedToken]
+        let imageLink: [IndexedToken]
+        let table: [IndexedToken]
+        let code: [MarkdownToken]   // codeBlock + inlineCode, for isInsideCodeBlock checks
+    }
+
     struct StylingContext {
         let nsText: NSString
         let tokens: [MarkdownToken]
@@ -35,8 +50,42 @@ extension MarkdownStyler {
         /// so the NSImage passes can skip tokens wholly outside these bounds
         /// instead of walking every token in the document per keystroke.
         var scopeBounds: (lo: Int, hi: Int)? = nil
+        /// Pre-classified per-kind token arrays; nil for direct callers (tests),
+        /// which fall back to classifying `tokens` on demand.
+        var classified: ClassifiedStyleTokens? = nil
 
         var services: MarkdownEditorServices { configuration.services }
+
+        // Per-kind indexed arrays: the cached classification, or a one-off
+        // classification of `tokens` when a direct caller passed none.
+        var inlineLatexIndexed: [IndexedToken] { classified?.inlineLatex ?? Self.indexed(tokens, .inlineLatex) }
+        var blockLatexIndexed: [IndexedToken] { classified?.blockLatex ?? Self.indexed(tokens, .blockLatex) }
+        var imageEmbedIndexed: [IndexedToken] { classified?.imageEmbed ?? Self.indexed(tokens, .imageEmbed) }
+        var imageLinkIndexed: [IndexedToken] { classified?.imageLink ?? Self.indexed(tokens, .imageLink) }
+        var tableIndexed: [IndexedToken] { classified?.table ?? Self.indexed(tokens, .table) }
+
+        static func indexed(_ tokens: [MarkdownToken], _ kind: MarkdownTokenKind) -> [IndexedToken] {
+            tokens.enumerated().compactMap { $0.element.kind == kind ? ($0.offset, $0.element) : nil }
+        }
+
+        /// The slice of a location-sorted, non-overlapping per-kind array that
+        /// intersects the restyle scope — binary-searched so out-of-scope
+        /// tokens are never even visited. Whole array when scope is nil.
+        func scoped(_ arr: [IndexedToken]) -> ArraySlice<IndexedToken> {
+            guard let bounds = scopeBounds else { return arr[...] }
+            var lo = 0, hi = arr.count
+            while lo < hi {                                   // first NSMaxRange > bounds.lo
+                let m = (lo + hi) / 2
+                if NSMaxRange(arr[m].token.range) > bounds.lo { hi = m } else { lo = m + 1 }
+            }
+            let start = lo
+            hi = arr.count
+            while lo < hi {                                   // first location >= bounds.hi
+                let m = (lo + hi) / 2
+                if arr[m].token.range.location >= bounds.hi { hi = m } else { lo = m + 1 }
+            }
+            return arr[start..<lo]
+        }
 
         /// True when `range` lies entirely outside the restyle scope — its
         /// attributes would be clipped away at application time.
@@ -68,6 +117,7 @@ enum MarkdownStyler {
         activeTokenIndices: Set<Int>,
         wikiLinkIDProvider: @escaping (NSRange) -> String? = { _ in nil },
         precomputedTokens: [MarkdownToken]? = nil,
+        classified: ClassifiedStyleTokens? = nil,
         scopedRanges: [NSRange]? = nil,
         configuration: MarkdownEditorConfiguration = .default
     ) -> [StyledRange] {
@@ -79,7 +129,7 @@ enum MarkdownStyler {
                   let hi = valid.map({ NSMaxRange($0) }).max() else { return nil }
             return (lo, hi)
         }
-        let codeTokens = tokens.filter { $0.kind == .codeBlock || $0.kind == .inlineCode }
+        let codeTokens = classified?.code ?? tokens.filter { $0.kind == .codeBlock || $0.kind == .inlineCode }
         let baseFont = NSFont(name: fontName, size: fontSize) ?? NSFont.systemFont(ofSize: fontSize)
         let baseDefaultLineHeight = ceil(
             layoutBridge?.defaultLineHeight(for: baseFont)
@@ -100,22 +150,28 @@ enum MarkdownStyler {
                 ?? NSFont.systemFont(ofSize: hiddenMarkerSize),
             configuration: configuration,
             wikiLinkIDProvider: wikiLinkIDProvider,
-            scopeBounds: scopeBounds
+            scopeBounds: scopeBounds,
+            classified: classified
         )
 
         var result: [StyledRange] = []
         // AST-native styler handles everything but NSImage rendering (incl. the composition fixes).
+        let astT0 = DispatchTime.now().uptimeNanoseconds
         result += MarkdownASTStyler.styleAttributes(
             text: text, fontName: fontName, fontSize: fontSize,
             caretLocation: caretLocation, wikiLinkIDProvider: wikiLinkIDProvider,
             scopedRanges: scopedRanges, configuration: configuration
         )
+        let astMs = Double(DispatchTime.now().uptimeNanoseconds - astT0) / 1_000_000
         // NSImage rendering reuses the existing, proven machinery.
+        let imgT0 = DispatchTime.now().uptimeNanoseconds
         result += styleBlockLatex(ctx)
         result += styleInlineLatex(ctx)
         result += styleImageEmbeds(ctx)
         result += styleImageLinks(ctx)
+        let imgMs = Double(DispatchTime.now().uptimeNanoseconds - imgT0) / 1_000_000
         result += styleTables(ctx)
+        PerfTrace.note { "  styleAttributes: ast=\(String(format: "%.2f", astMs))ms latex+img4=\(String(format: "%.2f", imgMs))ms styledRanges=\(result.count)" }
         return result
     }
 }

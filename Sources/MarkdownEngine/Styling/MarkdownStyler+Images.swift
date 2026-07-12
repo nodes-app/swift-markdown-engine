@@ -20,8 +20,7 @@ extension MarkdownStyler {
     /// at which point we fall back to dimming the markdown source).
     static func styleImageLinks(_ ctx: StylingContext) -> [StyledRange] {
         var attrs: [StyledRange] = []
-        for (idx, token) in ctx.tokens.enumerated() where token.kind == .imageLink {
-            if ctx.outsideScope(token.range) { continue }   // clipped at application anyway
+        for (idx, token) in ctx.scoped(ctx.imageLinkIndexed) {
             if MarkdownDetection.isInsideCodeBlock(range: token.range, codeTokens: ctx.codeTokens) { continue }
 
             // The URL lives between markerRanges[2] ('(') and markerRanges[3] (')').
@@ -115,8 +114,7 @@ extension MarkdownStyler {
 
     static func styleImageEmbeds(_ ctx: StylingContext) -> [StyledRange] {
         var attrs: [StyledRange] = []
-        for (idx, token) in ctx.tokens.enumerated() where token.kind == .imageEmbed {
-            if ctx.outsideScope(token.range) { continue }   // clipped at application anyway
+        for (idx, token) in ctx.scoped(ctx.imageEmbedIndexed) {
             if MarkdownDetection.isInsideCodeBlock(range: token.range, codeTokens: ctx.codeTokens) { continue }
 
             let isActive = ctx.activeTokenIndices.contains(idx)

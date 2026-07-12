@@ -16,9 +16,7 @@ extension MarkdownStyler {
 
     static func styleBlockLatex(_ ctx: StylingContext) -> [StyledRange] {
         var attrs: [StyledRange] = []
-        let blockLatexTokens = ctx.tokens.enumerated().filter { $0.element.kind == .blockLatex }
-        for (idx, token) in blockLatexTokens {
-            if ctx.outsideScope(token.range) { continue }   // clipped at application anyway
+        for (idx, token) in ctx.scoped(ctx.blockLatexIndexed) {
             if MarkdownDetection.isInsideCodeBlock(range: token.range, codeTokens: ctx.codeTokens) { continue }
             let isActive = ctx.activeTokenIndices.contains(idx)
             let rawLatexContent = ctx.nsText.substring(with: token.contentRange)
@@ -28,7 +26,7 @@ extension MarkdownStyler {
 
             guard token.standaloneParagraphRange(in: ctx.nsText) != nil else { continue }
 
-            let latexFontSize = HeadingHelpers.latexFontSize(for: token, tokens: ctx.tokens, baseFont: ctx.baseFont)
+            let latexFontSize = HeadingHelpers.latexFontSize(for: token, headings: [], baseFont: ctx.baseFont)  // block $$ is never inside a heading
 
             if isActive {
                 appendSecondaryMarkers(for: token, to: &attrs, theme: ctx.configuration.theme)
@@ -68,11 +66,16 @@ extension MarkdownStyler {
         // draws that tiny inline image on the collapsed 1pt source line under
         // the table — visible as a stray dot. Skip inline LaTeX inside a
         // table; the table image already covers it.
-        let tableRanges = ctx.tokens.filter { $0.kind == .table }.map(\.range)
+        let scopedLatex = ctx.scoped(ctx.inlineLatexIndexed)
+        guard !scopedLatex.isEmpty else { return attrs }
+        // Containers that ENCLOSE an in-scope formula must overlap the scope, so
+        // scope-slicing these is exact; built once, not per formula.
+        let tableRanges = ctx.scoped(ctx.tableIndexed).map { $0.token.range }
         // Quote lines mute their text via foregroundColor, which the LaTeX *image* ignores — render it in mutedText instead so it matches the grey.
-        let blockquoteRanges = ctx.tokens.filter { $0.kind == .blockquote }.map(\.range)
-        for (idx, token) in ctx.tokens.enumerated() where token.kind == .inlineLatex {
-            if ctx.outsideScope(token.range) { continue }   // clipped at application anyway
+        let blockquoteRanges = MarkdownStyler.StylingContext.indexed(ctx.tokens, .blockquote).map { $0.token.range }
+        // Built once, not re-scanned per formula (latexFontSize was O(#latex × #tokens)).
+        let headings = ctx.scoped(MarkdownStyler.StylingContext.indexed(ctx.tokens, .heading)).map { $0.token }
+        for (idx, token) in scopedLatex {
             if MarkdownDetection.isInsideCodeBlock(range: token.range, codeTokens: ctx.codeTokens) { continue }
             if tableRanges.contains(where: { tableRange in
                 token.range.location >= tableRange.location
@@ -83,7 +86,7 @@ extension MarkdownStyler {
 
             let isActive = ctx.activeTokenIndices.contains(idx)
             let latexContent = ctx.nsText.substring(with: token.contentRange)
-            let latexFontSize = HeadingHelpers.latexFontSize(for: token, tokens: ctx.tokens, baseFont: ctx.baseFont)
+            let latexFontSize = HeadingHelpers.latexFontSize(for: token, headings: headings, baseFont: ctx.baseFont)
 
             if isActive {
                 for markerRange in token.markerRanges {

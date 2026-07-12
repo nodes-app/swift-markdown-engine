@@ -188,6 +188,10 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
         /// checks need the original index) — collected in the same single
         /// classification pass instead of a per-call full-token filter.
         let codeBlockTokensWithIndices: [(index: Int, token: MarkdownToken)]
+        /// Per-kind indexed token arrays for the styler's NSImage passes, built
+        /// in the same single classification pass so the passes iterate small
+        /// scope-sliced arrays instead of walking every document token.
+        let classified: MarkdownStyler.ClassifiedStyleTokens
         /// Bumped only when a FRESH parse builds this document — cache-hit
         /// returns share the version, so (version, selection, suppressed) is
         /// an exact memo key for pure derivations like active-token indices.

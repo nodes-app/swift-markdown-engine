@@ -61,8 +61,20 @@ extension NativeTextViewCoordinator {
             didEnsureLayoutForCurrentDocument = true
         }
 
+        // Only on-screen code blocks have a visible copy button. Computing a
+        // viewRect (and copying the code) for every block in the document is
+        // O(doc) and dominates large files; cull to the laid-out viewport range
+        // — scroll hooks recompute as blocks come into view.
+        let visibleRange: NSRange? = {
+            guard let tlm = textView.textLayoutManager,
+                  let vp = tlm.textViewportLayoutController.viewportRange else { return nil }
+            let start = tlm.offset(from: tlm.documentRange.location, to: vp.location)
+            return NSRange(location: start, length: tlm.offset(from: vp.location, to: vp.endLocation))
+        }()
+
         let selections: [CodeBlockSelection] = cachedCodeBlockTokens.compactMap { originalIndex, token in
             guard !activeTokenIndices.contains(originalIndex) else { return nil }
+            if let visibleRange, NSIntersectionRange(token.range, visibleRange).length == 0 { return nil }
             guard var boundingRect = textView.viewRect(forCharacterRange: token.range, using: layoutBridge) else { return nil }
 
             boundingRect.origin.x = textView.frame.origin.x + textView.textContainerOrigin.x - scrollOffset.x

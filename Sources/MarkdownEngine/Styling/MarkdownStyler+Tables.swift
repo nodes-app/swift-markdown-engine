@@ -30,7 +30,10 @@ extension MarkdownStyler {
     /// instead of re-rendering every inactive table on every keystroke.
     private static let tableImageCache: NSCache<NSString, NSImage> = {
         let cache = NSCache<NSString, NSImage>()
-        cache.countLimit = 128
+        // Must exceed a document's unique-table count or a full restyle (load /
+        // theme / font change) re-renders every table (same thrash class as the
+        // metadata cap). NSCache still auto-evicts under memory pressure.
+        cache.countLimit = 2048
         return cache
     }()
 
@@ -96,8 +99,11 @@ extension MarkdownStyler {
 
     /// Parse + content-hash for a table source, memoized: both are pure in
     /// the source text but were recomputed for every table on every keystroke
-    /// (the non-render share of styleTables). FIFO-capped like the block
-    /// token memo.
+    /// (the non-render share of styleTables). FIFO-capped like the block token
+    /// memo — the cap MUST exceed a document's table count, else cyclic access
+    /// over the full table set is Bélády-pessimal under FIFO (~100% miss) and
+    /// every table re-parses+re-hashes every keystroke.
+    private static let tableMetaCap = 8192
     private static let tableMetaLock = NSLock()
     private static var tableMetaCache: [String: (parsed: ParsedTable?, hash: Int)] = [:]
     private static var tableMetaOrder: [String] = []
@@ -116,7 +122,7 @@ extension MarkdownStyler {
         if tableMetaCache[source] == nil {
             tableMetaCache[source] = computed
             tableMetaOrder.append(source)
-            if tableMetaOrder.count > 512 {
+            if tableMetaOrder.count > tableMetaCap {
                 tableMetaCache[tableMetaOrder.removeFirst()] = nil
             }
         }
@@ -155,13 +161,19 @@ extension MarkdownStyler {
         var tableCount = 0
         var renderedCount = 0
         let tablesT0 = DispatchTime.now().uptimeNanoseconds
-        for (idx, token) in ctx.tokens.enumerated() where token.kind == .table {
+        // Iterate the pre-classified table array (not all document tokens); all
+        // tables are visited because the occurrence counter needs the full,
+        // document-order set for stable duplicate-table sourceIDs.
+        var metaNanos: UInt64 = 0
+        for (idx, token) in ctx.tableIndexed {
             tableCount += 1
             // Tokenizer already drops tables overlapping fenced code, so no re-check here.
             attrs.append((token.range, [.spellingState: 0]))
 
+            let metaT0 = DispatchTime.now().uptimeNanoseconds
             let source = ctx.nsText.substring(with: token.range)
             let meta = tableMeta(for: source)
+            metaNanos &+= DispatchTime.now().uptimeNanoseconds - metaT0
             guard let parsed = meta.parsed else { continue }
 
             // Advance occurrence index even for active/out-of-scope tables so
@@ -232,7 +244,8 @@ extension MarkdownStyler {
         }
         if tableCount > 0 {
             let ms = Double(DispatchTime.now().uptimeNanoseconds - tablesT0) / 1_000_000
-            PerfTrace.note { "styleTables scanned=\(tableCount) tables, re-rendered=\(renderedCount) NSImage in \(String(format: "%.2f", ms))ms" }
+            let metaMs = Double(metaNanos) / 1_000_000
+            PerfTrace.note { "styleTables scanned=\(tableCount) tables, re-rendered=\(renderedCount) NSImage in \(String(format: "%.2f", ms))ms (substring+meta=\(String(format: "%.2f", metaMs))ms)" }
         }
         return attrs
     }

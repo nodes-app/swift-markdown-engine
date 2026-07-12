@@ -235,9 +235,22 @@ extension NativeTextViewCoordinator {
         if codeBlockStructureChanged {
             effectiveParagraphCandidates = [NSRange(location: 0, length: fullText.length)]
         }
-        // Always restyle paragraphs containing latex/imageEmbed tokens to avoid stale raw text.
-        let latexParagraphs = PerfTrace.measure("latexMap") {
-            (latexTokens + blockLatexTokens + parsed.imageEmbedTokens).map { fullText.paragraphRange(for: $0.range) }
+        // Restyle only latex/imageEmbed paragraphs the EDIT touches (mirrors the
+        // table loop below); the caret entering/leaving a formula, which flips
+        // rendered↔raw, is covered by tokenRestyleParagraphs. Blanket-restyling
+        // every such paragraph made scopeBounds span the whole document, which
+        // defeated the per-pass scope culling in the styler.
+        let latexParagraphs = PerfTrace.measure("latexMap") { () -> [NSRange] in
+            var out: [NSRange] = []
+            for group in [latexTokens, blockLatexTokens, parsed.imageEmbedTokens] {
+                for token in group {
+                    if token.range.location > NSMaxRange(safeEditedRange) { break }
+                    if NSIntersectionRange(token.range, safeEditedRange).length > 0 {
+                        out.append(fullText.paragraphRange(for: token.range))
+                    }
+                }
+            }
+            return out
         }
         effectiveParagraphCandidates.append(contentsOf: latexParagraphs)
         // A table renders as ONE image anchored on the block's FIRST paragraph.
@@ -262,7 +275,7 @@ extension NativeTextViewCoordinator {
             previousActiveTokenIndices: preEditActiveTokenIndices
         ))
 
-        PerfTrace.measure("restyle") { restyleTextView(tv, paragraphCandidates: effectiveParagraphCandidates, tokens: tokens) }
+        PerfTrace.measure("restyle") { restyleTextView(tv, paragraphCandidates: effectiveParagraphCandidates, tokens: tokens, classified: parsed.classified) }
         PerfTrace.measure("codeSel") { updateCodeBlockSelection(textView: tv, parsed: parsed) }
         if wtActive {
             previousActiveTokenIndices = activeTokenIndices
@@ -424,7 +437,7 @@ extension NativeTextViewCoordinator {
             needsRestyleAfterDrag = true
         } else if tokensChanged || taskSyntaxChanged || hrLineChanged || bulletSyntaxChanged || needsRestyleAfterDrag {
             needsRestyleAfterDrag = false
-            restyleTextView(tv, paragraphCandidates: paragraphCandidates, tokens: tokens)
+            restyleTextView(tv, paragraphCandidates: paragraphCandidates, tokens: tokens, classified: parsed.classified)
         }
 
         // Auto-select content when clicking (mouse) into a rendered (previously inactive) latex or image embed
