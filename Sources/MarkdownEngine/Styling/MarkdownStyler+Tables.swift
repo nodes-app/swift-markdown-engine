@@ -161,12 +161,30 @@ extension MarkdownStyler {
         var tableCount = 0
         var renderedCount = 0
         let tablesT0 = DispatchTime.now().uptimeNanoseconds
-        // Iterate the pre-classified table array (not all document tokens); all
-        // tables are visited because the occurrence counter needs the full,
-        // document-order set for stable duplicate-table sourceIDs.
+        // Iterate the pre-classified table array (not all document tokens).
+        // The occurrence counter needs every table that could DUPLICATE
+        // another (stable duplicate-table sourceIDs) — but equal content
+        // implies equal source length, so a table whose length is unique in
+        // the document can never affect another table's occurrence index.
+        let tableIndexed = ctx.tableIndexed
+        var lengthCounts: [Int: Int] = [:]
+        lengthCounts.reserveCapacity(tableIndexed.count)
+        for (_, token) in tableIndexed { lengthCounts[token.range.length, default: 0] += 1 }
+        var skippedCount = 0
         var metaNanos: UInt64 = 0
-        for (idx, token) in ctx.tableIndexed {
+        for (idx, token) in tableIndexed {
             tableCount += 1
+            // Inactive + out-of-scope: attribute application clips everything
+            // away anyway. Unique length ⇒ no duplicate can depend on this
+            // table's hash — skip the substring + parse/hash AND the
+            // .spellingState write (which is applied UNCLIPPED and used to
+            // touch every table in the document on every keystroke).
+            if !ctx.activeTokenIndices.contains(idx),
+               ctx.outsideScope(token.range),
+               lengthCounts[token.range.length] == 1 {
+                skippedCount += 1
+                continue
+            }
             // Tokenizer already drops tables overlapping fenced code, so no re-check here.
             attrs.append((token.range, [.spellingState: 0]))
 
@@ -245,7 +263,7 @@ extension MarkdownStyler {
         if tableCount > 0 {
             let ms = Double(DispatchTime.now().uptimeNanoseconds - tablesT0) / 1_000_000
             let metaMs = Double(metaNanos) / 1_000_000
-            PerfTrace.note { "styleTables scanned=\(tableCount) tables, re-rendered=\(renderedCount) NSImage in \(String(format: "%.2f", ms))ms (substring+meta=\(String(format: "%.2f", metaMs))ms)" }
+            PerfTrace.note { "styleTables scanned=\(tableCount) tables (skipped=\(skippedCount)), re-rendered=\(renderedCount) NSImage in \(String(format: "%.2f", ms))ms (substring+meta=\(String(format: "%.2f", metaMs))ms)" }
         }
         return attrs
     }
