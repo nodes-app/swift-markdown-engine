@@ -75,6 +75,27 @@ struct TableScopeSkipTests {
         #expect(touchingTable.contains { $0.attributes[.spellingState] as? Int == 0 })
     }
 
+    @Test func outOfScopeDuplicatesSkipWhenNothingRenders() throws {
+        // Two IDENTICAL tables, scope far away from both: no table renders
+        // this pass, so no occurrence index is consumed — BOTH must be
+        // skipped even though they share a length (the 533-similar-tables
+        // perf doc showed the unique-length heuristic never firing).
+        let table = "| dup | dup |\n|---|---|\n| x | y |"
+        let text = table + "\n\nmiddle\n\n" + table + "\n\ntrailing paragraph of prose"
+        let ranges = tableRanges(in: text)
+        #expect(ranges.count == 2)
+        let last = try #require(ranges.last)
+        let scopeLo = NSMaxRange(last) + 2
+        let ctx = makeContext(text: text, scopeBounds: (lo: scopeLo, hi: (text as NSString).length))
+
+        let attrs = MarkdownStyler.styleTables(ctx)
+
+        for range in ranges {
+            let touching = attrs.filter { NSIntersectionRange($0.range, range).length > 0 }
+            #expect(touching.isEmpty)
+        }
+    }
+
     @Test func duplicateTablesKeepStableOccurrenceBookkeeping() throws {
         // Two IDENTICAL tables; the second is in scope, the first is not.
         // The first must still be hashed (same length ⇒ potential duplicate),

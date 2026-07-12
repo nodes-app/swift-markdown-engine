@@ -162,26 +162,26 @@ extension MarkdownStyler {
         var renderedCount = 0
         let tablesT0 = DispatchTime.now().uptimeNanoseconds
         // Iterate the pre-classified table array (not all document tokens).
-        // The occurrence counter needs every table that could DUPLICATE
-        // another (stable duplicate-table sourceIDs) — but equal content
-        // implies equal source length, so a table whose length is unique in
-        // the document can never affect another table's occurrence index.
+        // The occurrence counter exists for stable duplicate-table sourceIDs,
+        // and a sourceID is only CONSUMED by a table that renders this pass
+        // (inactive + in scope). Equal content implies equal source length,
+        // so only tables sharing a length with a rendering table can affect
+        // its occurrence index — every other inactive table skips the
+        // substring + parse/hash AND the .spellingState write (applied
+        // UNCLIPPED, it used to touch every table in the document on every
+        // keystroke). Typing prose renders no table → all tables skip.
         let tableIndexed = ctx.tableIndexed
-        var lengthCounts: [Int: Int] = [:]
-        lengthCounts.reserveCapacity(tableIndexed.count)
-        for (_, token) in tableIndexed { lengthCounts[token.range.length, default: 0] += 1 }
+        var neededLengths: Set<Int> = []
+        for (idx, token) in tableIndexed
+        where !ctx.activeTokenIndices.contains(idx) && !ctx.outsideScope(token.range) {
+            neededLengths.insert(token.range.length)
+        }
         var skippedCount = 0
         var metaNanos: UInt64 = 0
         for (idx, token) in tableIndexed {
             tableCount += 1
-            // Inactive + out-of-scope: attribute application clips everything
-            // away anyway. Unique length ⇒ no duplicate can depend on this
-            // table's hash — skip the substring + parse/hash AND the
-            // .spellingState write (which is applied UNCLIPPED and used to
-            // touch every table in the document on every keystroke).
             if !ctx.activeTokenIndices.contains(idx),
-               ctx.outsideScope(token.range),
-               lengthCounts[token.range.length] == 1 {
+               !neededLengths.contains(token.range.length) {
                 skippedCount += 1
                 continue
             }
