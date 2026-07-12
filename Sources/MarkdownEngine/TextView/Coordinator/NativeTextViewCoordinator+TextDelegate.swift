@@ -153,9 +153,10 @@ extension NativeTextViewCoordinator {
             self.lastComputedStorage = storageState.storage
 #if DEBUG
             // Sampled safety net: every 64th keystroke, prove the splice equals
-            // a full rebuild. Remove together with PerfTrace after sign-off.
+            // a full rebuild. Opt-in (MD_PERF_VERIFY=1) — the O(doc) rebuild
+            // spikes pollute the PERF numbers. Remove with PerfTrace after sign-off.
             wikiVerifyCounter &+= 1
-            if wikiVerifyCounter % 64 == 0 {
+            if PerfTrace.verifyEnabled, wikiVerifyCounter % 64 == 0 {
                 let reference = WikiLinkService.makeStorageState(
                     from: docString,
                     existingMetadata: wikiLinkMetadata,
@@ -309,7 +310,7 @@ extension NativeTextViewCoordinator {
             onInlineSelectionChange?(nil)
             return
         }
-        updateSelectionStates(tv)
+        PerfTrace.measure("selStates") { updateSelectionStates(tv) }
         let selLoc = selRange.location
 
         // Selection change fires BEFORE textDidChange mid-edit: hand the
@@ -321,7 +322,10 @@ extension NativeTextViewCoordinator {
             let delta = (tv.string as NSString).length - previousDisplayLength
             return ParseEditDescriptor(editedRange: pending, delta: delta)
         }()
-        let parsed = parsedDocument(for: tv.string, edit: selectionEdit)
+        // The keystroke's FIRST post-edit parse happens here, not in
+        // textDidChange (whose "parse" span then O(1)-hits) — measure it so
+        // the printed frame stops understating the real parse cost.
+        let parsed = PerfTrace.measure("selParse") { parsedDocument(for: tv.string, edit: selectionEdit) }
         let tokens = parsed.tokens
         let codeTokens = parsed.codeTokens
         let latexTokens = parsed.latexTokens
@@ -437,7 +441,9 @@ extension NativeTextViewCoordinator {
             needsRestyleAfterDrag = true
         } else if tokensChanged || taskSyntaxChanged || hrLineChanged || bulletSyntaxChanged || needsRestyleAfterDrag {
             needsRestyleAfterDrag = false
-            restyleTextView(tv, paragraphCandidates: paragraphCandidates, tokens: tokens, classified: parsed.classified)
+            PerfTrace.measure("selRestyle") {
+                restyleTextView(tv, paragraphCandidates: paragraphCandidates, tokens: tokens, classified: parsed.classified)
+            }
         }
 
         // Auto-select content when clicking (mouse) into a rendered (previously inactive) latex or image embed
@@ -562,8 +568,10 @@ extension NativeTextViewCoordinator {
         let newWindow = MarkdownDetection.backtickWindowCount(in: fullText, around: editedRange)
         let count = previousBacktickCount - base.oldCount + newWindow
 #if DEBUG
+        // Opt-in (MD_PERF_VERIFY=1): the full scan is the O(doc) cost this
+        // census exists to avoid — as a default-on sample it skews the numbers.
         backtickVerifyCounter &+= 1
-        if backtickVerifyCounter % 64 == 0 {
+        if PerfTrace.verifyEnabled, backtickVerifyCounter % 64 == 0 {
             assert(count == MarkdownDetection.tripleBacktickCount(in: fullText),
                    "incremental backtick census diverged from the full scan")
         }
@@ -572,6 +580,11 @@ extension NativeTextViewCoordinator {
     }
 
     public func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool {
+        let preNS = textView.string as NSString
+        // Open the keystroke's PERF frame HERE: the pre-edit parse and the
+        // smart-input interceptors below used to run before the frame existed
+        // and were invisible in the printed totals.
+        PerfTrace.begin(docLength: preNS.length)
         parseGeneration &+= 1
         // Refresh the descriptor for EVERY proposed edit — including programmatic
         // ones. A smart-input interceptor that suppresses a keystroke and performs
@@ -581,7 +594,6 @@ extension NativeTextViewCoordinator {
         pendingEditedRange = NSRange(location: affectedCharRange.location, length: replacementString?.utf16.count ?? 0)
         pendingEditCount += 1
         // Pre-edit backtick window baseline for the incremental census.
-        let preNS = textView.string as NSString
         if affectedCharRange.location >= 0, NSMaxRange(affectedCharRange) <= preNS.length {
             pendingBacktickWindow = (affectedCharRange.location, affectedCharRange.length,
                 MarkdownDetection.backtickWindowCount(in: preNS, around: affectedCharRange))
@@ -602,34 +614,36 @@ extension NativeTextViewCoordinator {
             pendingPreEditActiveTokenIndices = nil
             return true
         }
-        let parsed = parsedDocument(for: textView.string)
+        let parsed = PerfTrace.measure("preParse") { parsedDocument(for: textView.string) }
         pendingPreEditActiveTokenIndices = activeTokenIndices(
             parsed: parsed,
             selection: textView.selectedRange(),
-            in: textView.string as NSString,
+            in: preNS,
             suppressed: !textView.isEditable
         )
 
-        // Block LaTeX auto-wrap: insert newlines to keep $$ on its own line
-        if MarkdownInputHandler.handleBlockLatexAutoWrap(
-            textView: textView,
-            affectedCharRange: affectedCharRange,
-            replacementString: replacementString,
-            blockLatexTokens: parsed.blockLatexTokens
-        ) {
-            return false
-        }
+        return PerfTrace.measure("smartInput") {
+            // Block LaTeX auto-wrap: insert newlines to keep $$ on its own line
+            if MarkdownInputHandler.handleBlockLatexAutoWrap(
+                textView: textView,
+                affectedCharRange: affectedCharRange,
+                replacementString: replacementString,
+                blockLatexTokens: parsed.blockLatexTokens
+            ) {
+                return false
+            }
 
-        if MarkdownInputHandler.handleImageEmbedAutoWrap(
-            textView: textView,
-            affectedCharRange: affectedCharRange,
-            replacementString: replacementString,
-            imageEmbedTokens: parsed.imageEmbedTokens
-        ) {
-            return false
-        }
+            if MarkdownInputHandler.handleImageEmbedAutoWrap(
+                textView: textView,
+                affectedCharRange: affectedCharRange,
+                replacementString: replacementString,
+                imageEmbedTokens: parsed.imageEmbedTokens
+            ) {
+                return false
+            }
 
-        return MarkdownInputHandler.handleListInsertion(textView: textView, affectedCharRange: affectedCharRange, replacementString: replacementString)
+            return MarkdownInputHandler.handleListInsertion(textView: textView, affectedCharRange: affectedCharRange, replacementString: replacementString)
+        }
     }
 
     public func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {

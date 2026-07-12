@@ -76,8 +76,10 @@ final class DocumentParseState {
                               changeEndNew: changeEndNew, delta: edit.delta)
 #if DEBUG
             // Sampled safety net: the spliced buffer must equal the storage.
+            // Opt-in (MD_PERF_VERIFY=1) — the fresh O(doc) extraction spikes
+            // every 64th keystroke and pollutes the PERF numbers.
             verifyCounter &+= 1
-            if verifyCounter % 64 == 0 {
+            if PerfTrace.verifyEnabled, verifyCounter % 64 == 0 {
                 var fresh = [unichar](repeating: 0, count: newLen)
                 if newLen > 0 { ns.getCharacters(&fresh, range: NSRange(location: 0, length: newLen)) }
                 assert(fresh == newChars, "spliced parse buffer diverged from the text storage")

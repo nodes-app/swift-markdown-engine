@@ -19,8 +19,14 @@ import Foundation
 enum PerfTrace {
 #if DEBUG
     static var enabled = ProcessInfo.processInfo.environment["MD_PERF"] != "0"
+    /// Opt-in for the sampled full-rebuild verifier asserts (wiki splice,
+    /// backtick census, parse buffer). They run 3× O(doc) work synchronously
+    /// on every 64th keystroke — periodic spikes that pollute the PERF
+    /// numbers — so they stay off unless explicitly requested.
+    static let verifyEnabled = ProcessInfo.processInfo.environment["MD_PERF_VERIFY"] == "1"
 #else
     static let enabled = false
+    static let verifyEnabled = false
 #endif
 
     // All call sites run on the main thread (the coordinator + text view are
@@ -36,13 +42,21 @@ enum PerfTrace {
     }
 
     /// Open a per-keystroke frame. Every `measure`/`note` until `end()` attaches to it.
+    /// A frame already opened this keystroke is CONTINUED, not reset:
+    /// shouldChangeTextIn opens the frame (so the pre-edit parse and the
+    /// smart-input interceptors are counted — they used to run before the
+    /// frame and were invisible), the mid-edit selection change and
+    /// textDidChange attach to it. A frame left open by an edit that never
+    /// reached textDidChange is considered stale after 1s and reset.
     static func begin(docLength len: Int) {
         guard enabled else { return }
-        active = true
+        let now = DispatchTime.now().uptimeNanoseconds
         docLength = len
+        if active, Double(now - frameStart) / 1_000_000 < 1_000 { return }
+        active = true
         phases.removeAll(keepingCapacity: true)
         notes.removeAll(keepingCapacity: true)
-        frameStart = DispatchTime.now().uptimeNanoseconds
+        frameStart = now
     }
 
     /// Time one sequential top-level phase of the current frame.
