@@ -73,18 +73,7 @@ extension MarkdownStyler {
         /// tokens are never even visited. Whole array when scope is nil.
         func scoped(_ arr: [IndexedToken]) -> ArraySlice<IndexedToken> {
             guard let bounds = scopeBounds else { return arr[...] }
-            var lo = 0, hi = arr.count
-            while lo < hi {                                   // first NSMaxRange > bounds.lo
-                let m = (lo + hi) / 2
-                if NSMaxRange(arr[m].token.range) > bounds.lo { hi = m } else { lo = m + 1 }
-            }
-            let start = lo
-            hi = arr.count
-            while lo < hi {                                   // first location >= bounds.hi
-                let m = (lo + hi) / 2
-                if arr[m].token.range.location >= bounds.hi { hi = m } else { lo = m + 1 }
-            }
-            return arr[start..<lo]
+            return MarkdownStyler.scopedSlice(arr, lo: bounds.lo, hi: bounds.hi)
         }
 
         /// True when `range` lies entirely outside the restyle scope — its
@@ -99,6 +88,26 @@ extension MarkdownStyler {
             guard let scopeBounds else { return false }
             return range.location >= scopeBounds.hi
         }
+    }
+
+    /// Binary-searched slice of a location-sorted, non-overlapping per-kind
+    /// array whose tokens intersect `[lo, hi)` — tokens outside are never
+    /// visited. Shared by the styler's scope culling and the coordinator's
+    /// edit-scoped candidate collection (which used to walk each array
+    /// linearly from the document head to the edit).
+    static func scopedSlice(_ arr: [IndexedToken], lo bound: Int, hi upper: Int) -> ArraySlice<IndexedToken> {
+        var lo = 0, hi = arr.count
+        while lo < hi {                                   // first NSMaxRange > bound
+            let m = (lo + hi) / 2
+            if NSMaxRange(arr[m].token.range) > bound { hi = m } else { lo = m + 1 }
+        }
+        let start = lo
+        hi = arr.count
+        while lo < hi {                                   // first location >= upper
+            let m = (lo + hi) / 2
+            if arr[m].token.range.location >= upper { hi = m } else { lo = m + 1 }
+        }
+        return arr[start..<lo]
     }
 }
 

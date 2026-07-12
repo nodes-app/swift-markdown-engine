@@ -243,12 +243,12 @@ extension NativeTextViewCoordinator {
         // defeated the per-pass scope culling in the styler.
         let latexParagraphs = PerfTrace.measure("latexMap") { () -> [NSRange] in
             var out: [NSRange] = []
-            for group in [latexTokens, blockLatexTokens, parsed.imageEmbedTokens] {
-                for token in group {
-                    if token.range.location > NSMaxRange(safeEditedRange) { break }
-                    if NSIntersectionRange(token.range, safeEditedRange).length > 0 {
-                        out.append(fullText.paragraphRange(for: token.range))
-                    }
+            // Binary-searched slices — the old loops walked each array from
+            // the document head to the edit on every keystroke.
+            for group in [parsed.classified.inlineLatex, parsed.classified.blockLatex, parsed.classified.imageEmbed] {
+                for (_, token) in MarkdownStyler.scopedSlice(group, lo: safeEditedRange.location, hi: NSMaxRange(safeEditedRange))
+                where NSIntersectionRange(token.range, safeEditedRange).length > 0 {
+                    out.append(fullText.paragraphRange(for: token.range))
                 }
             }
             return out
@@ -259,14 +259,11 @@ extension NativeTextViewCoordinator {
         // that merges into an existing table), the styler re-emits the anchor
         // against the FULL block — restyling only the edited rows would clip
         // that anchor away and the table goes blank until a full restyle.
-        // Location-sorted classified tables: early-exit past the edit instead
-        // of a full-token filter per keystroke.
+        // Location-sorted classified tables, binary-searched to the edit.
         var editedTableParagraphs: [NSRange] = []
-        for token in parsed.tableTokens {
-            if token.range.location > NSMaxRange(safeEditedRange) { break }
-            if NSIntersectionRange(token.range, safeEditedRange).length > 0 {
-                editedTableParagraphs.append(fullText.paragraphRange(for: token.range))
-            }
+        for (_, token) in MarkdownStyler.scopedSlice(parsed.classified.table, lo: safeEditedRange.location, hi: NSMaxRange(safeEditedRange))
+        where NSIntersectionRange(token.range, safeEditedRange).length > 0 {
+            editedTableParagraphs.append(fullText.paragraphRange(for: token.range))
         }
         effectiveParagraphCandidates.append(contentsOf: editedTableParagraphs)
         effectiveParagraphCandidates.append(contentsOf: tokenRestyleParagraphs(
@@ -387,25 +384,6 @@ extension NativeTextViewCoordinator {
         let caretLoc = selRange.location
         let paragraphRange = nsText.paragraphRange(for: NSRange(location: caretLoc, length: 0))
 
-        var paragraphCandidates: [NSRange] = [paragraphRange]
-        if paragraphRange.length == 0 && caretLoc > 0 {
-            paragraphCandidates.append(nsText.paragraphRange(for: NSRange(location: max(0, caretLoc - 1), length: 0)))
-        }
-        if let prevLoc = previousCaretLocation, prevLoc != caretLoc {
-            let safePrev = min(prevLoc, nsText.length)
-            let prevPara = nsText.paragraphRange(for: NSRange(location: safePrev, length: 0))
-            paragraphCandidates.append(prevPara)
-        }
-        // Also restyle paragraphs containing latex/imageEmbed tokens to refresh rendering.
-        let latexParagraphs = (latexTokens + blockLatexTokens + parsed.imageEmbedTokens).map { nsText.paragraphRange(for: $0.range) }
-        paragraphCandidates.append(contentsOf: latexParagraphs)
-        paragraphCandidates.append(contentsOf: tokenRestyleParagraphs(
-            in: nsText,
-            tokens: tokens,
-            currentActiveTokenIndices: activeTokenIndices,
-            previousActiveTokenIndices: previousActiveTokenIndices
-        ))
-
         let shouldSkipSelectionRestyle = pendingEditedRange != nil
         let tokensChanged = activeTokenIndices != prevActive
         // Caret crossings in/out of `- [ ]` syntax need a restyle too: task
@@ -446,6 +424,36 @@ extension NativeTextViewCoordinator {
             needsRestyleAfterDrag = true
         } else if tokensChanged || taskSyntaxChanged || hrLineChanged || bulletSyntaxChanged || needsRestyleAfterDrag {
             needsRestyleAfterDrag = false
+            // Candidates are built ONLY when a restyle actually runs — this
+            // used to happen unconditionally on every selection change,
+            // including the mid-keystroke one that skips the restyle above.
+            var paragraphCandidates: [NSRange] = [paragraphRange]
+            if paragraphRange.length == 0 && caretLoc > 0 {
+                paragraphCandidates.append(nsText.paragraphRange(for: NSRange(location: max(0, caretLoc - 1), length: 0)))
+            }
+            if let prevLoc = previousCaretLocation, prevLoc != caretLoc {
+                let safePrev = min(prevLoc, nsText.length)
+                paragraphCandidates.append(nsText.paragraphRange(for: NSRange(location: safePrev, length: 0)))
+            }
+            // Latex/imageEmbed tokens only inside the caret/previous-caret
+            // paragraphs (binary-searched); the rendered↔raw flip of a token
+            // the caret entered or left is covered by tokenRestyleParagraphs.
+            // The old blanket map over EVERY formula in the document widened
+            // scopeBounds to the whole document on every caret-move restyle,
+            // defeating the styler's per-pass culling — O(#formulas) each.
+            let scopeLo = paragraphCandidates.map(\.location).min() ?? 0
+            let scopeHi = paragraphCandidates.map { NSMaxRange($0) }.max() ?? 0
+            for group in [parsed.classified.inlineLatex, parsed.classified.blockLatex, parsed.classified.imageEmbed] {
+                for (_, token) in MarkdownStyler.scopedSlice(group, lo: scopeLo, hi: scopeHi) {
+                    paragraphCandidates.append(nsText.paragraphRange(for: token.range))
+                }
+            }
+            paragraphCandidates.append(contentsOf: tokenRestyleParagraphs(
+                in: nsText,
+                tokens: tokens,
+                currentActiveTokenIndices: activeTokenIndices,
+                previousActiveTokenIndices: previousActiveTokenIndices
+            ))
             PerfTrace.measure("selRestyle") {
                 restyleTextView(tv, paragraphCandidates: paragraphCandidates, tokens: tokens, classified: parsed.classified)
             }
