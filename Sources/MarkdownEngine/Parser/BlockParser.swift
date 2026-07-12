@@ -121,10 +121,29 @@ enum BlockParser {
         return BufferDiff(changeStart: p, changeEndOld: oldLen - s, changeEndNew: newLen - s, delta: newLen - oldLen)
     }
 
-    /// Does `[lo, hi)` (± margin for an edit-boundary delimiter) contain a `$$` or ``` that can ripple?
+    /// Does any LINE touched by `[lo, hi)` contain a `$$` or ``` that can ripple?
+    /// Line-expanded, not just ±3 around the edit: block delimiters are
+    /// line-classified with a TRIMMED prefix (`isBlockLatexOpen`), so editing
+    /// the leading whitespace of an indented `$$` opener flips the pairing
+    /// from arbitrarily far away from the literal `$$`. The boundary walk is
+    /// capped; hitting the cap reports a delimiter (conservative full parse).
     static func hasBlockDelimiter(_ buf: [unichar], _ lo: Int, _ hi: Int) -> Bool {
-        var i = max(0, lo - 3)
-        let end = min(buf.count, hi + 3)
+        let cap = 4096
+        var start = max(0, lo - 3)
+        var steps = 0
+        while start > 0, buf[start - 1] != 0x0A, buf[start - 1] != 0x0D {
+            start -= 1
+            steps += 1
+            if steps > cap { return true }
+        }
+        var end = min(buf.count, hi + 3)
+        steps = 0
+        while end < buf.count, buf[end] != 0x0A, buf[end] != 0x0D {
+            end += 1
+            steps += 1
+            if steps > cap { return true }
+        }
+        var i = start
         while i < end {
             if buf[i] == 0x24 {                                          // $
                 if i + 1 < end, buf[i + 1] == 0x24 { return true }       // $$

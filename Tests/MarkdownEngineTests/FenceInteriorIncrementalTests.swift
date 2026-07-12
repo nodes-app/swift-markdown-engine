@@ -85,6 +85,43 @@ struct FenceInteriorIncrementalTests {
         }
     }
 
+    // Review finding (a479348): isBlockLatexOpen matches the TRIMMED line
+    // prefix, so an indented `$$` opener can be flipped by an edit in its
+    // leading whitespace — arbitrarily far from the literal `$$`, past the
+    // ±3-char delimiter guard — and the dissolved opener's former closer
+    // re-pairs with a later `$$` block OUTSIDE the splice window. The splice
+    // must bail (or match ground truth) for any edit on a line carrying a
+    // block delimiter.
+    @Test func indentedLatexOpenerWhitespaceInsertStaysEquivalent() {
+        let old = "intro\n\n   $$\n   a = 1\n   $$\nmiddle text\n\n$$\nb = 2\n$$\ntail"
+        let openerLoc = (old as NSString).range(of: "   $$").location
+        let (new, diff) = splice(old, at: openerLoc, remove: 0, insert: "x")
+
+        let result = BlockParser.incrementalParse(
+            oldChars: chars(old), oldBlocks: BlockParser.computeBlocks(old),
+            newChars: chars(new), newNS: new as NSString, diff: diff
+        )
+
+        if let result {
+            #expect(result.blocks == BlockParser.computeBlocks(new))
+        }
+    }
+
+    @Test func indentedLatexOpenerWhitespaceDeleteStaysEquivalent() {
+        let old = "intro\n\nx   $$\n   a = 1\n   $$\nmiddle text\n\n$$\nb = 2\n$$\ntail"
+        let editLoc = (old as NSString).range(of: "x   $$").location
+        let (new, diff) = splice(old, at: editLoc, remove: 1, insert: "")
+
+        let result = BlockParser.incrementalParse(
+            oldChars: chars(old), oldBlocks: BlockParser.computeBlocks(old),
+            newChars: chars(new), newNS: new as NSString, diff: diff
+        )
+
+        if let result {
+            #expect(result.blocks == BlockParser.computeBlocks(new))
+        }
+    }
+
     // Fence-heavy differential fuzz: edits biased into fence/latex interiors.
     @Test(arguments: [0xFE7CE, 0x5EED5, 0xACE02, 0xB16F1] as [UInt64])
     func fenceHeavyFuzzMatchesFullParse(seed: UInt64) {
@@ -95,6 +132,8 @@ struct FenceInteriorIncrementalTests {
             "```swift", "let a = 1", "let b = 2", "func f() {", "  return", "}", "```",
             "prose between the fences with **bold**",
             "$$", "\\sum_{i=0}^n i^2", "$$",
+            "more prose here",
+            "   $$", "   e^{i\\pi} = -1", "   $$",
             "```python", "def g():", "    pass", "```",
             "- a list item",
             "trailing paragraph",
