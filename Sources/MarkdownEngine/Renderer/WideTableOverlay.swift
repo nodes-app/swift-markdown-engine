@@ -233,10 +233,17 @@ extension NativeTextView {
         let fullRange = NSRange(location: 0, length: storage.length)
 
         // Cheap presence-check first: skip the full-document layout pass when
-        // the doc has no wide tables. enumerateAttribute stops on first hit.
+        // the doc has no wide tables. enumerateAttribute stops on first hit —
+        // but a MISS walks every attribute run in the document (scheduled
+        // after each restyle), so stamp it when it gets slow.
+        let presenceT0 = DispatchTime.now().uptimeNanoseconds
         var hasAnyWideTable = false
         storage.enumerateAttribute(.scrollableBlockSourceID, in: fullRange, options: []) { value, _, stop in
             if value is Int { hasAnyWideTable = true; stop.pointee = true }
+        }
+        let presenceMs = Double(DispatchTime.now().uptimeNanoseconds - presenceT0) / 1_000_000
+        if presenceMs > 0.3 {
+            PerfTrace.stamp("wideTableOverlay.presenceScan", presenceMs, "wide=\(hasAnyWideTable ? 1 : 0) docLen=\(storage.length)")
         }
         guard hasAnyWideTable else {
             removeAllWideTableOverlays()

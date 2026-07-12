@@ -70,6 +70,7 @@ extension NativeTextViewCoordinator {
 
     public func textDidChange(_ notification: Notification) {
         guard let tv = notification.object as? NSTextView else { return }
+        PerfTrace.checkpoint("didIn")
         // Before the early returns: the first keystroke must hide the placeholder.
         (tv as? NativeTextView)?.refreshPlaceholderVisibility()
         // Raw mode: display IS storage — sync the binding, skip the restyle.
@@ -299,6 +300,8 @@ extension NativeTextViewCoordinator {
         // Raw mode: plain source — no reveal, snap-back, or inline previews.
         if configuration.rawSourceMode { return }
         if isWritingToolsActive { return }
+        PerfTrace.checkpoint("selIn")
+        defer { PerfTrace.checkpoint("selOut") }
         let selRange = tv.selectedRange()
         let currentEventType = NSApp.currentEvent?.type
         // ONE bridge of the document text — this handler fires on every
@@ -663,6 +666,7 @@ extension NativeTextViewCoordinator {
             suppressed: !textView.isEditable
         )
 
+        defer { PerfTrace.checkpoint("shouldOut") }
         return PerfTrace.measure("smartInput") {
             // Block LaTeX auto-wrap: insert newlines to keep $$ on its own line
             if MarkdownInputHandler.handleBlockLatexAutoWrap(

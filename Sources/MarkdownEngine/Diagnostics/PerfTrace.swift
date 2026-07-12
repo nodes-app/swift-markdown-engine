@@ -99,6 +99,15 @@ enum PerfTrace {
         notes.append(make())
     }
 
+    /// Record a named timestamp (offset from frame start) inline in the
+    /// breakdown, printed as `@label=12.34`. The gaps BETWEEN checkpoints and
+    /// the measured spans locate work the spans don't cover (AppKit edit
+    /// application, layout, notification dispatch between our callbacks).
+    static func checkpoint(_ label: String) {
+        guard enabled, active else { return }
+        phases.append(("@" + label, Double(DispatchTime.now().uptimeNanoseconds - frameStart) / 1_000_000))
+    }
+
     /// Close the frame and print total + per-phase breakdown + notes.
     /// `other` = total − Σ(phases + accumulated): time inside the frame that
     /// no span covers (AppKit edit processing, layout, unmeasured code).
@@ -110,7 +119,8 @@ enum PerfTrace {
         if !accumulated.isEmpty {
             breakdown += " " + accumulated.map { String(format: "+%@=%.2f", $0.0, $0.1) }.joined(separator: " ")
         }
-        let covered = phases.reduce(0) { $0 + $1.1 } + accumulated.reduce(0) { $0 + $1.1 }
+        let covered = phases.filter { !$0.0.hasPrefix("@") }.reduce(0) { $0 + $1.1 }
+            + accumulated.reduce(0) { $0 + $1.1 }
         print(String(format: "⌨️ PERF doc=%dch total=%.2fms | %@ other=%.2f", docLength, total, breakdown, total - covered))
         for note in notes { print("    └─ \(note)") }
     }
