@@ -27,6 +27,7 @@ extension NativeTextView {
         let lineHeight = layoutBridgeDefaultLineHeight(for: self.baseFont, using: layoutBridge)
         // File switch/resize forces full layout until height settles; typing stays O(edit).
         if debugTag == "?" { pendingFullLayoutMeasure = true }
+        let forcedFullLayout = pendingFullLayoutMeasure
         let measured = measuredBaseContentHeight(
             minimumHeight: lineHeight,
             forceFullLayout: pendingFullLayoutMeasure
@@ -42,6 +43,12 @@ extension NativeTextView {
         let overscrollChanged = abs(resolvedOverscroll - activeBottomOverscroll) > 0.5
         // Height settled → stop forcing full layout (until the next switch/resize).
         if !(baseHeightChanged || overscrollChanged) { pendingFullLayoutMeasure = false }
+        // A persistent fullLayout=1 with hChanged/osChanged flipping every
+        // keystroke = the bistable-height loop: every keystroke then pays a
+        // FULL document ensureLayout inside the overscroll span.
+        PerfTrace.note {
+            "overscroll[\(debugTag)]: fullLayout=\(forcedFullLayout ? 1 : 0) h=\(Int(measured))\(baseHeightChanged ? " hChanged" : "")\(overscrollChanged ? " osChanged" : "")"
+        }
         guard baseHeightChanged || overscrollChanged else { return }
         baseContentHeight = measured
         activeBottomOverscroll = resolvedOverscroll
@@ -292,6 +299,12 @@ extension NativeTextView {
     }
 
     override func scrollRangeToVisible(_ range: NSRange) {
+        // Runs from inside AppKit's post-edit processing — outside every
+        // sequential span; accumulate so the frame stops hiding it.
+        PerfTrace.accumulate("reveal") { revealRangeIfNeeded(range) }
+    }
+
+    private func revealRangeIfNeeded(_ range: NSRange) {
         if suppressAutoRevealOnce {
             suppressAutoRevealOnce = false
             return
@@ -362,7 +375,9 @@ extension NativeTextView {
                 // caret is already visible (the common per-keystroke case).
                 if let end = tlm.textContentManager?.location(tlm.documentRange.location, offsetBy: min(range.location + 1, docLength)),
                    let settleRange = NSTextRange(location: tlm.documentRange.location, end: end) {
-                    tlm.ensureLayout(for: settleRange)
+                    // O(doc-start → caret) real layout — the prime suspect
+                    // whenever `+reveal` dominates a frame.
+                    PerfTrace.accumulate("revealSettle") { tlm.ensureLayout(for: settleRange) }
                 }
                 revealRect = caretSegmentRect(fallback: revealRect)
                 frame = revealRect.offsetBy(dx: 0, dy: self.frame.origin.y)

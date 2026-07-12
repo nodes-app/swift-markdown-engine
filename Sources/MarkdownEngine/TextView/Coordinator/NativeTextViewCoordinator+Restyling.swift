@@ -180,6 +180,7 @@ extension NativeTextViewCoordinator {
         }
 
         let tokens = parseState.tokens(for: text, edit: edit)
+        let tClassify = DispatchTime.now().uptimeNanoseconds
         var codeTokens: [MarkdownToken] = []
         var latexTokens: [MarkdownToken] = []
         var blockLatexTokens: [MarkdownToken] = []
@@ -247,6 +248,10 @@ extension NativeTextViewCoordinator {
         cachedParsedLength = length
         cachedParseGeneration = parseGeneration
         cachedParsedDocument = parsed
+        PerfTrace.note {
+            let ms = Double(DispatchTime.now().uptimeNanoseconds - tClassify) / 1_000_000
+            return "classify=\(String(format: "%.2f", ms))ms #tokens=\(tokens.count)"
+        }
         return parsed
     }
 

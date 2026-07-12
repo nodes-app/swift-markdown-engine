@@ -338,8 +338,10 @@ extension NativeTextViewCoordinator {
         let blockLatexTokens = parsed.blockLatexTokens
 
         let prevActive = activeTokenIndices
-        activeTokenIndices = activeTokenIndices(parsed: parsed, selection: selRange, in: nsText, suppressed: !tv.isEditable)
-        filterImageEmbedActiveTokens(parsed: parsed, text: nsText, selectionLocation: selRange.location)
+        PerfTrace.measure("selActive") {
+            activeTokenIndices = activeTokenIndices(parsed: parsed, selection: selRange, in: nsText, suppressed: !tv.isEditable)
+            filterImageEmbedActiveTokens(parsed: parsed, text: nsText, selectionLocation: selRange.location)
+        }
 
         // Snap-back: when the caret LEFT a wiki/image token, re-sync its displayed name to the live target name.
         if selRange.length == 0,
@@ -377,13 +379,15 @@ extension NativeTextViewCoordinator {
             }
         }
 
-        updateAutocorrectSettings(
-            tv,
-            caretLocation: selLoc,
-            codeTokens: codeTokens,
-            latexTokens: latexTokens,
-            allTokens: tokens
-        )
+        PerfTrace.measure("selAuto") {
+            updateAutocorrectSettings(
+                tv,
+                caretLocation: selLoc,
+                codeTokens: codeTokens,
+                latexTokens: latexTokens,
+                allTokens: tokens
+            )
+        }
         let caretLoc = selRange.location
         let paragraphRange = nsText.paragraphRange(for: NSRange(location: caretLoc, length: 0))
 
@@ -486,12 +490,14 @@ extension NativeTextViewCoordinator {
         // Text unchanged past this point (the snap-back branch returned above);
         // only the selection may have moved.
         let selLocation = tv.selectedRange().location
-        let inlineContext = inlineTokenContext(
-            at: selLocation,
-            parsed: parsed,
-            codeTokens: codeTokens,
-            text: nsText
-        )
+        let inlineContext = PerfTrace.measure("selCtx") {
+            inlineTokenContext(
+                at: selLocation,
+                parsed: parsed,
+                codeTokens: codeTokens,
+                text: nsText
+            )
+        }
         let isInsideImageEmbed = {
             guard case .imageEmbed = inlineContext else { return false }
             return true

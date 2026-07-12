@@ -36,6 +36,10 @@ enum PerfTrace {
     private static var docLength = 0
     private static var phases: [(String, Double)] = []
     private static var notes: [String] = []
+    /// Summed costs for code that runs MANY times per frame or from inside
+    /// AppKit callbacks (caret reveal, spell-checker callbacks) — printed as
+    /// `+label=…` after the sequential phases.
+    private static var accumulated: [(String, Double)] = []
 
     private static func nowMs() -> Double {
         Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000
@@ -56,7 +60,26 @@ enum PerfTrace {
         active = true
         phases.removeAll(keepingCapacity: true)
         notes.removeAll(keepingCapacity: true)
+        accumulated.removeAll(keepingCapacity: true)
         frameStart = now
+    }
+
+    /// Like `measure`, but SUMS repeated calls under one label instead of
+    /// appending a phase per call — for work triggered from inside AppKit
+    /// (caret reveal, spell-checker callbacks) that can fire several times
+    /// per keystroke and would otherwise stay invisible in the frame.
+    @discardableResult
+    static func accumulate<T>(_ label: String, _ body: () -> T) -> T {
+        guard enabled, active else { return body() }
+        let t0 = nowMs()
+        let result = body()
+        let dt = nowMs() - t0
+        if let i = accumulated.firstIndex(where: { $0.0 == label }) {
+            accumulated[i].1 += dt
+        } else {
+            accumulated.append((label, dt))
+        }
+        return result
     }
 
     /// Time one sequential top-level phase of the current frame.
@@ -77,12 +100,18 @@ enum PerfTrace {
     }
 
     /// Close the frame and print total + per-phase breakdown + notes.
+    /// `other` = total − Σ(phases + accumulated): time inside the frame that
+    /// no span covers (AppKit edit processing, layout, unmeasured code).
     static func end() {
         guard enabled, active else { return }
         active = false
         let total = Double(DispatchTime.now().uptimeNanoseconds - frameStart) / 1_000_000
-        let breakdown = phases.map { String(format: "%@=%.2f", $0.0, $0.1) }.joined(separator: " ")
-        print(String(format: "⌨️ PERF doc=%dch total=%.2fms | %@", docLength, total, breakdown))
+        var breakdown = phases.map { String(format: "%@=%.2f", $0.0, $0.1) }.joined(separator: " ")
+        if !accumulated.isEmpty {
+            breakdown += " " + accumulated.map { String(format: "+%@=%.2f", $0.0, $0.1) }.joined(separator: " ")
+        }
+        let covered = phases.reduce(0) { $0 + $1.1 } + accumulated.reduce(0) { $0 + $1.1 }
+        print(String(format: "⌨️ PERF doc=%dch total=%.2fms | %@ other=%.2f", docLength, total, breakdown, total - covered))
         for note in notes { print("    └─ \(note)") }
     }
 

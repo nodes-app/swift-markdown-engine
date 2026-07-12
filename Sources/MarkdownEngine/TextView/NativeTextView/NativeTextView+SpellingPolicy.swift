@@ -13,6 +13,13 @@ import AppKit
 
 extension NativeTextView {
     override func setSpellingState(_ value: Int, range charRange: NSRange) {
+        // Spell-checker callback — fires from AppKit, potentially several
+        // times per keystroke, and does full-document contains() scans below;
+        // accumulate so the cost shows up in the PERF frame.
+        PerfTrace.accumulate("spellCb") { applySpellingPolicy(value, range: charRange) }
+    }
+
+    private func applySpellingPolicy(_ value: Int, range charRange: NSRange) {
         let coordinator = delegate as? NativeTextViewCoordinator
         if value != 0 {
             if self.string.contains("`") {
