@@ -120,6 +120,11 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     /// means the hoisted editedRange/lengthDelta describe a single tracked
     /// edit and incremental fast paths may trust them.
     var pendingEditCount = 0
+#if DEBUG
+    /// Diagnostic: whether the last completed textDidChange ran with a
+    /// trusted single-edit descriptor (fast paths). Read by tests.
+    var debugLastEditWasTrusted: Bool? = nil
+#endif
     var pendingPreEditActiveTokenIndices: Set<Int>? = nil
     var previousCaretLocation: Int? = nil
     /// Drag-select suppressed a restyle; replayed on the next non-drag selection change.

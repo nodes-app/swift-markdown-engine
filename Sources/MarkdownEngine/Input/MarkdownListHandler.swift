@@ -17,7 +17,15 @@ struct MarkdownLists {
         let len = min(range.length, max(0, maxLen))
         let safeRange = NSRange(location: loc, length: len)
 
-        if let coord = textView.delegate as? NativeTextViewWrapper.Coordinator { coord.isProgrammaticEdit = true }
+        if let coord = textView.delegate as? NativeTextViewWrapper.Coordinator {
+            coord.isProgrammaticEdit = true
+            // This edit REPLACES a suppressed keystroke that never applied.
+            // Dropping its pending count lets the shouldChangeText below
+            // re-register as the cycle's single tracked edit, so textDidChange
+            // keeps the trusted fast paths (the descriptor is refreshed for
+            // every proposed edit and describes THIS transition exactly).
+            coord.pendingEditCount = 0
+        }
         defer {
             if let coord = textView.delegate as? NativeTextViewWrapper.Coordinator { coord.isProgrammaticEdit = false }
         }

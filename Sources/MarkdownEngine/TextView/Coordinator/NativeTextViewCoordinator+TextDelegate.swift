@@ -121,6 +121,9 @@ extension NativeTextViewCoordinator {
         // substitutions, IME commits, WT batches) distrusts the fast paths.
         let singleTrackedEdit = pendingEditCount == 1
         pendingEditCount = 0
+#if DEBUG
+        debugLastEditWasTrusted = singleTrackedEdit
+#endif
         let lengthDelta = previousDisplayLength >= 0 ? fullLength - previousDisplayLength : Int.min
         previousDisplayLength = fullLength
 

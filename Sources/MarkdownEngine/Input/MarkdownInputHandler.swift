@@ -27,6 +27,10 @@ enum MarkdownInputHandler {
     private static func insertTextProgrammatically(_ textView: NSTextView, text: String, at range: NSRange, cursorAfter: Int) {
         if let coord = textView.delegate as? NativeTextViewWrapper.Coordinator {
             coord.isProgrammaticEdit = true
+            // Replaces a suppressed keystroke that never applied — reset its
+            // pending count so this edit registers as the cycle's single
+            // tracked edit and textDidChange keeps the trusted fast paths.
+            coord.pendingEditCount = 0
         }
         textView.insertText(text, replacementRange: range)
         if let coord = textView.delegate as? NativeTextViewWrapper.Coordinator {
