@@ -301,16 +301,22 @@ extension NativeTextViewCoordinator {
         if isWritingToolsActive { return }
         let selRange = tv.selectedRange()
         let currentEventType = NSApp.currentEvent?.type
+        // ONE bridge of the document text — this handler fires on every
+        // keystroke (mid-edit) and every caret move, and used to re-copy
+        // `tv.string` (O(doc) each) at a dozen separate sites below. The
+        // snap-back branch mutates the text and re-reads explicitly.
+        let docText = tv.string
+        let nsText = docText as NSString
         // Mouse-/Wake-Fokus auf Link: kein Preview, erst Navigation. Gilt für alle Nicht-Key-Events.
         if currentEventType != .keyDown,
-           selRange.location < (tv.string as NSString).length,
+           selRange.location < nsText.length,
            tv.textStorage?.attribute(.link, at: selRange.location, effectiveRange: nil) != nil {
             isImageEmbedActive = false
             isWikiLinkActive = false
             onInlineSelectionChange?(nil)
             return
         }
-        PerfTrace.measure("selStates") { updateSelectionStates(tv) }
+        PerfTrace.measure("selStates") { updateSelectionStates(tv, nsText: nsText) }
         let selLoc = selRange.location
 
         // Selection change fires BEFORE textDidChange mid-edit: hand the
@@ -319,18 +325,17 @@ extension NativeTextViewCoordinator {
         let selectionEdit: ParseEditDescriptor? = {
             guard let pending = pendingEditedRange, pendingEditCount == 1,
                   previousDisplayLength >= 0 else { return nil }
-            let delta = (tv.string as NSString).length - previousDisplayLength
+            let delta = nsText.length - previousDisplayLength
             return ParseEditDescriptor(editedRange: pending, delta: delta)
         }()
         // The keystroke's FIRST post-edit parse happens here, not in
         // textDidChange (whose "parse" span then O(1)-hits) — measure it so
         // the printed frame stops understating the real parse cost.
-        let parsed = PerfTrace.measure("selParse") { parsedDocument(for: tv.string, edit: selectionEdit) }
+        let parsed = PerfTrace.measure("selParse") { parsedDocument(for: docText, edit: selectionEdit) }
         let tokens = parsed.tokens
         let codeTokens = parsed.codeTokens
         let latexTokens = parsed.latexTokens
         let blockLatexTokens = parsed.blockLatexTokens
-        let nsText = tv.string as NSString
 
         let prevActive = activeTokenIndices
         activeTokenIndices = activeTokenIndices(parsed: parsed, selection: selRange, in: nsText, suppressed: !tv.isEditable)
@@ -410,9 +415,9 @@ extension NativeTextViewCoordinator {
         // cursor-out (after editing the brackets) leaves the line stuck on
         // raw chars.
         let prevTaskSyntax = previousCaretLocation.flatMap {
-            MarkdownStyler.taskSyntaxRange(at: $0, in: tv.string)
+            MarkdownStyler.taskSyntaxRange(at: $0, in: docText)
         }
-        let currentTaskSyntax = MarkdownStyler.taskSyntaxRange(at: selLoc, in: tv.string)
+        let currentTaskSyntax = MarkdownStyler.taskSyntaxRange(at: selLoc, in: docText)
         let taskSyntaxChanged = prevTaskSyntax?.location != currentTaskSyntax?.location
             || prevTaskSyntax?.length != currentTaskSyntax?.length
         // Caret crossings in/out of a thematic-break (HR) line also need a
@@ -421,16 +426,16 @@ extension NativeTextViewCoordinator {
         // `---` / `***` / `___` line. Without this, clicking on a rendered
         // HR wouldn't reveal the source dashes for editing.
         let prevHRLine = previousCaretLocation.flatMap {
-            MarkdownStyler.hrLineRange(at: $0, in: tv.string)
+            MarkdownStyler.hrLineRange(at: $0, in: docText)
         }
-        let currentHRLine = MarkdownStyler.hrLineRange(at: selLoc, in: tv.string)
+        let currentHRLine = MarkdownStyler.hrLineRange(at: selLoc, in: docText)
         let hrLineChanged = prevHRLine?.location != currentHRLine?.location
             || prevHRLine?.length != currentHRLine?.length
         // Bullet markers: caret in/out of `- ` syntax flips glyph ↔ raw.
         let prevBulletSyntax = previousCaretLocation.flatMap {
-            MarkdownStyler.bulletSyntaxRange(at: $0, in: tv.string)
+            MarkdownStyler.bulletSyntaxRange(at: $0, in: docText)
         }
-        let currentBulletSyntax = MarkdownStyler.bulletSyntaxRange(at: selLoc, in: tv.string)
+        let currentBulletSyntax = MarkdownStyler.bulletSyntaxRange(at: selLoc, in: docText)
         let bulletSyntaxChanged = prevBulletSyntax?.location != currentBulletSyntax?.location
             || prevBulletSyntax?.length != currentBulletSyntax?.length
         // Mid-drag restyle is suppressed (revealing markers shifts the layout → drag hit-test lands short, dropping trailing chars) and replayed on release.
@@ -466,7 +471,8 @@ extension NativeTextViewCoordinator {
             }
         }
 
-        let nsString = tv.string as NSString
+        // Text unchanged past this point (the snap-back branch returned above);
+        // only the selection may have moved.
         let selLocation = tv.selectedRange().location
         let inlineContext = inlineTokenContext(
             at: selLocation,
@@ -497,14 +503,14 @@ extension NativeTextViewCoordinator {
             // no longer lives in the editor text — it sits in the `.wikiLinkID` side-channel.
             let placeholder: String
             if case .imageEmbed(let token) = inlineContext {
-                let embedName = nsString.substring(with: token.contentRange)
+                let embedName = nsText.substring(with: token.contentRange)
                 if let suffix = wikiLinkID(for: token.range), !suffix.isEmpty {
                     placeholder = "![[\(embedName)|\(suffix)]]"
                 } else {
                     placeholder = "![[\(embedName)]]"
                 }
             } else {
-                placeholder = nsString.substring(with: displayRange)
+                placeholder = nsText.substring(with: displayRange)
             }
             let storageRange = inlineContext.selectionKind == .wikiLink
                 ? storageRange(containingDisplayLocation: selLocation) ?? storageRange(forDisplayRange: displayRange)
@@ -580,11 +586,30 @@ extension NativeTextViewCoordinator {
     }
 
     public func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool {
-        let preNS = textView.string as NSString
+        // ONE bridge of the pre-edit text — every `textView.string` read is an
+        // O(doc) copy of the mutable backing store; this function used to take
+        // four of them per keystroke.
+        let preText = textView.string
+        let preNS = preText as NSString
         // Open the keystroke's PERF frame HERE: the pre-edit parse and the
         // smart-input interceptors below used to run before the frame existed
         // and were invisible in the printed totals.
         PerfTrace.begin(docLength: preNS.length)
+
+        // Pre-edit parse for the interactive path, BEFORE the generation bump:
+        // the text is still pre-edit, so this O(1)-hits the cache the previous
+        // cycle left behind. Bumping first forced parsedDocument onto its
+        // O(doc) byte-compare verify on every ordinary keystroke.
+        let outOfBounds = affectedCharRange.location > preNS.length
+            || affectedCharRange.location + affectedCharRange.length > preNS.length
+        let isUndoRedo = textView.undoManager?.isUndoing == true
+            || textView.undoManager?.isRedoing == true
+        let interactive = !isProgrammaticEdit && !isWritingToolsActive
+            && !configuration.rawSourceMode && !outOfBounds && !isUndoRedo
+        let preEditParsed = interactive
+            ? PerfTrace.measure("preParse") { parsedDocument(for: preText) }
+            : nil
+
         parseGeneration &+= 1
         // Refresh the descriptor for EVERY proposed edit — including programmatic
         // ones. A smart-input interceptor that suppresses a keystroke and performs
@@ -604,17 +629,15 @@ extension NativeTextViewCoordinator {
         if isWritingToolsActive { return true }
         // Raw mode: plain-text editing — no smart Markdown input.
         if configuration.rawSourceMode { return true }
-        let currentLen = (textView.string as NSString).length
-        let maxR = affectedCharRange.location + affectedCharRange.length
-        if affectedCharRange.location > currentLen || maxR > currentLen {
+        if outOfBounds {
             pendingPreEditActiveTokenIndices = nil
             return false
         }
-        if textView.undoManager?.isUndoing == true || textView.undoManager?.isRedoing == true {
+        if isUndoRedo {
             pendingPreEditActiveTokenIndices = nil
             return true
         }
-        let parsed = PerfTrace.measure("preParse") { parsedDocument(for: textView.string) }
+        guard let parsed = preEditParsed else { return true }
         pendingPreEditActiveTokenIndices = activeTokenIndices(
             parsed: parsed,
             selection: textView.selectedRange(),
@@ -740,8 +763,8 @@ extension NativeTextViewCoordinator {
         return (containerX - f.minX) / f.width
     }
 
-    func updateSelectionStates(_ tv: NSTextView) {
-        let nsText = tv.string as NSString
+    func updateSelectionStates(_ tv: NSTextView, nsText: NSString? = nil) {
+        let nsText = nsText ?? (tv.string as NSString)
         let selRange = tv.selectedRange()
         let bus = configuration.services.bus
         let center = NotificationCenter.default
