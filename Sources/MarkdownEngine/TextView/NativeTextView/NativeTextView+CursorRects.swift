@@ -48,14 +48,17 @@ extension NativeTextView {
         }
     }
 
-    /// True when the pointer is over a wide-table scroll overlay (mirrors the
-    /// task-checkbox suppression above; read-only mode already shows the arrow
-    /// via `applyReadOnlyCursor`).
+    /// True when the pointer is over a wide-table overlay's HORIZONTAL
+    /// SCROLLER (mirrors the task-checkbox suppression above; read-only mode
+    /// already shows the arrow via `applyReadOnlyCursor`). Only the scroller
+    /// strip is a control surface — over the rendered table image itself the
+    /// normal text cursor behavior stays.
     private func isOverWideTableOverlay(_ event: NSEvent) -> Bool {
         guard !wideTableOverlays.isEmpty else { return false }
         for (_, overlay) in wideTableOverlays where overlay.superview != nil && !overlay.isHidden {
-            let point = overlay.convert(event.locationInWindow, from: nil)
-            if overlay.bounds.contains(point) { return true }
+            guard let scroller = overlay.horizontalScroller, !scroller.isHidden else { continue }
+            let point = scroller.convert(event.locationInWindow, from: nil)
+            if scroller.bounds.contains(point) { return true }
         }
         return false
     }
