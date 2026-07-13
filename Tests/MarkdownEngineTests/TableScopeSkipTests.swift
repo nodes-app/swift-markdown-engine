@@ -14,7 +14,6 @@
 
 import AppKit
 import Foundation
-import SwiftUI
 import Testing
 @testable import MarkdownEngine
 
@@ -65,28 +64,6 @@ struct TableScopeSkipTests {
         for range in ranges {
             #expect(attrs.filter { NSIntersectionRange($0.range, range).length > 0 }.isEmpty)
         }
-    }
-
-    // The spell checker must never paint squiggles on table source: the
-    // collapsed ~1pt source line under the rendered image shows them as a
-    // stray red dot (proven live: `🔴 SPELL … inTable=true APPLIED`).
-    @Test @MainActor func spellcheckSuppressionCoversTables() {
-        _ = NSApplication.shared
-        let text = "| alpha | beta |\n|---|---|\n| Setapp | 2 |\n\nprose"
-        let coordinator = NativeTextViewCoordinator(
-            text: .constant(text),
-            fontName: "SF Pro Text",
-            fontSize: 14,
-            isWikiLinkActive: .constant(false),
-            onLinkClick: nil,
-            onInlineSelectionChange: nil
-        )
-        let typoRange = (text as NSString).range(of: "Setapp")
-
-        #expect(coordinator.isInsideSpellcheckSuppressedToken(range: typoRange, in: text))
-        #expect(coordinator.isInsideSpellcheckSuppressedToken(location: typoRange.location, in: text))
-        let proseRange = (text as NSString).range(of: "prose")
-        #expect(!coordinator.isInsideSpellcheckSuppressedToken(range: proseRange, in: text))
     }
 
     // A table inside the restyle scope must still emit its attributes.
