@@ -132,17 +132,13 @@ extension MarkdownStyler {
 
     /// Returns the rendered image for `source`, from cache when possible.
     /// `rendered` is true only when a fresh render actually happened.
-    /// `availableWidth` caps the table's width (cells wrap onto extra lines);
-    /// it is part of the cache key because the layout depends on it.
     static func tableImage(
         for source: String,
         parsed: ParsedTable,
         ctx: StylingContext,
-        appearance: NSAppearance,
-        availableWidth: CGFloat
+        appearance: NSAppearance
     ) -> (image: NSImage, rendered: Bool) {
-        let widthKey = Int(availableWidth.rounded())
-        let key = (themeKeyPrefix(ctx: ctx, appearance: appearance) + "|w\(widthKey)|" + source) as NSString
+        let key = (themeKeyPrefix(ctx: ctx, appearance: appearance) + "|" + source) as NSString
         if let cached = tableImageCache.object(forKey: key) {
             return (cached, false)
         }
@@ -152,8 +148,7 @@ extension MarkdownStyler {
             theme: ctx.configuration.theme,
             codeBackgroundColor: ctx.codeBackgroundColor,
             latex: ctx.services.latex,
-            appearance: appearance,
-            availableWidth: availableWidth
+            appearance: appearance
         )
         tableImageCache.setObject(image, forKey: key)
         return (image, true)
@@ -230,20 +225,16 @@ extension MarkdownStyler {
             // See renderTable: resolve table colors under the text view's real appearance.
             let renderAppearance = ctx.layoutBridge?.firstTextContainer?.textView?.effectiveAppearance
                 ?? NSApp.effectiveAppearance
-            // Cells wrap to the container width (Obsidian-style); the render
-            // only exceeds it when the per-column floors genuinely don't fit,
-            // in which case the scrollable overlay below takes over.
-            let containerWidth = effectiveContainerWidth(for: ctx)
             let (image, rendered) = tableImage(
                 for: source,
                 parsed: parsed,
                 ctx: ctx,
-                appearance: renderAppearance,
-                availableWidth: containerWidth
+                appearance: renderAppearance
             )
             if rendered { renderedCount += 1 }
             let imageBounds = CGRect(x: 0, y: 0, width: image.size.width, height: image.size.height)
             // Wide tables → scrollable mode (NSScrollView overlay); narrow → collapsed.
+            let containerWidth = effectiveContainerWidth(for: ctx)
             let isWide = image.size.width > containerWidth + 0.5
             let computedSourceID = stableTableSourceID(
                 for: source,
@@ -444,8 +435,7 @@ extension MarkdownStyler {
         theme: MarkdownEditorTheme,
         codeBackgroundColor: NSColor,
         latex: any LatexRenderer,
-        appearance: NSAppearance,
-        availableWidth: CGFloat
+        appearance: NSAppearance
     ) -> NSImage {
         let columnCount = table.alignments.count
         let cellHPadding: CGFloat = 12
@@ -480,8 +470,11 @@ extension MarkdownStyler {
         }
 
         var columnWidths = [CGFloat](repeating: minColumnContentWidth, count: columnCount)
+        var maxCellHeight: CGFloat = baseLineHeight
         func considerCell(_ cell: NSAttributedString, col: Int) {
-            columnWidths[col] = max(columnWidths[col], ceil(cell.size().width))
+            let size = cell.size()
+            columnWidths[col] = max(columnWidths[col], ceil(size.width))
+            maxCellHeight = max(maxCellHeight, ceil(size.height))
         }
         for (i, cell) in headerCells.enumerated() where i < columnCount {
             considerCell(cell, col: i)
@@ -492,49 +485,13 @@ extension MarkdownStyler {
             }
         }
 
-        // Obsidian-style layout: when the natural column widths exceed the
-        // available container width, columns share the available width
-        // proportionally (each floored at a few ems, never above its natural
-        // width) and cells WRAP onto extra lines instead of growing the table
-        // sideways. If even the floors don't fit (many-column monsters), the
-        // table stays wider than the container and the horizontal-scroll
-        // overlay takes over as before.
-        let chrome = CGFloat(columnCount) * 2 * cellHPadding
-            + CGFloat(columnCount + 1) * borderWidth
-        let contentAvailable = availableWidth - chrome
-        let naturalContent = columnWidths.reduce(0, +)
-        if contentAvailable > 0, naturalContent > contentAvailable {
-            let wrapFloor = max(minColumnContentWidth, baseFont.pointSize * 3.5)
-            let scale = contentAvailable / naturalContent
-            columnWidths = columnWidths.map { natural in
-                max(min(natural, wrapFloor), (natural * scale).rounded(.down))
-            }
-        }
-
-        // Per-row heights: each row is as tall as its tallest (wrapped) cell.
-        func cellHeight(_ cell: NSAttributedString, col: Int) -> CGFloat {
-            let bounds = cell.boundingRect(
-                with: NSSize(width: columnWidths[col], height: .greatestFiniteMagnitude),
-                options: [.usesLineFragmentOrigin]
-            )
-            return ceil(bounds.height)
-        }
+        let lineHeight = max(baseLineHeight, maxCellHeight)
         let rowCount = 1 + table.rows.count // header + body rows
-        var rowContentHeights = [CGFloat](repeating: baseLineHeight, count: rowCount)
-        for (i, cell) in headerCells.enumerated() where i < columnCount {
-            rowContentHeights[0] = max(rowContentHeights[0], cellHeight(cell, col: i))
-        }
-        for (rowIdx, row) in bodyCells.enumerated() {
-            for (i, cell) in row.enumerated() where i < columnCount {
-                rowContentHeights[rowIdx + 1] = max(rowContentHeights[rowIdx + 1], cellHeight(cell, col: i))
-            }
-        }
-
         let totalWidth = columnWidths.reduce(0, +)
             + CGFloat(columnCount) * 2 * cellHPadding
             + CGFloat(columnCount + 1) * borderWidth
-        let totalHeight = rowContentHeights.reduce(0) { $0 + $1 + 2 * cellVPadding }
-            + CGFloat(rowCount + 1) * borderWidth
+        let rowHeight = lineHeight + 2 * cellVPadding
+        let totalHeight = CGFloat(rowCount) * rowHeight + CGFloat(rowCount + 1) * borderWidth
 
         let size = NSSize(width: totalWidth, height: totalHeight)
 
@@ -547,7 +504,7 @@ extension MarkdownStyler {
         var rowTop = [CGFloat](repeating: 0, count: rowCount + 1)
         rowTop[0] = borderWidth
         for i in 0..<rowCount {
-            rowTop[i + 1] = rowTop[i] + rowContentHeights[i] + 2 * cellVPadding + borderWidth
+            rowTop[i + 1] = rowTop[i] + rowHeight + borderWidth
         }
 
         let alignments = table.alignments
@@ -561,7 +518,7 @@ extension MarkdownStyler {
                 x: borderWidth,
                 y: borderWidth,
                 width: size.width - 2 * borderWidth,
-                height: rowContentHeights[0] + 2 * cellVPadding
+                height: rowHeight
             )).fill()
 
             // Outer border
@@ -594,27 +551,27 @@ extension MarkdownStyler {
                 guard col < columnCount else { return }
                 let cellLeft = columnLeft[col] + cellHPadding
                 let cellRight = columnLeft[col + 1] - borderWidth - cellHPadding
-                let cellContentWidth = cellRight - cellLeft
-                // Align via NSParagraphStyle; word-wrap fills the row height
-                // measured above (long words fall back to character breaks).
+                let availableWidth = cellRight - cellLeft
+                // Align via NSParagraphStyle in the content rect so the text engine handles clipping.
                 let paragraph = NSMutableParagraphStyle()
                 switch alignments[col] {
                 case .left:   paragraph.alignment = .left
                 case .center: paragraph.alignment = .center
                 case .right:  paragraph.alignment = .right
                 }
-                paragraph.lineBreakMode = .byWordWrapping
+                paragraph.lineBreakMode = .byClipping
                 let aligned = NSMutableAttributedString(attributedString: s)
                 aligned.addAttribute(
                     .paragraphStyle,
                     value: paragraph,
                     range: NSRange(location: 0, length: aligned.length)
                 )
+                let cellInnerTop = rowTop[row] + max(0, (rowHeight - lineHeight) / 2)
                 let drawRect = NSRect(
                     x: cellLeft,
-                    y: rowTop[row] + cellVPadding,
-                    width: cellContentWidth,
-                    height: rowContentHeights[row]
+                    y: cellInnerTop,
+                    width: availableWidth,
+                    height: lineHeight
                 )
                 aligned.draw(with: drawRect, options: [.usesLineFragmentOrigin], context: nil)
             }
