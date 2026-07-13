@@ -236,7 +236,7 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
             height: snappedMaxY - snappedY
         )
 
-        let selectionRects = selectionRectsInDrawCoordinates(drawPoint: point, snappedY: snappedY, snappedMaxY: snappedMaxY)
+        let selectionRects = selectionRectsInDrawCoordinates(drawPoint: point, scale: scale)
         color.setFill()
         if selectionRects.isEmpty {
             NSBezierPath(rect: bgRect).fill()
@@ -253,11 +253,10 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
 
     /// Returns active text-selection rectangles intersecting this fragment, in
     /// the same draw-relative coordinate system used by `drawCodeBlockBackground`.
-    private func selectionRectsInDrawCoordinates(drawPoint: CGPoint, snappedY: CGFloat, snappedMaxY: CGFloat) -> [CGRect] {
+    private func selectionRectsInDrawCoordinates(drawPoint: CGPoint, scale: CGFloat) -> [CGRect] {
         guard let tlm = textLayoutManager else { return [] }
         var rects: [CGRect] = []
 
-        let dx = drawPoint.x - layoutFragmentFrame.origin.x
         let myRange = self.rangeInElement
 
         for selection in tlm.textSelections {
@@ -270,20 +269,35 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
                       let intersection = NSTextRange(location: interStart, end: interEnd) else { continue }
 
                 tlm.enumerateTextSegments(in: intersection, type: .selection, options: []) { _, segFrame, _, _ in
-                    // Expand vertically to match the bgRect's snapped span so the
-                    // even-odd cut-out is geometrically congruent with the fill.
-                    let drawRect = CGRect(
-                        x: segFrame.origin.x + dx,
-                        y: snappedY,
-                        width: segFrame.width,
-                        height: snappedMaxY - snappedY
-                    )
-                    rects.append(drawRect)
+                    rects.append(Self.selectionDrawRect(
+                        segmentFrame: segFrame,
+                        drawPoint: drawPoint,
+                        fragmentFrame: layoutFragmentFrame,
+                        scale: scale
+                    ))
                     return true
                 }
             }
         }
         return rects
+    }
+
+    static func selectionDrawRect(
+        segmentFrame: CGRect,
+        drawPoint: CGPoint,
+        fragmentFrame: CGRect,
+        scale: CGFloat
+    ) -> CGRect {
+        let dx = drawPoint.x - fragmentFrame.minX
+        let dy = drawPoint.y - fragmentFrame.minY
+        let minY = floor((segmentFrame.minY + dy) * scale) / scale
+        let maxY = ceil((segmentFrame.maxY + dy) * scale) / scale
+        return CGRect(
+            x: segmentFrame.minX + dx,
+            y: minY,
+            width: segmentFrame.width,
+            height: maxY - minY
+        )
     }
 
     private func isCodeBlockBackgroundColor(_ color: NSColor) -> Bool {
