@@ -62,6 +62,33 @@ struct TableWrappingTests {
         #expect(narrowRender.size.height > wideRender.size.height + 10)
     }
 
+    // W3C auto layout: columns never shrink below their longest unbreakable
+    // word — when even those minimums don't fit, the table stays WIDER than
+    // the container and the horizontal-scroll overlay takes over.
+    @Test func manyColumnsFallBackToHorizontalScroll() throws {
+        let source = """
+        | Rechtsformvergleich | Gründungskostenaufstellung | Haftungsbeschränkung | Steuerberaterkosten | Handelsregistereintrag | Stammkapitalanforderung |
+        |---|---|---|---|---|---|
+        | Einzelunternehmen | Gewerbeanmeldung | unbeschränkt | optional | nein | keines |
+        """
+        let image = try render(source, availableWidth: 500)
+        // The longest-word minimums of six columns can't fit in 500pt — the
+        // table must stay wider and scroll horizontally, not crush the columns.
+        #expect(image.size.width > 500.5)
+    }
+
+    @Test func columnsNeverShrinkBelowTheLongestWord() throws {
+        let source = """
+        | A | B |
+        |---|---|
+        | Donaudampfschifffahrtsgesellschaftskapitän | x |
+        """
+        let image = try render(source, availableWidth: 200)
+        // The unbreakable word is wider than 200 — the table must exceed the
+        // available width rather than break mid-word.
+        #expect(image.size.width > 200.5)
+    }
+
     @Test func smallTableKeepsItsNaturalWidth() throws {
         let source = "| a | b |\n|---|---|\n| 1 | 2 |"
         let image = try render(source, availableWidth: 650)

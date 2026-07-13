@@ -107,11 +107,33 @@ private var sampleMarkdown: String {
     [
         markdownHeader,
         inlineFormattingSection,
+        tableSection,
         latexSection,
         codeSection,
         markdownFooter,
     ].joined(separator: "\n\n")
 }
+
+/// Table layout demo: the first table's cells WRAP to the available width
+/// (CSS auto-layout style); the second has so many columns that even the
+/// longest-word minimums don't fit — it stays wide and scrolls horizontally.
+private let tableSection = """
+## Tables
+
+Cells wrap to the available width:
+
+| Rechtsform | Gründungskosten | Laufende Kosten/Jahr |
+|---|---|---|
+| Einzelunternehmen (Kleingewerbe) | 20–60€ (Gewerbeanmeldung) | ~0€ (nur Steuerberater optional, 300–800€) |
+| GbR (mit zwei Gesellschaftern) | 20–60€ x Anzahl Gesellschafter (jeder meldet einzeln an) | Gesellschaftervertrag empfohlen (Anwalt: 500–1.500€ einmalig) |
+| UG (haftungsbeschränkt) | Notar + Handelsregister: ~300–500€ (Musterprotokoll) bis 1.000€+ | IHK-Beitrag (~150–400€), Steuerberater fast Pflicht |
+
+Too many columns → horizontal scroll instead of crushed cells:
+
+| Rechtsformvergleich | Gründungskostenaufstellung | Haftungsbeschränkung | Steuerberaterkosten | Handelsregistereintrag | Stammkapitalanforderung |
+|---|---|---|---|---|---|
+| Einzelunternehmen | Gewerbeanmeldung | unbeschränkt | optional | nein | keines |
+"""
 
 private let markdownHeader = """
 # MarkdownEngine

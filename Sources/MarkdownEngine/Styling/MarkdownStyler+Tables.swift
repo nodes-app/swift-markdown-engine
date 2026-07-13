@@ -479,9 +479,39 @@ extension MarkdownStyler {
             }
         }
 
-        var columnWidths = [CGFloat](repeating: minColumnContentWidth, count: columnCount)
+        // CSS automatic table layout (W3C 17.5.2.2), which is what browser-based
+        // editors like Obsidian get for free: each column has a MAXIMUM width
+        // (content on one line) and a MINIMUM width (MCW — content may wrap but
+        // must not overflow, i.e. the widest unbreakable whitespace-separated
+        // segment). Measured segment-by-segment: a too-narrow boundingRect
+        // would emergency-break INSIDE words and understate the minimum.
+        func widestUnbreakableSegment(_ cell: NSAttributedString) -> CGFloat {
+            let str = cell.string as NSString
+            let whitespace = CharacterSet.whitespacesAndNewlines
+            var widest: CGFloat = 0
+            var segStart = -1
+            for i in 0...str.length {
+                let isBreak = i == str.length || {
+                    guard let scalar = Unicode.Scalar(str.character(at: i)) else { return false }
+                    return whitespace.contains(scalar)
+                }()
+                if isBreak {
+                    if segStart >= 0 {
+                        let segment = cell.attributedSubstring(from: NSRange(location: segStart, length: i - segStart))
+                        widest = max(widest, ceil(segment.size().width))
+                        segStart = -1
+                    }
+                } else if segStart < 0 {
+                    segStart = i
+                }
+            }
+            return widest
+        }
+        var maxWidths = [CGFloat](repeating: minColumnContentWidth, count: columnCount)
+        var minWidths = [CGFloat](repeating: minColumnContentWidth, count: columnCount)
         func considerCell(_ cell: NSAttributedString, col: Int) {
-            columnWidths[col] = max(columnWidths[col], ceil(cell.size().width))
+            maxWidths[col] = max(maxWidths[col], ceil(cell.size().width))
+            minWidths[col] = max(minWidths[col], widestUnbreakableSegment(cell))
         }
         for (i, cell) in headerCells.enumerated() where i < columnCount {
             considerCell(cell, col: i)
@@ -492,22 +522,29 @@ extension MarkdownStyler {
             }
         }
 
-        // Obsidian-style layout: when the natural column widths exceed the
-        // available container width, columns share the available width
-        // proportionally (each floored at a few ems, never above its natural
-        // width) and cells WRAP onto extra lines instead of growing the table
-        // sideways. If even the floors don't fit (many-column monsters), the
-        // table stays wider than the container and the horizontal-scroll
-        // overlay takes over as before.
+        // Distribute the available width:
+        // - everything fits on one line → natural (maximum) widths;
+        // - too wide → shrink to the available width, but never below a
+        //   column's longest unbreakable word; the slack above the minimums is
+        //   distributed proportionally to each column's (max − min) stretch;
+        // - even the minimums don't fit (many-column tables) → columns stay at
+        //   their minimums, the table renders wider than the container, and
+        //   the horizontal-scroll overlay takes over as before.
         let chrome = CGFloat(columnCount) * 2 * cellHPadding
             + CGFloat(columnCount + 1) * borderWidth
         let contentAvailable = availableWidth - chrome
-        let naturalContent = columnWidths.reduce(0, +)
-        if contentAvailable > 0, naturalContent > contentAvailable {
-            let wrapFloor = max(minColumnContentWidth, baseFont.pointSize * 3.5)
-            let scale = contentAvailable / naturalContent
-            columnWidths = columnWidths.map { natural in
-                max(min(natural, wrapFloor), (natural * scale).rounded(.down))
+        let sumMax = maxWidths.reduce(0, +)
+        let sumMin = minWidths.reduce(0, +)
+        var columnWidths = maxWidths
+        if contentAvailable > 0, sumMax > contentAvailable {
+            if sumMin >= contentAvailable {
+                columnWidths = minWidths
+            } else {
+                let extra = contentAvailable - sumMin
+                let totalStretch = sumMax - sumMin
+                columnWidths = zip(minWidths, maxWidths).map { mn, mx in
+                    mn + ((mx - mn) / totalStretch * extra).rounded(.down)
+                }
             }
         }
 
