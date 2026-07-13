@@ -39,8 +39,8 @@ struct TableImageCacheTests {
         let ctx = makeContext(for: source)
         let aqua = try #require(NSAppearance(named: .aqua))
 
-        let first = MarkdownStyler.tableImage(for: source, parsed: parsed, ctx: ctx, appearance: aqua)
-        let second = MarkdownStyler.tableImage(for: source, parsed: parsed, ctx: ctx, appearance: aqua)
+        let first = MarkdownStyler.tableImage(for: source, parsed: parsed, ctx: ctx, appearance: aqua, availableWidth: 2000)
+        let second = MarkdownStyler.tableImage(for: source, parsed: parsed, ctx: ctx, appearance: aqua, availableWidth: 2000)
 
         #expect(first.rendered)
         #expect(!second.rendered)
@@ -54,8 +54,8 @@ struct TableImageCacheTests {
         let aqua = try #require(NSAppearance(named: .aqua))
         let dark = try #require(NSAppearance(named: .darkAqua))
 
-        _ = MarkdownStyler.tableImage(for: source, parsed: parsed, ctx: ctx, appearance: aqua)
-        let darkResult = MarkdownStyler.tableImage(for: source, parsed: parsed, ctx: ctx, appearance: dark)
+        _ = MarkdownStyler.tableImage(for: source, parsed: parsed, ctx: ctx, appearance: aqua, availableWidth: 2000)
+        let darkResult = MarkdownStyler.tableImage(for: source, parsed: parsed, ctx: ctx, appearance: dark, availableWidth: 2000)
 
         #expect(darkResult.rendered)
     }
@@ -70,10 +70,10 @@ struct TableImageCacheTests {
         var themed = MarkdownEditorConfiguration.default
         themed.theme.mutedText = .systemPink
 
-        _ = MarkdownStyler.tableImage(for: source, parsed: parsed, ctx: makeContext(for: source), appearance: aqua)
+        _ = MarkdownStyler.tableImage(for: source, parsed: parsed, ctx: makeContext(for: source), appearance: aqua, availableWidth: 2000)
         let repainted = MarkdownStyler.tableImage(
             for: source, parsed: parsed,
-            ctx: makeContext(for: source, configuration: themed), appearance: aqua
+            ctx: makeContext(for: source, configuration: themed), appearance: aqua, availableWidth: 2000
         )
 
         #expect(repainted.rendered)
@@ -93,11 +93,11 @@ struct TableImageCacheTests {
 
         _ = MarkdownStyler.tableImage(
             for: source, parsed: parsed,
-            ctx: makeContext(for: source, configuration: blueBody), appearance: aqua
+            ctx: makeContext(for: source, configuration: blueBody), appearance: aqua, availableWidth: 2000
         )
         let redRender = MarkdownStyler.tableImage(
             for: source, parsed: parsed,
-            ctx: makeContext(for: source, configuration: redBody), appearance: aqua
+            ctx: makeContext(for: source, configuration: redBody), appearance: aqua, availableWidth: 2000
         )
 
         #expect(redRender.rendered)
