@@ -464,6 +464,13 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             let coordinator = context.coordinator
             DispatchQueue.main.async { coordinator.isWikiLinkActive = false }
         }
+        // Sync the input-behavior toggles (auto-close pairs, list helpers).
+        // The keystroke handlers read textView.configuration live, but only
+        // makeNSView used to write it — an embedder settings change was inert
+        // until the editor was rebuilt. Plain assignment: a tiny value struct,
+        // and no rebuild is needed for it to take effect.
+        textView.configuration.lists = configuration.lists
+        context.coordinator.configuration.lists = configuration.lists
         // Reading column centers by POSITION (container subview), so the text inset is constant.
         let desiredTextInset = NSSize(
             width: configuration.textInsets.horizontal,
