@@ -142,7 +142,11 @@ extension MarkdownStyler {
         availableWidth: CGFloat
     ) -> (image: NSImage, rendered: Bool) {
         let widthKey = Int(availableWidth.rounded())
-        let key = (themeKeyPrefix(ctx: ctx, appearance: appearance) + "|w\(widthKey)|" + source) as NSString
+        // The extension registry is part of the key: `==x==` in a cell renders
+        // highlighted under one config and literal under another — those must
+        // never share a cached image.
+        let extensionKey = ctx.configuration.extensionRegistry.fingerprint
+        let key = (themeKeyPrefix(ctx: ctx, appearance: appearance) + "|x\(extensionKey)|w\(widthKey)|" + source) as NSString
         if let cached = tableImageCache.object(forKey: key) {
             return (cached, false)
         }
@@ -153,7 +157,8 @@ extension MarkdownStyler {
             codeBackgroundColor: ctx.codeBackgroundColor,
             latex: ctx.services.latex,
             appearance: appearance,
-            availableWidth: availableWidth
+            availableWidth: availableWidth,
+            extensions: ctx.configuration.extensions
         )
         tableImageCache.setObject(image, forKey: key)
         return (image, true)
@@ -336,7 +341,8 @@ extension MarkdownStyler {
         header: Bool,
         theme: MarkdownEditorTheme,
         codeBackgroundColor: NSColor,
-        latex: any LatexRenderer
+        latex: any LatexRenderer,
+        extensions: [any MarkdownExtension] = []
     ) -> NSAttributedString {
         let descriptor = baseFont.fontDescriptor
         let pointSize = baseFont.pointSize
@@ -345,10 +351,14 @@ extension MarkdownStyler {
             ? (NSFont(descriptor: descriptor.withSymbolicTraits(.bold), size: pointSize) ?? baseFont)
             : baseFont
         let out = NSMutableAttributedString()
+        var extensionsByID: [String: any MarkdownExtension] = [:]
+        for ext in extensions { extensionsByID[ext.id] = ext }
         appendInlineCell(
-            InlineParser.parse(raw), in: raw as NSString, into: out,
+            InlineParser.parse(raw, registry: ExtensionRegistry(extensions: extensions)),
+            in: raw as NSString, into: out,
             font: startFont, baseDescriptor: descriptor, pointSize: pointSize,
-            codeFont: codeFont, theme: theme, codeBackgroundColor: codeBackgroundColor, latex: latex
+            codeFont: codeFont, theme: theme, codeBackgroundColor: codeBackgroundColor, latex: latex,
+            extensionsByID: extensionsByID
         )
         return out
     }
@@ -378,12 +388,14 @@ extension MarkdownStyler {
         codeFont: NSFont,
         theme: MarkdownEditorTheme,
         codeBackgroundColor: NSColor,
-        latex: any LatexRenderer
+        latex: any LatexRenderer,
+        extensionsByID: [String: any MarkdownExtension] = [:]
     ) {
         func recurse(_ children: [InlineNode], _ f: NSFont) {
             appendInlineCell(children, in: ns, into: out, font: f, baseDescriptor: baseDescriptor,
                              pointSize: pointSize, codeFont: codeFont, theme: theme,
-                             codeBackgroundColor: codeBackgroundColor, latex: latex)
+                             codeBackgroundColor: codeBackgroundColor, latex: latex,
+                             extensionsByID: extensionsByID)
         }
         func appendPlain(_ range: NSRange, _ f: NSFont) {
             out.append(NSAttributedString(string: ns.substring(with: range),
@@ -397,21 +409,16 @@ extension MarkdownStyler {
                 appendPlain(character, font)
             case .emphasis(let kind, _, _, let children):
                 recurse(children, composeEmphasis(font, kind, baseDescriptor: baseDescriptor, pointSize: pointSize))
-            case .strikethrough(_, _, let children):
+            case .ext(let extNode):
                 let start = out.length
-                recurse(children, font)
-                if out.length > start {
-                    out.addAttributes([
-                        .strikethroughStyle: NSUnderlineStyle.single.rawValue,
-                        .strikethroughColor: theme.bodyText
-                    ], range: NSRange(location: start, length: out.length - start))
+                if extNode.children.isEmpty {
+                    appendPlain(extNode.contentRange, font)
+                } else {
+                    recurse(extNode.children, font)
                 }
-            case .highlight(_, _, let children):
-                let start = out.length
-                recurse(children, font)
-                if out.length > start {
-                    out.addAttribute(.backgroundColor, value: theme.highlightColor,
-                                     range: NSRange(location: start, length: out.length - start))
+                if out.length > start, let ext = extensionsByID[extNode.extensionID] {
+                    out.addAttributes(ext.contentAttributes(theme: theme),
+                                      range: NSRange(location: start, length: out.length - start))
                 }
             case .code(_, let content):
                 out.append(NSAttributedString(string: ns.substring(with: content), attributes: [
@@ -445,7 +452,8 @@ extension MarkdownStyler {
         codeBackgroundColor: NSColor,
         latex: any LatexRenderer,
         appearance: NSAppearance,
-        availableWidth: CGFloat
+        availableWidth: CGFloat,
+        extensions: [any MarkdownExtension] = []
     ) -> NSImage {
         let columnCount = table.alignments.count
         let cellHPadding: CGFloat = 12
@@ -467,14 +475,16 @@ extension MarkdownStyler {
         let headerCells = table.header.map {
             formattedCellString(
                 $0, baseFont: baseFont, header: true, theme: theme,
-                codeBackgroundColor: codeBackgroundColor, latex: latex
+                codeBackgroundColor: codeBackgroundColor, latex: latex,
+                extensions: extensions
             )
         }
         let bodyCells = table.rows.map { row in
             row.map {
                 formattedCellString(
                     $0, baseFont: baseFont, header: false, theme: theme,
-                    codeBackgroundColor: codeBackgroundColor, latex: latex
+                    codeBackgroundColor: codeBackgroundColor, latex: latex,
+                    extensions: extensions
                 )
             }
         }

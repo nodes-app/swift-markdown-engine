@@ -90,6 +90,11 @@ struct ContentView: View {
         config.services.latex = SwiftMathBridge()
         #endif
 
+        // Opt-in constructs beyond pure markdown. The core engine no longer
+        // knows `==highlight==` or `~~strikethrough~~` — they are extensions
+        // you register. Unregistered syntax stays literal text.
+        config.extensions = [HighlightExtension(), StrikethroughExtension()]
+
         return config
     }
 }
@@ -107,12 +112,26 @@ private var sampleMarkdown: String {
     [
         markdownHeader,
         inlineFormattingSection,
+        extensionSection,
         tableSection,
         latexSection,
         codeSection,
         markdownFooter,
     ].joined(separator: "\n\n")
 }
+
+/// Extension seam demo: `==highlight==` and `~~strikethrough~~` are NOT part
+/// of the core grammar anymore — they're supplied by the opt-in
+/// `HighlightExtension` and `StrikethroughExtension` registered above.
+private let extensionSection = """
+## Extensions
+
+The engine core parses pure markdown; extra constructs are opt-in extensions. \
+This ==highlighted text== comes from `HighlightExtension`, and this \
+~~struck-through text~~ from `StrikethroughExtension`. Unregistered, the exact \
+same characters would stay literal markdown. Nesting works too: \
+==with *italic* inside== and ~~also *nested*~~.
+"""
 
 /// Table layout demo: the first table's cells WRAP to the available width
 /// (CSS auto-layout style); the second has so many columns that even the

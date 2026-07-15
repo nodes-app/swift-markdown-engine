@@ -57,19 +57,21 @@ extension NativeTextViewWrapper.Coordinator {
     }
 
     /// Returns the smallest highlight token that fully contains the selection, or nil.
+    /// Highlight is extension-supplied; without a registered `HighlightExtension`
+    /// no such token exists and the toggle only wraps/unwraps literal `==`.
     func enclosingHighlightToken(for selection: NSRange, in text: String) -> MarkdownToken? {
-        let tokens = parsedDocument(for: text).tokens
-        return tokens.first { token in
-            token.kind == .highlight && tokenEncloses(token, selection: selection)
-        }
+        enclosingToken(of: .extensionSpan(HighlightExtension.identifier), for: selection, in: text)
     }
 
     func isSelectionHighlight(in nsText: NSString, range: NSRange) -> Bool {
         return enclosingHighlightToken(for: range, in: nsText as String) != nil
     }
 
+    /// Strikethrough is extension-supplied; without a registered
+    /// `StrikethroughExtension` no such token exists and the toggle only
+    /// wraps/unwraps literal `~~`.
     func isSelectionStrikethrough(in nsText: NSString, range: NSRange) -> Bool {
-        return enclosingToken(of: .strikethrough, for: range, in: nsText as String) != nil
+        return enclosingToken(of: .extensionSpan(StrikethroughExtension.identifier), for: range, in: nsText as String) != nil
     }
 
     func isSelectionInlineCode(in nsText: NSString, range: NSRange) -> Bool {
@@ -272,7 +274,7 @@ extension NativeTextViewWrapper.Coordinator {
         guard let tv = textView else { return }
         let range = tv.selectedRange()
 
-        if let token = enclosingToken(of: .strikethrough, for: range, in: tv.string) {
+        if let token = enclosingToken(of: .extensionSpan(StrikethroughExtension.identifier), for: range, in: tv.string) {
             unwrapToken(token, leftReplacement: "", rightReplacement: "")
             return
         }

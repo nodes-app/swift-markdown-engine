@@ -21,6 +21,6 @@ extension NativeTextView {
             return
         }
         let raw = (string as NSString).substring(with: sel)
-        MarkdownPasteboardWriter.write(markdown: raw, to: .general)
+        MarkdownPasteboardWriter.write(markdown: raw, to: .general, extensions: configuration.extensions)
     }
 }

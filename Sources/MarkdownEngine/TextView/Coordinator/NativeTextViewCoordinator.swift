@@ -40,8 +40,14 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
         didSet {
             subscribeToBusNotifications(replacing: oldValue.services.bus)
             subscribeToAppearanceNotification()
+            // Precompiled registry for the per-keystroke parse path — deriving
+            // it from the configuration on every keystroke would rebuild the
+            // delimiter arrays + fingerprint string each time.
+            cachedExtensionRegistry = configuration.extensionRegistry
         }
     }
+    /// Memoized `configuration.extensionRegistry` (see didSet).
+    var cachedExtensionRegistry: ExtensionRegistry = .empty
     /// Last `EmbeddedImageProvider.fingerprint()` value we've reflected in
     /// the textView's attributes. We cache it here because embedders that
     /// MUTATE the same provider over time (async URL fetches, etc.) would

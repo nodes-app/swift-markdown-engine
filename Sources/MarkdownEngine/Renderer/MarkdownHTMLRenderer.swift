@@ -17,29 +17,44 @@ import Foundation
 public enum MarkdownHTMLRenderer {
 
     /// Render `markdown` to an HTML fragment (block elements joined by newlines).
-    public static func html(from markdown: String) -> String {
+    /// `extensions` render their spans (e.g. `<mark>` for highlight); an
+    /// unregistered extension's syntax stays literal text.
+    public static func html(from markdown: String, extensions: [any MarkdownExtension] = []) -> String {
         let ns = markdown as NSString
-        let blocks = DocumentAST.parse(markdown)
-        let pieces = blocks.compactMap { block(for: $0, ns: ns) }
+        let env = Env(registry: ExtensionRegistry(extensions: extensions),
+                      byID: {
+                          var out: [String: any MarkdownExtension] = [:]
+                          for ext in extensions { out[ext.id] = ext }
+                          return out
+                      }())
+        let blocks = DocumentAST.parse(markdown, registry: env.registry)
+        let pieces = blocks.compactMap { block(for: $0, ns: ns, env: env) }
         return pieces.joined(separator: "\n")
+    }
+
+    /// Extension lookup threaded through the render walk.
+    private struct Env {
+        let registry: ExtensionRegistry
+        let byID: [String: any MarkdownExtension]
+        static let empty = Env(registry: .empty, byID: [:])
     }
 
     // MARK: - Blocks
 
-    private static func block(for node: BlockNode, ns: NSString) -> String? {
+    private static func block(for node: BlockNode, ns: NSString, env: Env) -> String? {
         switch node {
         case .heading(let level, _, _, let inlines):
             let l = min(max(level, 1), 6)
-            return "<h\(l)>\(renderInlines(inlines, ns: ns))</h\(l)>"
+            return "<h\(l)>\(renderInlines(inlines, ns: ns, env: env))</h\(l)>"
 
         case .paragraph(_, let inlines):
-            return "<p>\(renderInlines(inlines, ns: ns))</p>"
+            return "<p>\(renderInlines(inlines, ns: ns, env: env))</p>"
 
         case .blockquote(let range, _):
-            return renderBlockquote(range: range, ns: ns)
+            return renderBlockquote(range: range, ns: ns, env: env)
 
         case .list(_, let items):
-            return renderList(items: items, ns: ns)
+            return renderList(items: items, ns: ns, env: env)
 
         case .codeBlock(let range):
             return renderCodeBlock(range: range, ns: ns)
@@ -60,15 +75,15 @@ public enum MarkdownHTMLRenderer {
 
     /// Blockquote inlines are parsed over the block range *including* the `> `
     /// markers, so strip the markers per line and re-parse the content clean.
-    private static func renderBlockquote(range: NSRange, ns: NSString) -> String {
+    private static func renderBlockquote(range: NSRange, ns: NSString, env: Env) -> String {
         let raw = ns.substring(with: range)
         let stripped = raw
             .components(separatedBy: "\n")
             .map(stripQuoteMarkers)
             .filter { !$0.isEmpty }
             .joined(separator: "\n")
-        let inlines = InlineParser.parse(stripped)
-        return "<blockquote>\(renderInlines(inlines, ns: stripped as NSString))</blockquote>"
+        let inlines = InlineParser.parse(stripped, registry: env.registry)
+        return "<blockquote>\(renderInlines(inlines, ns: stripped as NSString, env: env))</blockquote>"
     }
 
     /// Drop leading indent (≤3 spaces/tabs) then one-or-more `>` each with an
@@ -86,7 +101,7 @@ public enum MarkdownHTMLRenderer {
 
     /// Emit `<ul>`/`<ol>` groups, switching container when ordered-ness flips.
     /// Nesting is flattened to a single level for v1 (see deviations).
-    private static func renderList(items: [ListItem], ns: NSString) -> String {
+    private static func renderList(items: [ListItem], ns: NSString, env: Env) -> String {
         var out: [String] = []
         var currentOrdered: Bool?
         var buffer: [String] = []
@@ -103,14 +118,14 @@ public enum MarkdownHTMLRenderer {
                 flush()
                 currentOrdered = item.ordered
             }
-            buffer.append(listItem(item, ns: ns))
+            buffer.append(listItem(item, ns: ns, env: env))
         }
         flush()
         return out.joined(separator: "\n")
     }
 
-    private static func listItem(_ item: ListItem, ns: NSString) -> String {
-        let content = renderInlines(item.inlines, ns: ns)
+    private static func listItem(_ item: ListItem, ns: NSString, env: Env) -> String {
+        let content = renderInlines(item.inlines, ns: ns, env: env)
         if item.checkbox != nil {
             // GFM task markup so markdown consumers (Obsidian etc.) restore
             // `- [ ]` on paste. Rich targets get this stripped to a plain
@@ -166,13 +181,13 @@ public enum MarkdownHTMLRenderer {
 
     // MARK: - Inlines
 
-    private static func renderInlines(_ nodes: [InlineNode], ns: NSString) -> String {
+    private static func renderInlines(_ nodes: [InlineNode], ns: NSString, env: Env) -> String {
         var out = ""
-        for node in nodes { out += renderInline(node, ns: ns) }
+        for node in nodes { out += renderInline(node, ns: ns, env: env) }
         return out
     }
 
-    private static func renderInline(_ node: InlineNode, ns: NSString) -> String {
+    private static func renderInline(_ node: InlineNode, ns: NSString, env: Env) -> String {
         switch node {
         case .text(let r):
             return escape(ns.substring(with: r))
@@ -181,7 +196,7 @@ public enum MarkdownHTMLRenderer {
             return "<code>\(escape(ns.substring(with: content)))</code>"
 
         case .emphasis(let kind, _, _, let children):
-            let inner = renderInlines(children, ns: ns)
+            let inner = renderInlines(children, ns: ns, env: env)
             switch kind {
             case .italic:     return "<em>\(inner)</em>"
             case .bold:       return "<strong>\(inner)</strong>"
@@ -189,7 +204,7 @@ public enum MarkdownHTMLRenderer {
             }
 
         case .link(_, _, let url, _, let children):
-            return "<a href=\"\(escape(ns.substring(with: url)))\">\(renderInlines(children, ns: ns))</a>"
+            return "<a href=\"\(escape(ns.substring(with: url)))\">\(renderInlines(children, ns: ns, env: env))</a>"
 
         case .image(_, let alt, let url, _):
             return "<img src=\"\(escape(ns.substring(with: url)))\" alt=\"\(escape(ns.substring(with: alt)))\">"
@@ -201,11 +216,14 @@ public enum MarkdownHTMLRenderer {
             let t = escape(ns.substring(with: target))
             return "<img src=\"\(t)\" alt=\"\(t)\">"
 
-        case .strikethrough(_, _, let children):
-            return "<del>\(renderInlines(children, ns: ns))</del>"
-
-        case .highlight(_, _, let children):
-            return "<mark>\(renderInlines(children, ns: ns))</mark>"
+        case .ext(let node):
+            guard let ext = env.byID[node.extensionID] else {
+                return escape(ns.substring(with: node.range))   // unknown id → literal
+            }
+            let inner = node.children.isEmpty
+                ? escape(ns.substring(with: node.contentRange))
+                : renderInlines(node.children, ns: ns, env: env)
+            return ext.html(childrenHTML: inner)
 
         case .inlineLatex(let range, _, _):
             return escape(ns.substring(with: range))

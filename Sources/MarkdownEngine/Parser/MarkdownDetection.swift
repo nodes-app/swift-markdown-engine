@@ -66,14 +66,16 @@ enum MarkdownDetection {
 
     // MARK: - Code Block Detection
 
-    /// Slow: parses tokens each call
-    static func isInsideCodeBlock(range: NSRange, in text: String) -> Bool {
-        let codeTokens = MarkdownTokenizer.parseTokensViaAST(in: text).filter { $0.kind == .codeBlock || $0.kind == .inlineCode }
+    /// Slow: parses tokens each call. Pass the editor's registry so the parse
+    /// matches the styled document's grammar (an extension span can pre-claim
+    /// text a built-in would otherwise recognize).
+    static func isInsideCodeBlock(range: NSRange, in text: String, registry: ExtensionRegistry = .empty) -> Bool {
+        let codeTokens = MarkdownTokenizer.parseTokensViaAST(in: text, registry: registry).filter { $0.kind == .codeBlock || $0.kind == .inlineCode }
         return isInsideCodeBlock(range: range, codeTokens: codeTokens)
     }
 
-    static func isInsideCodeBlock(location: Int, in text: String) -> Bool {
-        isInsideCodeBlock(range: NSRange(location: location, length: 0), in: text)
+    static func isInsideCodeBlock(location: Int, in text: String, registry: ExtensionRegistry = .empty) -> Bool {
+        isInsideCodeBlock(range: NSRange(location: location, length: 0), in: text, registry: registry)
     }
 
     /// Fast: uses pre-parsed tokens
@@ -145,8 +147,12 @@ enum MarkdownDetection {
 
     // MARK: - LaTeX Detection
 
-    static func isInsideLatex(location: Int, in text: String) -> Bool {
-        let tokens = MarkdownTokenizer.parseTokensViaAST(in: text)
+    /// Slow: parses tokens each call. The registry matters here: a registered
+    /// extension (e.g. `==$==$`) can claim characters that would otherwise
+    /// pair into a phantom `$…$`, so parsing with `.empty` diverges from the
+    /// styled document.
+    static func isInsideLatex(location: Int, in text: String, registry: ExtensionRegistry = .empty) -> Bool {
+        let tokens = MarkdownTokenizer.parseTokensViaAST(in: text, registry: registry)
         let latexTokens = tokens.filter { $0.kind == .inlineLatex || $0.kind == .blockLatex }
         return isInsideLatex(location: location, latexTokens: latexTokens)
     }

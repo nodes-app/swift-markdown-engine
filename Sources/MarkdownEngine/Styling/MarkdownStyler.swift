@@ -131,7 +131,7 @@ enum MarkdownStyler {
         scopedRanges: [NSRange]? = nil,
         configuration: MarkdownEditorConfiguration = .default
     ) -> [StyledRange] {
-        let tokens = precomputedTokens ?? MarkdownTokenizer.parseTokensViaAST(in: text)
+        let tokens = precomputedTokens ?? MarkdownTokenizer.parseTokensViaAST(in: text, registry: configuration.extensionRegistry)
         let nsText = text as NSString
         let scopeBounds: (lo: Int, hi: Int)? = scopedRanges.flatMap { ranges in
             let valid = ranges.filter { $0.location != NSNotFound && $0.length > 0 }

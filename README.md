@@ -24,7 +24,7 @@ checkboxes.
 
 ## Features
 
-- **Live Markdown styling** — bold, italic, strikethrough, highlight, headings, lists, blockquotes, GFM tables, code, links, task checkboxes, horizontal rules 
+- **Live Markdown styling** — bold, italic, headings, lists, blockquotes, GFM tables, code, links, task checkboxes, horizontal rules; `==highlight==` and `~~strikethrough~~` via opt-in [extensions](#extensions) 
 - **Wiki-style linking** with two-form storage / display roundtripping
   (`[[Name|<id>]]` ↔ `[[Name]]`)
 - **Image embeds** — both `![[Name]]` (Obsidian-style, embedder supplies the                           
@@ -122,6 +122,23 @@ configuration.services = MarkdownEditorServices(
 ```
 
 Each protocol and its no-op default are documented in DocC.
+
+### Extensions
+
+The core engine parses pure markdown. Extra constructs — delimited spans like
+`==highlight==` and `~~strikethrough~~` — are opt-in extensions:
+
+```swift
+var config = MarkdownEditorConfiguration()
+config.extensions = [HighlightExtension(), StrikethroughExtension()]
+```
+
+Unregistered syntax stays literal text. An extension supplies only its
+delimiters (`SpanSyntax`), the attributes for its content, and an HTML wrapper
+for rich copy — the parser owns all span geometry, marker hiding, caret
+reveal, and incremental restyling, so extensions behave identically to
+built-ins and cannot affect neighboring constructs. Conform to
+`MarkdownExtension` to add your own.
 
 ### Code Blocks
 
@@ -225,59 +242,38 @@ NativeTextViewWrapper(
 
 ### Height Behavior
 
-By default the editor scrolls internally within whatever height SwiftUI
-gives it. Set `heightBehavior` to `.fitsContent` to make the editor grow
-to fit its content and report that height to SwiftUI, so an enclosing
-`ScrollView` scrolls the page instead:
+By default the editor scrolls internally. Set `heightBehavior` to
+`.fitsContent` to make it grow to fit its content and report that height to
+SwiftUI, so an enclosing `ScrollView` scrolls the page instead:
 
 ```swift
 ScrollView {
-    NativeTextViewWrapper(
-        text: $text,
-        configuration: .init(heightBehavior: .fitsContent)
-    )
+    NativeTextViewWrapper(text: $text, configuration: .init(heightBehavior: .fitsContent))
 }
 ```
 
-- The editor reports `headerHeight + text content height` to SwiftUI;
-  no inner scroller appears.
-- Typing additional lines grows the block; deleting lines shrinks it.
-- An empty document shows one line of height.
-- Scroll-wheel events pass through to the enclosing scroll view.
-- Composes with `readingWidth`: the centered column is preserved and
-  height grows to the column's content height.
-- A static scroll-away header's band is included in the reported height.
-  The collapse-on-scroll animation is not meaningful in `.fitsContent`
-  because there is no internal scroll offset to drive it.
-- Switching `heightBehavior` at runtime is supported; the editor
-  reconfigures immediately.
-
-**Trade-offs:** `.fitsContent` forces full-document layout so the total
-height is known, forgoing TextKit-2 viewport virtualization. This is
-fine for small-to-medium inline content; very large documents still work
-but lay out in full.
+Composes with `readingWidth` and the scrolling header, and is switchable at
+runtime. `.fitsContent` lays out the whole document (no viewport
+virtualization), so prefer it for small-to-medium content. See
+``HeightBehavior`` in DocC for the full behavior.
 
 ### Reading Column
 
-Give long documents a fixed-width, centered column — and let wide GFM
-tables break out of it to the full window width, Google-Docs-style:
+Give long documents a fixed-width centered column; wide GFM tables break out
+to the full window width, Google-Docs-style:
 
 ```swift
-var configuration = MarkdownEditorConfiguration.default
 configuration.readingWidth = 650
 ```
 
-- Text wraps at `readingWidth` and never re-wraps on window resize —
-  only the column's position moves, which keeps live resize smooth.
-- Tables wider than the column expand up to the full viewport width and
-  scroll horizontally beyond that.
-- Leave it `nil` (the default) and the editor fills its container
-  edge-to-edge, exactly as before.
+Text wraps at `readingWidth` and never re-wraps on resize (only the column's
+position moves), keeping live resize smooth. Leave it `nil` (default) to fill
+the container edge-to-edge.
 
 ### Scrolling Header
 
 Host a SwiftUI view above the document body that scrolls away with it —
-document metadata, a property table, a contextual toolbar:
+metadata, a property table, a contextual toolbar:
 
 ```swift
 NativeTextViewWrapper(
@@ -288,34 +284,13 @@ NativeTextViewWrapper(
 )
 ```
 
-- The engine hosts the view in an `NSHostingView`, reserves its
-  intrinsic height at the top of the scrolled content, and shifts the
-  body below it. The header is a sibling of the text view, so it stays
-  fully interactive (buttons, text fields, menus).
-- `headerExpanded: false` collapses the band to `headerCollapsedHeight`:
-  the top row stays visible while the rows below clip away. Toggling
-  animates the reveal. Size your header so the content above
-  `headerCollapsedHeight` is the part you want to keep visible.
-- The hosted content refreshes on every SwiftUI update — bind your
-  model into the header view as usual. Inject any required environment
-  (`.environmentObject`, `.environment`) into the view *before* wrapping
-  it in `AnyView`; the hosting view does not inherit your hierarchy's
-  environment.
-- The reserved band uses the view's **intrinsic** (ideal) height. Text
-  that relies on wrapping at the editor's width can render taller than
-  its ideal height and clip at the band's bottom — give wrapping
-  content an explicit height (`.frame`/`.fixedSize`) or line limit.
-- Composes with `readingWidth`: the header spans the full viewport
-  width while the body keeps its centered column.
-- An optional `placeholder: NSAttributedString?` renders ghost text at
-  the first-line position while the document is empty — below the header
-  band, tracking its reveal animation; the first keystroke hides it.
-  Style it with the editor's body font so it lines up with the would-be
-  first line.
-- Pass `header: nil` (the default) and the editor renders exactly as
-  before — the header path adds nothing to header-less editors.
-
-The demo app's **Header** toolbar toggle shows the full behavior.
+The engine hosts it in an `NSHostingView`, reserves its intrinsic height, and
+keeps it fully interactive. `headerExpanded: false` collapses to
+`headerCollapsedHeight` (top row stays, rows below clip away, animated). Inject
+any required environment *before* wrapping in `AnyView`, and give wrapping
+content an explicit height so it doesn't clip at the band's bottom. Composes
+with `readingWidth`; an optional `placeholder:` shows ghost text while empty;
+`header: nil` (default) adds nothing. The demo's **Header** toggle shows it.
 
 ## Demo
 
@@ -329,17 +304,9 @@ a local path, so any engine edit rebuilds into the demo on the next run.
 
 ## Documentation
 
-Full API documentation is available via DocC. In Xcode, use
-**Product → Build Documentation** (`⇧⌃⌘D`).
-
-For local CLI preview, temporarily add the Swift DocC plugin as described in
-[CONTRIBUTING.md](CONTRIBUTING.md), then run:
-
-```bash
-swift package --disable-sandbox preview-documentation --target MarkdownEngine
-```
-
-Once the package is hosted on Swift Package Index, the docs will live at
+Full API docs ship as DocC. In Xcode: **Product → Build Documentation**
+(`⇧⌃⌘D`); for local CLI preview see [CONTRIBUTING.md](CONTRIBUTING.md). Once
+hosted on Swift Package Index, docs will live at
 `https://swiftpackageindex.com/nodes-app/swift-markdown-engine/documentation`.
 
 ## Requirements & Status

@@ -179,7 +179,7 @@ extension NativeTextViewCoordinator {
             }
         }
 
-        let tokens = parseState.tokens(for: text, edit: edit)
+        let tokens = parseState.tokens(for: text, edit: edit, registry: cachedExtensionRegistry)
         let tClassify = DispatchTime.now().uptimeNanoseconds
         var codeTokens: [MarkdownToken] = []
         var latexTokens: [MarkdownToken] = []

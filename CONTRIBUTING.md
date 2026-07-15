@@ -54,7 +54,7 @@ Screen recordings welcome.
 ## Pull requests
 
 - One logical change per PR, branched from `main`
-- Tests for new tokenizer / styler / service behavior in
+- Tests for new tokenizer / styler / service / extension behavior in
   `Tests/MarkdownEngineTests/`
 - DocC comments for any public-API change; update `Demo/` if relevant
 - One-line entry in `CHANGELOG.md` under `[Unreleased]`
@@ -72,6 +72,12 @@ Non-negotiable for the core `MarkdownEngine` target:
   `MarkdownEngineLatex` → SwiftMath) are the deliberate exception so
   consumers can opt in. New bridges or new core deps need an issue
   first.
+- **New constructs go through the extension seam, not the core grammar.** A delimited span (`==highlight==`, `%%comment%%`, …) should be a
+  `MarkdownExtension` in `Sources/MarkdownEngine/Extensions/` — see
+  `HighlightExtension` as the template — not a new case wired into the parser,
+  styler, and renderer. This keeps the core pure markdown and each construct
+  isolated. Editing the core grammar (a genuinely new block type, a CommonMark
+  fix) needs an issue first.
 - **Public surface stays small.** Favor `internal`; new public symbols
   need a DocC comment.
 

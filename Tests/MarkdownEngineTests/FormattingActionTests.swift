@@ -29,7 +29,11 @@ struct FormattingActionTests {
         textView.isVerticallyResizable = true
         textView.autoresizingMask = [.width]
         textView.isEditable = true
-        textView.configuration = .default
+        // Formatting toggles resolve ==/~~ spans via extension tokens, so the
+        // test editor registers both extensions (like a real embedder would).
+        var config = MarkdownEditorConfiguration.default
+        config.extensions = [HighlightExtension(), StrikethroughExtension()]
+        textView.configuration = config
         let coordinator = NativeTextViewCoordinator(
             text: .constant(""),
             fontName: "SF Pro Text",
@@ -39,6 +43,7 @@ struct FormattingActionTests {
             onInlineSelectionChange: nil
         )
         coordinator.textView = textView
+        coordinator.configuration = config
         textView.string = initialText
         textView.setSelectedRange(selection)
         action(coordinator)

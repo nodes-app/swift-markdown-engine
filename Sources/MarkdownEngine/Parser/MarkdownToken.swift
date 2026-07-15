@@ -15,7 +15,7 @@ extension NSAttributedString.Key {
     public static let taskCheckbox = NSAttributedString.Key("TaskCheckbox")
 }
 
-enum MarkdownTokenKind {
+enum MarkdownTokenKind: Equatable {
     case italic
     case boldItalic
     case bold
@@ -30,11 +30,12 @@ enum MarkdownTokenKind {
     case inlineLatex
     case imageEmbed
     case imageLink
-    case strikethrough
-    case highlight
     case table
     /// A CommonMark backslash escape; marker is the `\`, content the escaped literal char.
     case backslashEscape
+    /// A span contributed by a registered `MarkdownExtension`,
+    /// carrying the extension's id (e.g. `.extensionSpan("highlight")`).
+    case extensionSpan(String)
 }
 
 struct MarkdownToken {

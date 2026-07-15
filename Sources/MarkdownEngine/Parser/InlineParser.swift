@@ -15,15 +15,16 @@
 //    1. scanCodeSpans   — highest precedence, opaque interior.
 //    2. scanEscapes      — `\x` becomes a claimed span, so the escaped char is
 //                          automatically inert for every pass below.
-//    3. scanLinkFamily   — ![[…]], [[…]], ![…](…), […](…), ~~…~~, $…$ in
-//                          precedence order. URLs allow balanced parens. A
+//    3. scanLinkFamily   — ![[…]], [[…]], ![…](…), […](…), $…$ (+ registered
+//                          extension spans) in precedence order. URLs allow
+//                          balanced parens. A
 //                          candidate overlapping a claimed span is rejected
 //                          (kept literal) — this is what stops a `$…$` from
 //                          spanning across a code span.
 //    4. resolveEmphasis  — `*`/`_` delimiter runs over text outside every
 //                          claimed span; may wrap claimed spans.
 //    5. buildTree        — containment tree. Emphasis nests already-collected
-//                          spans; link/strikethrough content is re-parsed
+//                          spans; link/extension-span content is re-parsed
 //                          recursively; code/image/wiki/embed/latex/escape are
 //                          opaque leaves.
 //
@@ -47,14 +48,24 @@ indirect enum InlineNode: Equatable {
     case wikiLink(range: NSRange, name: NSRange, id: NSRange?, markers: [NSRange])
     /// `![[target]]`. `markers` is `[ "![[", "]]" ]`.
     case imageEmbed(range: NSRange, target: NSRange, markers: [NSRange])
-    /// `~~text~~`. `markers` is `[openMarker, closeMarker]`; content recursively parsed.
-    case strikethrough(range: NSRange, markers: [NSRange], children: [InlineNode])
-    /// `==text==`. `markers` is `[openMarker, closeMarker]`; content recursively parsed.
-    case highlight(range: NSRange, markers: [NSRange], children: [InlineNode])
     /// `$math$` — opaque. `markers` is `[ "$", "$" ]`.
     case inlineLatex(range: NSRange, content: NSRange, markers: [NSRange])
     /// Backslash escape `\x`; `marker` is the `\`, `character` the now-literal punctuation.
     case escape(range: NSRange, character: NSRange, marker: NSRange)
+    /// A span contributed by a registered `MarkdownExtension`
+    /// (e.g. `==highlight==`). Pure data — behavior lives in the extension,
+    /// looked up by `extensionID` at styling/render time.
+    case ext(ExtensionInlineNode)
+}
+
+/// An extension-contributed inline span. `children` is empty for opaque
+/// (non-`parsesContent`) spans.
+struct ExtensionInlineNode: Equatable {
+    let extensionID: String
+    let range: NSRange
+    let contentRange: NSRange
+    let markers: [NSRange]   // [open, close]
+    let children: [InlineNode]
 }
 
 enum InlineParser {
@@ -70,27 +81,25 @@ enum InlineParser {
     private static let rparen: unichar = 0x29
     private static let pipe: unichar = 0x7C
     private static let backslash: unichar = 0x5C
-    private static let tilde: unichar = 0x7E
-    private static let equals: unichar = 0x3D
     private static let dollar: unichar = 0x24
 
     // MARK: - Entry point
 
-    static func parse(_ text: String) -> [InlineNode] {
+    static func parse(_ text: String, registry: ExtensionRegistry = .empty) -> [InlineNode] {
         let ns = text as NSString
         let len = ns.length
         guard len > 0 else { return [] }
 
         var claimed = scanCodeSpans(ns, len: len)
         claimed += scanEscapes(ns, len: len, claimed: claimed.map(\.fullRange))
-        claimed += scanLinkFamily(ns, len: len, claimed: claimed.map(\.fullRange))
+        claimed += scanLinkFamily(ns, len: len, claimed: claimed.map(\.fullRange), registry: registry)
         let emphasis = resolveEmphasis(ns, len: len, claimedRanges: claimed.map(\.fullRange))
-        return buildTree(region: NSRange(location: 0, length: len), spans: claimed + emphasis, ns: ns)
+        return buildTree(region: NSRange(location: 0, length: len), spans: claimed + emphasis, ns: ns, registry: registry)
     }
 
     /// Parse the inline content of `range` within `ns`, returning nodes in absolute document coordinates.
-    static func parse(_ ns: NSString, range: NSRange) -> [InlineNode] {
-        offsetNodes(parse(ns.substring(with: range)), by: range.location)
+    static func parse(_ ns: NSString, range: NSRange, registry: ExtensionRegistry = .empty) -> [InlineNode] {
+        offsetNodes(parse(ns.substring(with: range), registry: registry), by: range.location)
     }
 
     // MARK: - Span model
@@ -102,16 +111,16 @@ enum InlineParser {
         case image(range: NSRange, alt: NSRange, url: NSRange, markers: [NSRange])
         case wikiLink(range: NSRange, name: NSRange, id: NSRange?, markers: [NSRange])
         case imageEmbed(range: NSRange, target: NSRange, markers: [NSRange])
-        case strikethrough(range: NSRange, contentRange: NSRange, markers: [NSRange])
-        case highlight(range: NSRange, contentRange: NSRange, markers: [NSRange])
         case inlineLatex(range: NSRange, content: NSRange, markers: [NSRange])
         case escape(range: NSRange, character: NSRange, marker: NSRange)
+        case ext(id: String, range: NSRange, contentRange: NSRange, markers: [NSRange], parsesContent: Bool)
 
         var fullRange: NSRange {
             switch self {
             case .code(let r, _), .emphasis(_, let r, _, _), .link(let r, _, _, _),
                  .image(let r, _, _, _), .wikiLink(let r, _, _, _), .imageEmbed(let r, _, _),
-                 .strikethrough(let r, _, _), .highlight(let r, _, _), .inlineLatex(let r, _, _), .escape(let r, _, _):
+                 .inlineLatex(let r, _, _), .escape(let r, _, _),
+                 .ext(_, let r, _, _, _):
                 return r
             }
         }
@@ -191,9 +200,9 @@ enum InlineParser {
         return spans
     }
 
-    // MARK: - 3. Link family / strikethrough / inline LaTeX
+    // MARK: - 3. Link family / inline LaTeX / extension spans
 
-    private static func scanLinkFamily(_ ns: NSString, len: Int, claimed: [NSRange]) -> [Span] {
+    private static func scanLinkFamily(_ ns: NSString, len: Int, claimed: [NSRange], registry: ExtensionRegistry) -> [Span] {
         func overlapsClaimed(_ range: NSRange) -> Bool {
             claimed.contains { NSIntersectionRange($0, range).length > 0 }
         }
@@ -201,7 +210,7 @@ enum InlineParser {
         var i = 0
         while i < len {
             if claimed.contains(where: { NSLocationInRange(i, $0) }) { i += 1; continue }
-            if let span = matchClaimedSpan(ns, len, at: i), !overlapsClaimed(span.fullRange) {
+            if let span = matchClaimedSpan(ns, len, at: i, registry: registry), !overlapsClaimed(span.fullRange) {
                 spans.append(span)
                 i = NSMaxRange(span.fullRange)
             } else {
@@ -211,7 +220,23 @@ enum InlineParser {
         return spans
     }
 
-    private static func matchClaimedSpan(_ ns: NSString, _ len: Int, at i: Int) -> Span? {
+    private static func matchClaimedSpan(_ ns: NSString, _ len: Int, at i: Int, registry: ExtensionRegistry) -> Span? {
+        if let span = matchBuiltIn(ns, len, at: i) { return span }
+        // Extensions match after every built-in, in registration order. A
+        // built-in trigger that matched-and-FAILED (e.g. `$50$` rejected by
+        // the math heuristic) falls through here, so an extension sharing a
+        // built-in's first character is still reachable.
+        let c = ns.character(at: i)
+        for entry in registry.entries where entry.open.first == c {
+            if let span = matchExtensionSpan(ns, len, start: i, entry: entry) { return span }
+        }
+        return nil
+    }
+
+    /// The built-in constructs, tried exclusively in fixed precedence order —
+    /// the first branch whose trigger matches decides (nil = stays literal
+    /// for built-ins), exactly the pre-extension behavior.
+    private static func matchBuiltIn(_ ns: NSString, _ len: Int, at i: Int) -> Span? {
         let c = ns.character(at: i)
         let c1 = peek(ns, i + 1, len)
         let c2 = peek(ns, i + 2, len)
@@ -219,10 +244,50 @@ enum InlineParser {
         if c == lbracket, c1 == lbracket { return matchWikiLink(ns, len, start: i) }
         if c == bang, c1 == lbracket { return matchImage(ns, len, start: i) }
         if c == lbracket { return matchLink(ns, len, start: i) }
-        if c == tilde, c1 == tilde { return matchStrikethrough(ns, len, start: i) }
-        if c == equals, c1 == equals { return matchHighlight(ns, len, start: i) }
         if c == dollar, c1 != dollar { return matchInlineLatex(ns, len, start: i) }
         return nil
+    }
+
+    /// Generic scanner for extension-contributed delimited spans. Mirrors the
+    /// built-in `~~`/`==` semantics: the span opens at an exact `open` match,
+    /// closes at the FIRST exact `close` match on the same line, and a lone
+    /// occurrence of `close`'s first character inside the content aborts the
+    /// candidate (it stays literal).
+    private static func matchExtensionSpan(_ ns: NSString, _ len: Int, start i: Int, entry: ExtensionRegistry.Entry) -> Span? {
+        let open = entry.open, close = entry.close
+        guard !open.isEmpty, !close.isEmpty else { return nil }
+        guard matches(ns, len, at: i, chars: open) else { return nil }
+        if entry.syntax.rejectsOpenerRun, i > 0, ns.character(at: i - 1) == open[0] { return nil }
+
+        let contentStart = i + open.count
+        let closeFirst = close[0]
+        var k = contentStart
+        while k < len {
+            let ch = ns.character(at: k)
+            if ch == newline { return nil }
+            if ch == closeFirst {
+                guard matches(ns, len, at: k, chars: close) else { return nil }
+                if entry.syntax.requiresNonEmptyContent, k == contentStart { return nil }
+                if entry.syntax.rejectsCloserRun,
+                   let after = peek(ns, k + close.count, len), after == close[close.count - 1] { return nil }
+                return .ext(
+                    id: entry.id,
+                    range: NSRange(location: i, length: (k + close.count) - i),
+                    contentRange: NSRange(location: contentStart, length: k - contentStart),
+                    markers: [NSRange(location: i, length: open.count), NSRange(location: k, length: close.count)],
+                    parsesContent: entry.syntax.parsesContent
+                )
+            }
+            k += 1
+        }
+        return nil
+    }
+
+    /// Exact UTF-16 sequence match at `i`.
+    private static func matches(_ ns: NSString, _ len: Int, at i: Int, chars: [unichar]) -> Bool {
+        guard i + chars.count <= len else { return false }
+        for (offset, u) in chars.enumerated() where ns.character(at: i + offset) != u { return false }
+        return true
     }
 
     private static func peek(_ ns: NSString, _ idx: Int, _ len: Int) -> unichar? {
@@ -311,51 +376,7 @@ enum InlineParser {
         )
     }
 
-    /// `~~ text ~~` — text has no `~`; not part of a longer `~` run.
-    private static func matchStrikethrough(_ ns: NSString, _ len: Int, start i: Int) -> Span? {
-        if i > 0, ns.character(at: i - 1) == tilde { return nil }
-        let contentStart = i + 2
-        var k = contentStart
-        while k < len {
-            let ch = ns.character(at: k)
-            if ch == newline { return nil }
-            if ch == tilde {
-                guard peek(ns, k + 1, len) == tilde else { return nil }
-                guard k > contentStart, peek(ns, k + 2, len) != tilde else { return nil }
-                return .strikethrough(
-                    range: NSRange(location: i, length: (k + 2) - i),
-                    contentRange: NSRange(location: contentStart, length: k - contentStart),
-                    markers: [NSRange(location: i, length: 2), NSRange(location: k, length: 2)]
-                )
-            }
-            k += 1
-        }
-        return nil
-    }
-
     /// `$ math $` — single dollars, content has no `$`, passes the math heuristic.
-    /// `== text ==` — text has no `=`; not part of a longer `=` run.
-    private static func matchHighlight(_ ns: NSString, _ len: Int, start i: Int) -> Span? {
-        if i > 0, ns.character(at: i - 1) == equals { return nil }
-        let contentStart = i + 2
-        var k = contentStart
-        while k < len {
-            let ch = ns.character(at: k)
-            if ch == newline { return nil }
-            if ch == equals {
-                guard peek(ns, k + 1, len) == equals else { return nil }
-                guard k > contentStart else { return nil }
-                return .highlight(
-                    range: NSRange(location: i, length: (k + 2) - i),
-                    contentRange: NSRange(location: contentStart, length: k - contentStart),
-                    markers: [NSRange(location: i, length: 2), NSRange(location: k, length: 2)]
-                )
-            }
-            k += 1
-        }
-        return nil
-    }
-
     private static func matchInlineLatex(_ ns: NSString, _ len: Int, start i: Int) -> Span? {
         if i > 0, ns.character(at: i - 1) == dollar { return nil }
         let contentStart = i + 1
@@ -579,7 +600,7 @@ enum InlineParser {
 
     // MARK: - 5. Containment tree
 
-    private static func buildTree(region: NSRange, spans: [Span], ns: NSString) -> [InlineNode] {
+    private static func buildTree(region: NSRange, spans: [Span], ns: NSString, registry: ExtensionRegistry) -> [InlineNode] {
         let inRegion = spans.filter { rangeContains(region, $0.fullRange) }
 
         func isChild(_ s: Span) -> Bool {
@@ -606,26 +627,25 @@ enum InlineParser {
                 let content = NSRange(location: NSMaxRange(open), length: close.location - NSMaxRange(open))
                 let childSpans = inRegion.filter { rangeContains(content, $0.fullRange) && !equalRange($0.fullRange, fr) }
                 result.append(.emphasis(kind, range: range, markers: [open, close],
-                                        children: buildTree(region: content, spans: childSpans, ns: ns)))
+                                        children: buildTree(region: content, spans: childSpans, ns: ns, registry: registry)))
             case .link(let range, let textRange, let url, let markers):
                 result.append(.link(range: range, textRange: textRange, url: url, markers: markers,
-                                     children: reparse(textRange, ns: ns)))
+                                     children: reparse(textRange, ns: ns, registry: registry)))
             case .image(let range, let alt, let url, let markers):
                 result.append(.image(range: range, alt: alt, url: url, markers: markers))
             case .wikiLink(let range, let name, let id, let markers):
                 result.append(.wikiLink(range: range, name: name, id: id, markers: markers))
             case .imageEmbed(let range, let target, let markers):
                 result.append(.imageEmbed(range: range, target: target, markers: markers))
-            case .strikethrough(let range, let contentRange, let markers):
-                result.append(.strikethrough(range: range, markers: markers,
-                                             children: reparse(contentRange, ns: ns)))
-            case .highlight(let range, let contentRange, let markers):
-                result.append(.highlight(range: range, markers: markers,
-                                         children: reparse(contentRange, ns: ns)))
             case .inlineLatex(let range, let content, let markers):
                 result.append(.inlineLatex(range: range, content: content, markers: markers))
             case .escape(let range, let character, let marker):
                 result.append(.escape(range: range, character: character, marker: marker))
+            case .ext(let id, let range, let contentRange, let markers, let parsesContent):
+                result.append(.ext(ExtensionInlineNode(
+                    extensionID: id, range: range, contentRange: contentRange, markers: markers,
+                    children: parsesContent ? reparse(contentRange, ns: ns, registry: registry) : []
+                )))
             }
             cursor = NSMaxRange(fr)
         }
@@ -636,8 +656,8 @@ enum InlineParser {
     }
 
     /// Recursively parse a sub-range's content, offset back to absolute coordinates.
-    private static func reparse(_ range: NSRange, ns: NSString) -> [InlineNode] {
-        offsetNodes(parse(ns.substring(with: range)), by: range.location)
+    private static func reparse(_ range: NSRange, ns: NSString, registry: ExtensionRegistry) -> [InlineNode] {
+        offsetNodes(parse(ns.substring(with: range), registry: registry), by: range.location)
     }
 
     // MARK: - Helpers
@@ -656,10 +676,11 @@ enum InlineParser {
         case .image(let r, let a, let u, let m): return .image(range: s(r), alt: s(a), url: s(u), markers: m.map(s))
         case .wikiLink(let r, let n, let id, let m): return .wikiLink(range: s(r), name: s(n), id: id.map(s), markers: m.map(s))
         case .imageEmbed(let r, let t, let m): return .imageEmbed(range: s(r), target: s(t), markers: m.map(s))
-        case .strikethrough(let r, let m, let ch): return .strikethrough(range: s(r), markers: m.map(s), children: offsetNodes(ch, by: d))
-        case .highlight(let r, let m, let ch): return .highlight(range: s(r), markers: m.map(s), children: offsetNodes(ch, by: d))
         case .inlineLatex(let r, let c, let m): return .inlineLatex(range: s(r), content: s(c), markers: m.map(s))
         case .escape(let r, let c, let m): return .escape(range: s(r), character: s(c), marker: s(m))
+        case .ext(let n): return .ext(ExtensionInlineNode(
+            extensionID: n.extensionID, range: s(n.range), contentRange: s(n.contentRange),
+            markers: n.markers.map(s), children: offsetNodes(n.children, by: d)))
         }
     }
 

@@ -27,6 +27,10 @@ final class DocumentParseState {
     private var blocks: [Block] = []
     private var tokens: [MarkdownToken] = []
     private var valid = false
+    /// Registry fingerprint the stored tokens were computed under; a change
+    /// (extension registered/unregistered at runtime) invalidates the splice
+    /// base — old tokens must not be reused under a new grammar.
+    private var fingerprint = ""
 #if DEBUG
     private var verifyCounter: UInt = 0
 #endif
@@ -50,7 +54,7 @@ final class DocumentParseState {
     /// Tokens for `text`. With a trustworthy `edit` the update is
     /// O(edit + touched blocks + suffix shift); without one, a single shared
     /// O(doc) diff scan replaces the two independent scans of the static path.
-    func tokens(for text: String, edit: ParseEditDescriptor?) -> [MarkdownToken] {
+    func tokens(for text: String, edit: ParseEditDescriptor?, registry: ExtensionRegistry = .empty) -> [MarkdownToken] {
         let ns = text as NSString
         let newLen = ns.length
         let tStart = DispatchTime.now().uptimeNanoseconds
@@ -59,7 +63,7 @@ final class DocumentParseState {
         let prevChars = chars
         let prevBlocks = blocks
         let prevTokens = tokens
-        let wasValid = valid
+        let wasValid = valid && fingerprint == registry.fingerprint
         lock.unlock()
 
         // 1. New buffer + change region — spliced O(edit) when the descriptor
@@ -123,10 +127,10 @@ final class DocumentParseState {
         if wasValid, let diff, newBlocks != nil {
             newTokens = MarkdownTokenizer.incrementalTokens(
                 oldChars: prevChars, prevTokens: prevTokens,
-                newChars: newChars, blocks: resolvedBlocks, ns: ns, diff: diff
+                newChars: newChars, blocks: resolvedBlocks, ns: ns, diff: diff, registry: registry
             )?.tokens
         }
-        let resolvedTokens = newTokens ?? MarkdownTokenizer.fullTokens(blocks: resolvedBlocks, ns: ns)
+        let resolvedTokens = newTokens ?? MarkdownTokenizer.fullTokens(blocks: resolvedBlocks, ns: ns, registry: registry)
         let tTokens = DispatchTime.now().uptimeNanoseconds
         PerfTrace.note {
             let ms = { (a: UInt64, b: UInt64) in String(format: "%.2f", Double(b - a) / 1_000_000) }
@@ -140,13 +144,14 @@ final class DocumentParseState {
         blocks = resolvedBlocks
         tokens = resolvedTokens
         valid = true
+        fingerprint = registry.fingerprint
         lock.unlock()
 
         // Publish to the static memos so their callers (restyle's
         // DocumentAST.parse, smart-input helpers) take the memcmp hit instead
         // of splicing against a one-keystroke-stale cache every time.
         BlockParser.seedCache(chars: newChars, blocks: resolvedBlocks)
-        MarkdownTokenizer.seedCache(chars: newChars, tokens: resolvedTokens)
+        MarkdownTokenizer.seedCache(chars: newChars, tokens: resolvedTokens, fingerprint: registry.fingerprint)
         return resolvedTokens
     }
 }

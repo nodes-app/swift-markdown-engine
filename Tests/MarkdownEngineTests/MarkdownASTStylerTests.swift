@@ -126,7 +126,8 @@ struct MarkdownASTStylerTests {
     func highlightMarkersAreMutedWhenActive() {
         let text = "==text=="
         let attrs = MarkdownASTStyler.styleAttributes(
-            text: text, fontName: fontName, fontSize: base, caretLocation: 4, configuration: .default
+            text: text, fontName: fontName, fontSize: base, caretLocation: 4,
+            configuration: .init(extensions: [HighlightExtension(), StrikethroughExtension()])
         )
         #expect(color(in: attrs, at: 0) == MarkdownEditorTheme.default.mutedText)
         #expect(color(in: attrs, at: 1) == MarkdownEditorTheme.default.mutedText)
@@ -160,7 +161,8 @@ struct MarkdownASTStylerTests {
     func strikethroughMarkersAreMutedWhenActive() {
         let text = "~~strike~~"
         let attrs = MarkdownASTStyler.styleAttributes(
-            text: text, fontName: fontName, fontSize: base, caretLocation: 5, configuration: .default
+            text: text, fontName: fontName, fontSize: base, caretLocation: 5,
+            configuration: .init(extensions: [StrikethroughExtension()])
         )
         #expect(color(in: attrs, at: 0) == MarkdownEditorTheme.default.mutedText)
         #expect(color(in: attrs, at: 1) == MarkdownEditorTheme.default.mutedText)
@@ -172,7 +174,8 @@ struct MarkdownASTStylerTests {
     func inactiveMarkersShrinkInsteadOfColored() {
         let text = "a ==text== b **bold** c ~~strike~~ d *italic* e"
         let attrs = MarkdownASTStyler.styleAttributes(
-            text: text, fontName: fontName, fontSize: base, caretLocation: 0, configuration: .default
+            text: text, fontName: fontName, fontSize: base, caretLocation: 0,
+            configuration: .init(extensions: [HighlightExtension(), StrikethroughExtension()])
         )
         for pos in [2, 3, 8, 9, 13, 14, 19, 20, 24, 25, 32, 33, 37, 44] {
             #expect(isHiddenMarkerFont(in: attrs, at: pos), "marker at \(pos) should be shrunk")

@@ -471,6 +471,20 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         // and no rebuild is needed for it to take effect.
         textView.configuration.lists = configuration.lists
         context.coordinator.configuration.lists = configuration.lists
+        // Sync registered inline extensions. A change alters the GRAMMAR
+        // (tokens differ under the new registry), so the coordinator's parsed
+        // cache must drop before the restyle — the parse-layer memos invalidate
+        // themselves via the registry fingerprint.
+        let newExtensionFingerprint = configuration.extensionRegistry.fingerprint
+        if newExtensionFingerprint != context.coordinator.configuration.extensionRegistry.fingerprint {
+            context.coordinator.configuration.extensions = configuration.extensions
+            textView.configuration.extensions = configuration.extensions
+            context.coordinator.cachedParsedDocument = nil
+            let fullRange = NSRange(location: 0, length: (textView.string as NSString).length)
+            if fullRange.length > 0 {
+                context.coordinator.restyleParagraphs([fullRange], in: textView)
+            }
+        }
         // Reading column centers by POSITION (container subview), so the text inset is constant.
         let desiredTextInset = NSSize(
             width: configuration.textInsets.horizontal,

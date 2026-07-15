@@ -33,6 +33,26 @@ struct TableImageCacheTests {
         )
     }
 
+    @Test func differentExtensionRegistriesDoNotShareCacheEntries() throws {
+        let source = "| a | b |\n|---|---|\n| ==x== | 2 |"
+        let parsed = try #require(MarkdownStyler.parseTableSource(source))
+        let aqua = try #require(NSAppearance(named: .aqua))
+        var extConfig = MarkdownEditorConfiguration.default
+        extConfig.extensions = [HighlightExtension()]
+        // Render under the extension config first, then under the plain config:
+        // the second call must be a fresh render, never the cached image (the
+        // cell would show a highlight the plain config doesn't have).
+        _ = MarkdownStyler.tableImage(
+            for: source, parsed: parsed,
+            ctx: makeContext(for: source, configuration: extConfig),
+            appearance: aqua, availableWidth: 2000)
+        let plain = MarkdownStyler.tableImage(
+            for: source, parsed: parsed,
+            ctx: makeContext(for: source),
+            appearance: aqua, availableWidth: 2000)
+        #expect(plain.rendered, "plain-config table must not reuse the extension-config image")
+    }
+
     @Test func secondRequestIsServedFromCache() throws {
         let source = "| alpha | beta |\n|---|---|\n| 1 | 2 |"
         let parsed = try #require(MarkdownStyler.parseTableSource(source))

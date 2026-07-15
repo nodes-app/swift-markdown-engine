@@ -20,7 +20,8 @@ struct TableCellTests {
         let cfg = MarkdownEditorConfiguration.default
         return MarkdownStyler.formattedCellString(
             raw, baseFont: NSFont.systemFont(ofSize: 14), header: header,
-            theme: cfg.theme, codeBackgroundColor: .clear, latex: cfg.services.latex
+            theme: cfg.theme, codeBackgroundColor: .clear, latex: cfg.services.latex,
+            extensions: [HighlightExtension(), StrikethroughExtension()]
         )
     }
 

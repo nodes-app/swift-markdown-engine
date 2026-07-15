@@ -24,14 +24,14 @@ extension NativeTextView {
         if value != 0 {
             if self.string.contains("`") {
                 let inCode = coordinator?.isInsideCode(range: charRange, in: self.string)
-                    ?? MarkdownDetection.isInsideCodeBlock(range: charRange, in: self.string)
+                    ?? MarkdownDetection.isInsideCodeBlock(range: charRange, in: self.string, registry: self.configuration.extensionRegistry)
                 if inCode {
                     return
                 }
             }
             if self.string.contains("$") {
                 let inLatex = coordinator?.isInsideLatex(location: charRange.location, in: self.string)
-                    ?? MarkdownDetection.isInsideLatex(location: charRange.location, in: self.string)
+                    ?? MarkdownDetection.isInsideLatex(location: charRange.location, in: self.string, registry: self.configuration.extensionRegistry)
                 if inLatex {
                     return
                 }

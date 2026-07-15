@@ -206,57 +206,147 @@ struct InlineParserTests {
         ])
     }
 
-    // MARK: - Strikethrough
+    // MARK: - Strikethrough (extension-supplied `~~…~~` span)
+
+    private var strikeRegistry: ExtensionRegistry {
+        ExtensionRegistry(extensions: [StrikethroughExtension()])
+    }
+
+    private func strike(range: NSRange, markers: [NSRange], children: [InlineNode]) -> InlineNode {
+        .ext(ExtensionInlineNode(
+            extensionID: StrikethroughExtension.identifier,
+            range: range,
+            contentRange: NSRange(location: NSMaxRange(markers[0]),
+                                  length: markers[1].location - NSMaxRange(markers[0])),
+            markers: markers, children: children))
+    }
+
+    @Test("without a registered extension, ~~x~~ stays literal text")
+    func strikethroughUnregisteredStaysLiteral() {
+        #expect(InlineParser.parse("~~x~~") == [.text(r(0, 5))])
+    }
 
     @Test("strikethrough, content recursively parsed")
     func strikethrough() {
-        #expect(InlineParser.parse("~~x~~") == [
-            .strikethrough(range: r(0, 5), markers: [r(0, 2), r(3, 2)], children: [.text(r(2, 1))]),
+        #expect(InlineParser.parse("~~x~~", registry: strikeRegistry) == [
+            strike(range: r(0, 5), markers: [r(0, 2), r(3, 2)], children: [.text(r(2, 1))]),
         ])
     }
 
     @Test("triple tildes do not strike")
     func tripleTildeNotStrike() {
-        #expect(InlineParser.parse("~~~x~~~") == [.text(r(0, 7))])
+        #expect(InlineParser.parse("~~~x~~~", registry: strikeRegistry) == [.text(r(0, 7))])
+    }
+
+    @Test("~~abc~~~ stays literal (closer must not extend a longer run)")
+    func strikethroughRejectsCloserRun() {
+        #expect(InlineParser.parse("~~abc~~~", registry: strikeRegistry) == [.text(r(0, 8))])
     }
 
     @Test("strikethrough wraps emphasis")
     func strikeWrapsEmphasis() {
-        #expect(InlineParser.parse("~~*x*~~") == [
-            .strikethrough(range: r(0, 7), markers: [r(0, 2), r(5, 2)], children: [
+        #expect(InlineParser.parse("~~*x*~~", registry: strikeRegistry) == [
+            strike(range: r(0, 7), markers: [r(0, 2), r(5, 2)], children: [
                 .emphasis(.italic, range: r(2, 3), markers: [r(2, 1), r(4, 1)], children: [.text(r(3, 1))]),
             ]),
         ])
     }
 
-    // MARK: - Highlight
+    @Test("an extension sharing a built-in trigger char is reachable when the built-in fails")
+    func extensionReachableAfterBuiltInFails() {
+        // `$50$` is rejected by the built-in math heuristic (currency); a
+        // registered `$…$` extension must still get its chance (fall-through).
+        struct DollarSpan: MarkdownExtension {
+            var id: String { "dollar-span" }
+            var syntax: SpanSyntax { SpanSyntax(open: "$", close: "$", parsesContent: false) }
+            func contentAttributes(theme: MarkdownEditorTheme) -> [NSAttributedString.Key: Any] { [:] }
+            func html(childrenHTML: String) -> String { childrenHTML }
+        }
+        let registry = ExtensionRegistry(extensions: [DollarSpan()])
+        let nodes = InlineParser.parse("$50$", registry: registry)
+        guard case .ext(let node) = nodes.first else {
+            Issue.record("expected extension span, got \(nodes)")
+            return
+        }
+        #expect(node.extensionID == "dollar-span")
+        // And the built-in still wins when it matches: real math parses as latex.
+        let mathNodes = InlineParser.parse("$x^2 + y$", registry: registry)
+        guard case .inlineLatex = mathNodes.first else {
+            Issue.record("built-in latex must win over the extension, got \(mathNodes)")
+            return
+        }
+    }
+
+    @Test("both extensions registered: ~~ and == coexist and nest")
+    func strikeAndHighlightCoexist() {
+        let registry = ExtensionRegistry(extensions: [HighlightExtension(), StrikethroughExtension()])
+        let nodes = InlineParser.parse("~~a~~ ==b==", registry: registry)
+        #expect(nodes.count == 3)   // strike, " ", highlight
+        if case .ext(let first) = nodes[0] { #expect(first.extensionID == StrikethroughExtension.identifier) }
+        if case .ext(let last) = nodes[2] { #expect(last.extensionID == HighlightExtension.identifier) }
+    }
+
+    // MARK: - Highlight (extension-supplied `==…==` span)
+
+    private var highlightRegistry: ExtensionRegistry {
+        ExtensionRegistry(extensions: [HighlightExtension()])
+    }
+
+    private func hi(range: NSRange, markers: [NSRange], children: [InlineNode]) -> InlineNode {
+        .ext(ExtensionInlineNode(
+            extensionID: HighlightExtension.identifier,
+            range: range,
+            contentRange: NSRange(location: NSMaxRange(markers[0]),
+                                  length: markers[1].location - NSMaxRange(markers[0])),
+            markers: markers, children: children))
+    }
+
+    @Test("without a registered extension, ==x== stays literal text")
+    func highlightUnregisteredStaysLiteral() {
+        #expect(InlineParser.parse("==x==") == [.text(r(0, 5))])
+    }
 
     @Test("highlight, content recursively parsed")
     func highlight() {
-        #expect(InlineParser.parse("==x==") == [
-            .highlight(range: r(0, 5), markers: [r(0, 2), r(3, 2)], children: [.text(r(2, 1))]),
+        #expect(InlineParser.parse("==x==", registry: highlightRegistry) == [
+            hi(range: r(0, 5), markers: [r(0, 2), r(3, 2)], children: [.text(r(2, 1))]),
         ])
     }
 
     @Test("triple equals do not highlight")
     func tripleEqualsNotHighlight() {
-        #expect(InlineParser.parse("===x===") == [.text(r(0, 7))])
+        #expect(InlineParser.parse("===x===", registry: highlightRegistry) == [.text(r(0, 7))])
     }
 
     @Test("==abc=== matches ==abc==, trailing = is plain text")
     func highlightToleratesTrailingTripleEquals() {
-        #expect(InlineParser.parse("==abc===") == [
-            .highlight(range: r(0, 7), markers: [r(0, 2), r(5, 2)], children: [.text(r(2, 3))]),
+        #expect(InlineParser.parse("==abc===", registry: highlightRegistry) == [
+            hi(range: r(0, 7), markers: [r(0, 2), r(5, 2)], children: [.text(r(2, 3))]),
             .text(r(7, 1)),
         ])
     }
 
     @Test("highlight wraps emphasis")
     func highlightWrapsEmphasis() {
-        #expect(InlineParser.parse("==*x*==") == [
-            .highlight(range: r(0, 7), markers: [r(0, 2), r(5, 2)], children: [
+        #expect(InlineParser.parse("==*x*==", registry: highlightRegistry) == [
+            hi(range: r(0, 7), markers: [r(0, 2), r(5, 2)], children: [
                 .emphasis(.italic, range: r(2, 3), markers: [r(2, 1), r(4, 1)], children: [.text(r(3, 1))]),
             ]),
+        ])
+    }
+
+    @Test("a lone = inside content aborts the highlight candidate")
+    func highlightLoneEqualsAborts() {
+        #expect(InlineParser.parse("==a=b==", registry: highlightRegistry) == [.text(r(0, 7))])
+    }
+
+    @Test("highlight never crosses a code span")
+    func highlightDoesNotCrossCodeSpan() {
+        // The backtick run is claimed first; the == candidate overlapping it is rejected.
+        #expect(InlineParser.parse("==a `b==` c", registry: highlightRegistry) == [
+            .text(r(0, 4)),
+            .code(range: r(4, 5), content: r(5, 3)),
+            .text(r(9, 2)),
         ])
     }
 

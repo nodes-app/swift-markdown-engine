@@ -48,15 +48,10 @@ enum InlineASTAdapter {
         case .imageEmbed(let range, let target, let markers):
             result.append(MarkdownToken(kind: .imageEmbed, range: range, contentRange: target, markerRanges: markers))
 
-        case .strikethrough(let range, let markers, let children):
-            result.append(MarkdownToken(kind: .strikethrough, range: range,
-                                        contentRange: between(markers), markerRanges: markers))
-            children.forEach { append($0, to: &result) }
-
-        case .highlight(let range, let markers, let children):
-            result.append(MarkdownToken(kind: .highlight, range: range,
-                                        contentRange: between(markers), markerRanges: markers))
-            children.forEach { append($0, to: &result) }
+        case .ext(let node):
+            result.append(MarkdownToken(kind: .extensionSpan(node.extensionID), range: node.range,
+                                        contentRange: node.contentRange, markerRanges: node.markers))
+            node.children.forEach { append($0, to: &result) }
 
         case .inlineLatex(let range, let content, let markers):
             result.append(MarkdownToken(kind: .inlineLatex, range: range, contentRange: content, markerRanges: markers))

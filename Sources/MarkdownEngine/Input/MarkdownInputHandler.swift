@@ -50,7 +50,10 @@ enum MarkdownInputHandler {
         if let blockLatexTokens {
             resolvedTokens = blockLatexTokens
         } else {
-            resolvedTokens = MarkdownTokenizer.parseTokensViaAST(in: textView.string).filter { $0.kind == .blockLatex }
+            resolvedTokens = MarkdownTokenizer.parseTokensViaAST(
+                in: textView.string,
+                registry: (textView as? NativeTextView)?.configuration.extensionRegistry ?? .empty
+            ).filter { $0.kind == .blockLatex }
         }
         return handleBlockAutoWrap(textView: textView, affectedCharRange: affectedCharRange,
                                    replacementString: replacementString, tokens: resolvedTokens)
@@ -67,7 +70,10 @@ enum MarkdownInputHandler {
         if let imageEmbedTokens {
             resolvedTokens = imageEmbedTokens
         } else {
-            resolvedTokens = MarkdownTokenizer.parseTokensViaAST(in: textView.string).filter { $0.kind == .imageEmbed }
+            resolvedTokens = MarkdownTokenizer.parseTokensViaAST(
+                in: textView.string,
+                registry: (textView as? NativeTextView)?.configuration.extensionRegistry ?? .empty
+            ).filter { $0.kind == .imageEmbed }
         }
         return handleBlockAutoWrap(textView: textView, affectedCharRange: affectedCharRange,
                                    replacementString: replacementString, tokens: resolvedTokens)

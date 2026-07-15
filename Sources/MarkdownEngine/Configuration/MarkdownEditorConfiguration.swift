@@ -69,6 +69,10 @@ public struct MarkdownEditorConfiguration: Sendable {
     /// Runtime-switchable; a flip rebuilds immediately and drops the document's
     /// undo stack (actions from the other mode would replay at stale ranges).
     public var rawSourceMode: Bool
+    /// Opt-in constructs beyond pure markdown (e.g. `==highlight==`). Empty by
+    /// default: unregistered syntax stays literal text. Order defines match
+    /// precedence among extensions; built-in constructs always win first.
+    public var extensions: [any MarkdownExtension]
 
     public init(
         theme: MarkdownEditorTheme = .default,
@@ -92,7 +96,8 @@ public struct MarkdownEditorConfiguration: Sendable {
         readingWidth: CGFloat? = nil,
         spellChecking: SpellCheckingPolicy = .default,
         heightBehavior: HeightBehavior = .scrolls,
-        rawSourceMode: Bool = false
+        rawSourceMode: Bool = false,
+        extensions: [any MarkdownExtension] = []
     ) {
         self.theme = theme
         self.services = services
@@ -116,6 +121,7 @@ public struct MarkdownEditorConfiguration: Sendable {
         self.spellChecking = spellChecking
         self.heightBehavior = heightBehavior
         self.rawSourceMode = rawSourceMode
+        self.extensions = extensions
     }
 
     public static let `default` = MarkdownEditorConfiguration()
