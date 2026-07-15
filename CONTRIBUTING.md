@@ -24,21 +24,10 @@ your changes against a real app target.
 
 ### Local DocC preview
 
-To preview the DocC catalog locally, temporarily add the swift-docc
-plugin to `Package.swift`:
-
-```swift
-.package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.0")
-```
-
-Then run:
-
-```bash
-swift package --disable-sandbox preview-documentation --target MarkdownEngine
-```
-
-The plugin is intentionally **not** a permanent dependency — the core
-`MarkdownEngine` product stays free of any optional tooling.
+Temporarily add the [swift-docc-plugin](https://github.com/swiftlang/swift-docc-plugin)
+to `Package.swift`, then `swift package --disable-sandbox preview-documentation
+--target MarkdownEngine`. It's intentionally not a permanent dependency — the
+core product stays free of optional tooling.
 
 ## Reporting bugs
 
@@ -72,17 +61,15 @@ Non-negotiable for the core `MarkdownEngine` target:
   `MarkdownEngineLatex` → SwiftMath) are the deliberate exception so
   consumers can opt in. New bridges or new core deps need an issue
   first.
-- **New constructs go through the extension seam, not the core grammar.** A delimited span (`==highlight==`, `%%comment%%`, …) should be a
-  `MarkdownExtension` in `Sources/MarkdownEngine/Extensions/` — see
-  `HighlightExtension` as the template — not a new case wired into the parser,
-  styler, and renderer. This keeps the core pure markdown and each construct
-  isolated. Editing the core grammar (a genuinely new block type, a CommonMark
-  fix) needs an issue first.
+- **New constructs are extensions, not core grammar.** A construct like
+  `==highlight==` belongs in `Sources/MarkdownEngine/Extensions/` as a
+  `MarkdownExtension` — see `HighlightExtension` as the template — never a new
+  case threaded through the parser, styler, and renderer. This keeps the core
+  pure markdown and each construct isolated. Image/overlay-rendered constructs
+  (tables, math) are the exception — they still need core work; open an issue
+  first.
 - **Public surface stays small.** Favor `internal`; new public symbols
   need a DocC comment.
-
-[ARCHITECTURE.md](ARCHITECTURE.md) has the load-bearing invariants
-inline with the directory they apply to.
 
 ## Commit messages
 

@@ -24,7 +24,8 @@ checkboxes.
 
 ## Features
 
-- **Live Markdown styling** — bold, italic, headings, lists, blockquotes, GFM tables, code, links, task checkboxes, horizontal rules; `==highlight==` and `~~strikethrough~~` via opt-in [extensions](#extensions) 
+- **Live Markdown styling** — bold, italic, headings, lists, blockquotes, GFM tables, code, links, task checkboxes, horizontal rules
+- **Extensions** — opt-in constructs beyond CommonMark (`==highlight==`, `~~strikethrough~~`, …); add your own via [`MarkdownExtension`](#extensions)
 - **Wiki-style linking** with two-form storage / display roundtripping
   (`[[Name|<id>]]` ↔ `[[Name]]`)
 - **Image embeds** — both `![[Name]]` (Obsidian-style, embedder supplies the                           
@@ -125,8 +126,8 @@ Each protocol and its no-op default are documented in DocC.
 
 ### Extensions
 
-The core engine parses pure markdown. Extra constructs — delimited spans like
-`==highlight==` and `~~strikethrough~~` — are opt-in extensions:
+The core engine parses pure markdown. Extra constructs like `==highlight==`
+and `~~strikethrough~~` are opt-in extensions:
 
 ```swift
 var config = MarkdownEditorConfiguration()
@@ -134,11 +135,10 @@ config.extensions = [HighlightExtension(), StrikethroughExtension()]
 ```
 
 Unregistered syntax stays literal text. An extension supplies only its
-delimiters (`SpanSyntax`), the attributes for its content, and an HTML wrapper
-for rich copy — the parser owns all span geometry, marker hiding, caret
-reveal, and incremental restyling, so extensions behave identically to
-built-ins and cannot affect neighboring constructs. Conform to
-`MarkdownExtension` to add your own.
+syntax, the attributes for its content, and an HTML wrapper for rich copy — the
+parser owns all geometry, marker hiding, caret reveal, and incremental
+restyling, so extensions behave identically to built-ins and cannot affect
+neighboring constructs. Conform to `MarkdownExtension` to add your own.
 
 ### Code Blocks
 
