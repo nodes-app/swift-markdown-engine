@@ -126,19 +126,20 @@ Each protocol and its no-op default are documented in DocC.
 
 ### Extensions
 
-The core engine parses pure markdown. Extra constructs like `==highlight==`
-and `~~strikethrough~~` are opt-in extensions:
+The core engine parses pure markdown. Extra constructs like `==highlight==`,
+`~~strikethrough~~`, and `::: … :::` container blocks are opt-in extensions:
 
 ```swift
 var config = MarkdownEditorConfiguration()
-config.extensions = [HighlightExtension(), StrikethroughExtension()]
+config.extensions = [HighlightExtension(), StrikethroughExtension(), ContainerExtension()]
 ```
 
-Unregistered syntax stays literal text. An extension supplies only its
-syntax, the attributes for its content, and an HTML wrapper for rich copy — the
-parser owns all geometry, marker hiding, caret reveal, and incremental
-restyling, so extensions behave identically to built-ins and cannot affect
-neighboring constructs. Conform to `MarkdownExtension` to add your own.
+Unregistered syntax stays literal text. An extension contributes an inline
+form (`InlineSyntax`), a fenced block form (`BlockSyntax`), or both — plus the
+attributes for its content and an HTML wrapper for rich copy. The parser owns
+all geometry, marker/fence hiding, caret reveal, and incremental restyling, so
+extensions behave identically to built-ins and cannot affect neighboring
+constructs. Conform to `MarkdownExtension` to add your own.
 
 ### Code Blocks
 

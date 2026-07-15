@@ -116,10 +116,10 @@ final class DocumentParseState {
         if wasValid, let diff {
             newBlocks = BlockParser.incrementalParse(
                 oldChars: prevChars, oldBlocks: prevBlocks,
-                newChars: newChars, newNS: ns, diff: diff
+                newChars: newChars, newNS: ns, diff: diff, registry: registry
             )?.blocks
         }
-        let resolvedBlocks = newBlocks ?? BlockParser.computeBlocks(text)
+        let resolvedBlocks = newBlocks ?? BlockParser.computeBlocks(text, registry: registry)
         let tBlocks = DispatchTime.now().uptimeNanoseconds
 
         // 3. Tokens: prefix/suffix reuse on the same diff, full fallback.
@@ -150,7 +150,7 @@ final class DocumentParseState {
         // Publish to the static memos so their callers (restyle's
         // DocumentAST.parse, smart-input helpers) take the memcmp hit instead
         // of splicing against a one-keystroke-stale cache every time.
-        BlockParser.seedCache(chars: newChars, blocks: resolvedBlocks)
+        BlockParser.seedCache(chars: newChars, blocks: resolvedBlocks, fingerprint: registry.fingerprint)
         MarkdownTokenizer.seedCache(chars: newChars, tokens: resolvedTokens, fingerprint: registry.fingerprint)
         return resolvedTokens
     }

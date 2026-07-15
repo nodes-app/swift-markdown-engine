@@ -471,7 +471,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         // and no rebuild is needed for it to take effect.
         textView.configuration.lists = configuration.lists
         context.coordinator.configuration.lists = configuration.lists
-        // Sync registered inline extensions. A change alters the GRAMMAR
+        // Sync registered extensions (inline spans + fenced blocks). A change alters the GRAMMAR
         // (tokens differ under the new registry), so the coordinator's parsed
         // cache must drop before the restyle — the parse-layer memos invalidate
         // themselves via the registry fingerprint.

@@ -70,6 +70,17 @@ public enum MarkdownHTMLRenderer {
 
         case .blank:
             return nil
+
+        case .ext(let node):
+            guard let ext = env.byID[node.extensionID] else {
+                return "<p>\(escape(ns.substring(with: node.range).trimmingCharacters(in: .newlines)))</p>"
+            }
+            // Content lines are separate lines of one block — keep them as
+            // <br> breaks so multi-line bodies don't collapse to one line.
+            let inner = renderInlines(node.inlines, ns: ns, env: env)
+                .trimmingCharacters(in: .newlines)
+                .replacingOccurrences(of: "\n", with: "<br>\n")
+            return ext.html(childrenHTML: inner)
         }
     }
 

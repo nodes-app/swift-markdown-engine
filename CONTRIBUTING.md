@@ -62,10 +62,11 @@ Non-negotiable for the core `MarkdownEngine` target:
   consumers can opt in. New bridges or new core deps need an issue
   first.
 - **New constructs are extensions, not core grammar.** A construct like
-  `==highlight==` belongs in `Sources/MarkdownEngine/Extensions/` as a
-  `MarkdownExtension` — see `HighlightExtension` as the template — never a new
-  case threaded through the parser, styler, and renderer. This keeps the core
-  pure markdown and each construct isolated. Image/overlay-rendered constructs
+  `==highlight==` (inline) or a `::: … :::` fenced block belongs in
+  `Sources/MarkdownEngine/Extensions/` as a `MarkdownExtension` — see
+  `HighlightExtension` / `ContainerExtension` as templates — never a new case
+  threaded through the parser, styler, and renderer. This keeps the core pure
+  markdown and each construct isolated. Image/overlay-rendered constructs
   (tables, math) are the exception — they still need core work; open an issue
   first.
 - **Public surface stays small.** Favor `internal`; new public symbols

@@ -237,7 +237,15 @@ extension NativeTextViewCoordinator {
         )
 
         var effectiveParagraphCandidates = paragraphCandidates
-        if codeBlockStructureChanged {
+        // An edit touching an extension block fence re-pairs lines arbitrarily
+        // far away (exactly like ```), so restyle the whole document. Checked
+        // on BOTH sides of the edit: the pre-edit window (captured in
+        // shouldChangeTextIn, catches a deleted fence) and the post-edit
+        // window (catches a typed/pasted one). No-op with no block extensions.
+        let extFenceStructureChanged = pendingExtFenceTouched
+            || editWindowTouchesExtensionFence(in: fullText, around: safeEditedRange)
+        pendingExtFenceTouched = false
+        if codeBlockStructureChanged || extFenceStructureChanged {
             effectiveParagraphCandidates = [NSRange(location: 0, length: fullText.length)]
         }
         // Restyle only latex/imageEmbed paragraphs the EDIT touches (mirrors the
@@ -573,6 +581,19 @@ extension NativeTextViewCoordinator {
         }
     }
 
+    /// Whether the line-expanded window around `range` contains a registered
+    /// extension block fence. O(edit window) — the lines touched by the edit,
+    /// not the document.
+    func editWindowTouchesExtensionFence(in text: NSString, around range: NSRange) -> Bool {
+        let fences = cachedExtensionRegistry.blockEntries
+        guard !fences.isEmpty else { return false }
+        guard range.location != NSNotFound, range.location >= 0,
+              NSMaxRange(range) <= text.length else { return false }
+        let window = text.lineRange(for: range)
+        let windowText = text.substring(with: window)
+        return fences.contains { windowText.contains($0.fence) }
+    }
+
     /// Backtick census in O(edit window): the greedy ``` count equals
     /// Σ floor(runLen/3) over maximal backtick runs, so an edit only changes
     /// the contribution of runs it touches. `previousBacktickCount` minus the
@@ -643,8 +664,10 @@ extension NativeTextViewCoordinator {
         if affectedCharRange.location >= 0, NSMaxRange(affectedCharRange) <= preNS.length {
             pendingBacktickWindow = (affectedCharRange.location, affectedCharRange.length,
                 MarkdownDetection.backtickWindowCount(in: preNS, around: affectedCharRange))
+            pendingExtFenceTouched = editWindowTouchesExtensionFence(in: preNS, around: affectedCharRange)
         } else {
             pendingBacktickWindow = nil
+            pendingExtFenceTouched = false
         }
         if isProgrammaticEdit { return true }
         if isWritingToolsActive { return true }

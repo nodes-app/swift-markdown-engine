@@ -92,8 +92,9 @@ struct ContentView: View {
 
         // Opt-in constructs beyond pure markdown. The core engine no longer
         // knows `==highlight==` or `~~strikethrough~~` — they are extensions
-        // you register. Unregistered syntax stays literal text.
-        config.extensions = [HighlightExtension(), StrikethroughExtension()]
+        // you register; `::: … :::` containers are a fenced BLOCK extension.
+        // Unregistered syntax stays literal text.
+        config.extensions = [HighlightExtension(), StrikethroughExtension(), ContainerExtension()]
 
         return config
     }
@@ -131,6 +132,14 @@ This ==highlighted text== comes from `HighlightExtension`, and this \
 ~~struck-through text~~ from `StrikethroughExtension`. Unregistered, the exact \
 same characters would stay literal markdown. Nesting works too: \
 ==with *italic* inside== and ~~also *nested*~~.
+
+Extensions can also contribute fenced **blocks** — this container is \
+`ContainerExtension`:
+
+::: note
+A fenced container block. The `:::` fences hide while you read and reveal \
+while you edit — body text keeps full **inline** styling.
+:::
 """
 
 /// Table layout demo: the first table's cells WRAP to the available width

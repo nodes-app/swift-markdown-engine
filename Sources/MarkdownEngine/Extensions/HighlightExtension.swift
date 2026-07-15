@@ -29,8 +29,8 @@ public struct HighlightExtension: MarkdownExtension {
 
     public var id: String { Self.identifier }
 
-    public var syntax: SpanSyntax {
-        SpanSyntax(open: "==", close: "==")
+    public var inline: InlineSyntax? {
+        InlineSyntax(open: "==", close: "==")
     }
 
     public func contentAttributes(theme: MarkdownEditorTheme) -> [NSAttributedString.Key: Any] {

@@ -36,6 +36,9 @@ enum MarkdownTokenKind: Equatable {
     /// A span contributed by a registered `MarkdownExtension`,
     /// carrying the extension's id (e.g. `.extensionSpan("highlight")`).
     case extensionSpan(String)
+    /// A fenced block contributed by a registered `MarkdownExtension`,
+    /// carrying the extension's id (e.g. `.extensionBlock("container")`).
+    case extensionBlock(String)
 }
 
 struct MarkdownToken {

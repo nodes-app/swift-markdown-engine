@@ -33,6 +33,7 @@ enum BlockKind: Equatable {
     case table           // GFM table — opaque (rendered as a unit)
     case thematicBreak   // `---` / `***` / `___` — produces no token today
     case blank           // blank / whitespace-only line(s) — separator
+    case ext(String)     // extension-supplied fenced block (id), inline-bearing content
 }
 
 /// One block; `range` is the absolute UTF-16 span of its lines, tiling with no gaps.
@@ -57,10 +58,13 @@ enum BlockParser {
     private static let cacheLock = NSLock()
     private static var cachedChars: [unichar]?     // UTF-16 buffer of the last parse
     private static var cachedBlocks: [Block]?
+    /// Registry fingerprint the memo was computed under — extension fences
+    /// change the block structure of identical text.
+    private static var cachedFingerprint: String = ""
 
     /// Splits `text` into gap-free tiling blocks; memoizes the last parse so both per-keystroke callers share one line-scan.
     /// Pass `utf16Chars` when the caller already extracted the buffer (must match `text`).
-    static func parse(_ text: String, utf16Chars: [unichar]? = nil) -> [Block] {
+    static func parse(_ text: String, utf16Chars: [unichar]? = nil, registry: ExtensionRegistry = .empty) -> [Block] {
         let textNS = text as NSString
         let newLen = textNS.length
         let newChars: [unichar]
@@ -73,22 +77,22 @@ enum BlockParser {
         }
 
         cacheLock.lock()
-        let prevChars = cachedChars
-        let prevBlocks = cachedBlocks
+        let prevChars = cachedFingerprint == registry.fingerprint ? cachedChars : nil
+        let prevBlocks = cachedFingerprint == registry.fingerprint ? cachedBlocks : nil
         cacheLock.unlock()
 
         if let prevChars, let prevBlocks {
             // Identical text → memcmp hit (the scan below would walk O(doc)).
             if equalBuffers(prevChars, newChars) { return prevBlocks }
             if let diff = scanDiff(old: prevChars, new: newChars),
-               let (incr, _) = incrementalParse(oldChars: prevChars, oldBlocks: prevBlocks, newChars: newChars, newNS: textNS, diff: diff) {
-                cacheLock.lock(); cachedChars = newChars; cachedBlocks = incr; cacheLock.unlock()
+               let (incr, _) = incrementalParse(oldChars: prevChars, oldBlocks: prevBlocks, newChars: newChars, newNS: textNS, diff: diff, registry: registry) {
+                cacheLock.lock(); cachedChars = newChars; cachedBlocks = incr; cachedFingerprint = registry.fingerprint; cacheLock.unlock()
                 return incr
             }
         }
 
-        let blocks = computeBlocks(text)
-        cacheLock.lock(); cachedChars = newChars; cachedBlocks = blocks; cacheLock.unlock()
+        let blocks = computeBlocks(text, registry: registry)
+        cacheLock.lock(); cachedChars = newChars; cachedBlocks = blocks; cachedFingerprint = registry.fingerprint; cacheLock.unlock()
         return blocks
     }
 
@@ -96,8 +100,8 @@ enum BlockParser {
     /// per-keystroke result) so static-path callers — the restyle's
     /// DocumentAST.parse above all — take the memcmp hit instead of
     /// re-splicing against a one-keystroke-stale cache.
-    static func seedCache(chars: [unichar], blocks: [Block]) {
-        cacheLock.lock(); cachedChars = chars; cachedBlocks = blocks; cacheLock.unlock()
+    static func seedCache(chars: [unichar], blocks: [Block], fingerprint: String = "") {
+        cacheLock.lock(); cachedChars = chars; cachedBlocks = blocks; cachedFingerprint = fingerprint; cacheLock.unlock()
     }
 
     private static func equalBuffers(_ a: [unichar], _ b: [unichar]) -> Bool {
@@ -127,7 +131,7 @@ enum BlockParser {
     /// the leading whitespace of an indented `$$` opener flips the pairing
     /// from arbitrarily far away from the literal `$$`. The boundary walk is
     /// capped; hitting the cap reports a delimiter (conservative full parse).
-    static func hasBlockDelimiter(_ buf: [unichar], _ lo: Int, _ hi: Int) -> Bool {
+    static func hasBlockDelimiter(_ buf: [unichar], _ lo: Int, _ hi: Int, fences: [[unichar]] = []) -> Bool {
         let cap = 4096
         var start = max(0, lo - 3)
         var steps = 0
@@ -150,6 +154,15 @@ enum BlockParser {
             } else if buf[i] == 0x60, i + 2 < end, buf[i + 1] == 0x60, buf[i + 2] == 0x60 {
                 return true                                              // ```
             }
+            // Extension fences pair with a distant partner exactly like ``` —
+            // an edit touching one must force the full reparse too.
+            for fence in fences where !fence.isEmpty && buf[i] == fence[0] {
+                if i + fence.count <= end {
+                    var match = true
+                    for (k, u) in fence.enumerated() where buf[i + k] != u { match = false; break }
+                    if match { return true }
+                }
+            }
             i += 1
         }
         return false
@@ -157,7 +170,7 @@ enum BlockParser {
 
     /// Splice-parse against a precomputed change region (descriptor- or scan-derived):
     /// reparse the affected block window, splice between untouched prefix/suffix; nil to fall back to full.
-    static func incrementalParse(oldChars o: [unichar], oldBlocks: [Block], newChars n: [unichar], newNS: NSString, diff: BufferDiff) -> (blocks: [Block], window: Int)? {
+    static func incrementalParse(oldChars o: [unichar], oldBlocks: [Block], newChars n: [unichar], newNS: NSString, diff: BufferDiff, registry: ExtensionRegistry = .empty) -> (blocks: [Block], window: Int)? {
         guard !oldBlocks.isEmpty else { return nil }
         let oldLen = o.count, newLen = n.count
         guard oldLen > 0, newLen > 0 else { return nil }
@@ -168,8 +181,10 @@ enum BlockParser {
         guard changeStart >= 0, changeEnd <= oldLen, diff.changeEndNew <= newLen,
               changeStart <= changeEnd, changeStart <= diff.changeEndNew else { return nil }
 
-        // A fence/block-LaTeX delimiter in the edit can pair with a distant partner → full reparse.
-        if hasBlockDelimiter(o, changeStart, changeEnd) || hasBlockDelimiter(n, changeStart, diff.changeEndNew) {
+        // A fence/block-LaTeX/extension delimiter in the edit can pair with a distant partner → full reparse.
+        let fences = registry.blockEntries.map(\.fenceChars)
+        if hasBlockDelimiter(o, changeStart, changeEnd, fences: fences)
+            || hasBlockDelimiter(n, changeStart, diff.changeEndNew, fences: fences) {
             return nil
         }
 
@@ -207,11 +222,22 @@ enum BlockParser {
 
         // 5. Reparse just the window substring, shift to absolute new coords.
         let windowText = newNS.substring(with: NSRange(location: winStart, length: winEndNew - winStart))
-        let reparsed = computeBlocks(windowText).map { $0.shifted(by: winStart) }
-        // A trailing fence/latex reaching the window end might continue past it.
-        if let last = reparsed.last, last.kind == .fencedCode || last.kind == .blockLatex,
-           NSMaxRange(last.range) >= winEndNew {
-            return nil
+        let reparsed = computeBlocks(windowText, registry: registry).map { $0.shifted(by: winStart) }
+        // A trailing fence/latex/extension block reaching the window end might continue past it.
+        if let last = reparsed.last, NSMaxRange(last.range) >= winEndNew {
+            switch last.kind {
+            case .fencedCode, .blockLatex, .ext: return nil
+            case .paragraph:
+                // The edit may have dissolved the separator that used to end
+                // this paragraph (backspace-joining two paragraphs): if the
+                // suffix ALSO starts with a paragraph, the two would need to
+                // MERGE — a full parse never yields adjacent paragraphs. The
+                // splice can't merge across the cut, so fall back.
+                if winLast + 1 < oldBlocks.count, oldBlocks[winLast + 1].kind == .paragraph {
+                    return nil
+                }
+            default: break
+            }
         }
 
         // 6. Splice: prefix (unchanged) + reparsed window + suffix (shifted).
@@ -232,7 +258,7 @@ enum BlockParser {
         return (result, reparsed.count)
     }
 
-    static func computeBlocks(_ text: String) -> [Block] {
+    static func computeBlocks(_ text: String, registry: ExtensionRegistry = .empty) -> [Block] {
         let nsText = text as NSString
         let length = nsText.length
         guard length > 0 else { return [] }
@@ -313,6 +339,20 @@ enum BlockParser {
                 blocks.append(Block(kind: .blockLatex, range: union(lines[i...end])))
                 i = end + 1
 
+            } else if let entry = registry.blockEntry(opening: line) {
+                // Extension fenced block: consume through the closing fence
+                // line (or to EOF if none) — mirrors ``` semantics. Built-ins
+                // classify first, so a fence colliding with a built-in line
+                // form never reaches here.
+                var end = lines.count - 1
+                var scan = i + 1
+                while scan < lines.count {
+                    if lineText(scan).hasPrefix(entry.fence) { end = scan; break }
+                    scan += 1
+                }
+                blocks.append(Block(kind: .ext(entry.id), range: union(lines[i...end])))
+                i = end + 1
+
             } else {
                 // Paragraph: merge consecutive plain (non-blank, non-special) lines.
                 var end = i
@@ -320,9 +360,11 @@ enum BlockParser {
                     let next = lineText(end + 1)
                     if isBlank(next) || isFence(next) || isThematicBreak(next)
                         || isHeading(next) || isBlockquote(next) || isListItem(next) { break }
-                    // A table (row + separator) or a block-LaTeX run interrupts it.
+                    // A table (row + separator), a block-LaTeX run, or an
+                    // extension fence interrupts it.
                     if isTableRow(next), end + 2 < lines.count, isTableSeparator(lineText(end + 2)) { break }
                     if isBlockLatexOpen(next), blockLatexCloseIndex(from: end + 1) != nil { break }
+                    if registry.blockEntry(opening: next) != nil { break }
                     end += 1
                 }
                 blocks.append(Block(kind: .paragraph, range: union(lines[i...end])))

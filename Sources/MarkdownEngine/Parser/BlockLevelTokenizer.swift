@@ -42,17 +42,52 @@ enum BlockLevelTokenizer {
     }
 
     /// Block-level tokens for one block substring, dispatched by its kind.
-    static func tokens(for kind: BlockKind, in sub: NSString) -> [MarkdownToken] {
+    static func tokens(for kind: BlockKind, in sub: NSString, registry: ExtensionRegistry = .empty) -> [MarkdownToken] {
         switch kind {
         case .fencedCode:  return codeBlock(in: sub)
         case .heading:     return heading(in: sub)
         case .blockquote:  return blockquote(in: sub)
         case .table:       return table(in: sub)
         case .blockLatex:  return blockLatex(in: sub)
+        case .ext(let id): return extensionBlock(in: sub, id: id,
+                                                 fence: registry.blockEntry(for: id)?.fence ?? "")
         case .paragraph, .list, .thematicBreak, .blank:
             // Safety-net table scan; tables/block LaTeX are their own blocks now, inline `$$…$$` stays plain.
             return table(in: sub)
         }
+    }
+
+    // MARK: - Extension fenced block  (open fence line … closing fence line / EOF)
+
+    private static func extensionBlock(in s: NSString, id: String, fence: String) -> [MarkdownToken] {
+        let len = s.length
+        guard len > 0 else { return [] }
+        let afterOpenLine = line(in: s, from: 0).nextStart
+        // Closing fence: the LAST line, when it starts with the fence (the
+        // block parser guarantees no interior fence line).
+        var closeStart = -1
+        var closeEnd = -1
+        if afterOpenLine < len, !fence.isEmpty {
+            var lineStart = afterOpenLine
+            while lineStart < len {
+                let (contentEnd, next) = line(in: s, from: lineStart)
+                if next >= len {
+                    let text = s.substring(with: NSRange(location: lineStart, length: contentEnd - lineStart))
+                    if text.hasPrefix(fence) { closeStart = lineStart; closeEnd = contentEnd }
+                    break
+                }
+                if next <= lineStart { break }
+                lineStart = next
+            }
+        }
+        let contentEnd = closeStart >= 0 ? closeStart : len
+        var markers = [NSRange(location: 0, length: afterOpenLine)]
+        if closeStart >= 0 { markers.append(NSRange(location: closeStart, length: closeEnd - closeStart)) }
+        return [MarkdownToken(
+            kind: .extensionBlock(id),
+            range: NSRange(location: 0, length: len),
+            contentRange: NSRange(location: afterOpenLine, length: max(0, contentEnd - afterOpenLine)),
+            markerRanges: markers)]
     }
 
     // MARK: - Heading  (legacy `^\s*(#{1,6}) +(.*)$`)

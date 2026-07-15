@@ -28,8 +28,8 @@ public struct StrikethroughExtension: MarkdownExtension {
 
     public var id: String { Self.identifier }
 
-    public var syntax: SpanSyntax {
-        SpanSyntax(open: "~~", close: "~~", rejectsCloserRun: true)
+    public var inline: InlineSyntax? {
+        InlineSyntax(open: "~~", close: "~~", rejectsCloserRun: true)
     }
 
     public func contentAttributes(theme: MarkdownEditorTheme) -> [NSAttributedString.Key: Any] {

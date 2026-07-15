@@ -96,6 +96,10 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     /// window count around the proposed edit, so textDidChange can update the
     /// census from the edited window alone instead of rescanning the document.
     var pendingBacktickWindow: (location: Int, oldLength: Int, oldCount: Int)?
+    /// Whether the PRE-edit text around the pending edit touched a registered
+    /// extension block fence — captured in shouldChangeTextIn so a DELETED
+    /// fence still forces the full restyle in textDidChange.
+    var pendingExtFenceTouched = false
     /// Set when the storage mutated without the census bookkeeping seeing it
     /// (IME composition) — forces the next census back to a full scan.
     var backtickCensusNeedsRescan = false

@@ -39,7 +39,7 @@ extension MarkdownTokenizer {
         var newChars = [unichar](repeating: 0, count: newLen)
         if newLen > 0 { ns.getCharacters(&newChars, range: NSRange(location: 0, length: newLen)) }
 
-        let blocks = BlockParser.parse(text, utf16Chars: newChars)
+        let blocks = BlockParser.parse(text, utf16Chars: newChars, registry: registry)
 
         tokensLock.lock()
         let prevChars = cachedTokenFingerprint == registry.fingerprint ? cachedTokenChars : nil
@@ -94,9 +94,10 @@ extension MarkdownTokenizer {
         guard changeStart >= 0, diff.changeEndOld <= oldLen, changeEndNew <= newLen,
               changeStart <= diff.changeEndOld, changeStart <= changeEndNew else { return nil }
 
-        // A fence/block-LaTeX delimiter can pair with a distant partner and ripple far → full tokenization.
-        if BlockParser.hasBlockDelimiter(o, changeStart, diff.changeEndOld)
-            || BlockParser.hasBlockDelimiter(n, changeStart, changeEndNew) { return nil }
+        // A fence/block-LaTeX/extension delimiter can pair with a distant partner and ripple far → full tokenization.
+        let fences = registry.blockEntries.map(\.fenceChars)
+        if BlockParser.hasBlockDelimiter(o, changeStart, diff.changeEndOld, fences: fences)
+            || BlockParser.hasBlockDelimiter(n, changeStart, changeEndNew, fences: fences) { return nil }
 
         // New blocks touching the changed char range [changeStart, changeEndNew].
         // Blocks tile in order → the touching set is one contiguous run;
@@ -162,11 +163,22 @@ extension MarkdownTokenizer {
         }
         blockTokenLock.unlock()
 
-        let blockLevel = BlockLevelTokenizer.tokens(for: kind, in: sub as NSString)
-        // Fenced code is opaque — no inline markup inside it.
-        let inline = kind == .fencedCode
-            ? []
-            : InlineASTAdapter.tokens(from: InlineParser.parse(sub, registry: registry))
+        let blockLevel = BlockLevelTokenizer.tokens(for: kind, in: sub as NSString, registry: registry)
+        // Fenced code is opaque — no inline markup inside it. Extension blocks
+        // parse inlines over their CONTENT only (the fence lines are syntax —
+        // a `$x$` in the info string must not become a latex token).
+        let inline: [MarkdownToken]
+        if kind == .fencedCode {
+            inline = []
+        } else if case .ext = kind, let block = blockLevel.first {
+            let ns = sub as NSString
+            let content = block.contentRange
+            inline = content.length > 0
+                ? InlineASTAdapter.tokens(from: InlineParser.parse(ns, range: content, registry: registry))
+                : []
+        } else {
+            inline = InlineASTAdapter.tokens(from: InlineParser.parse(sub, registry: registry))
+        }
         let computed = blockLevel + inline
 
         blockTokenLock.lock()

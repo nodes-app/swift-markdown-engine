@@ -258,7 +258,7 @@ struct InlineParserTests {
         // registered `$…$` extension must still get its chance (fall-through).
         struct DollarSpan: MarkdownExtension {
             var id: String { "dollar-span" }
-            var syntax: SpanSyntax { SpanSyntax(open: "$", close: "$", parsesContent: false) }
+            var inline: InlineSyntax? { InlineSyntax(open: "$", close: "$", parsesContent: false) }
             func contentAttributes(theme: MarkdownEditorTheme) -> [NSAttributedString.Key: Any] { [:] }
             func html(childrenHTML: String) -> String { childrenHTML }
         }

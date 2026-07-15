@@ -6,6 +6,7 @@
 Sources/
 ├── MarkdownEngine/                          # core target — zero deps
 │   ├── Configuration/                       # MarkdownEditorConfiguration + MarkdownEditorTheme
+│   ├── Extensions/                          # the extension seam: MarkdownExtension + bundled opt-ins
 │   ├── Services/                            # 4 protocols, no-op defaults, WikiLinkService
 │   ├── Parser/                              # two-phase AST: BlockParser → InlineParser → DocumentAST (+ token projection)
 │   ├── Styling/                             # MarkdownASTStyler (AST walk) + MarkdownStyler facade for NSImage passes
@@ -70,6 +71,19 @@ currency).
 parses inlines only for blocks intersecting the edit, and `BlockScopedTokenizer`
 memoizes per-block tokens (substring → tokens, FIFO-capped) — so a keystroke
 re-parses one block, not the whole document (≈ O(edit)).
+
+## [`Extensions/`](Sources/MarkdownEngine/Extensions): opt-in constructs beyond pure markdown
+
+`MarkdownExtension` contributes an inline span form (`InlineSyntax`, e.g.
+`==highlight==`), a fenced block form (`BlockSyntax`, e.g. `::: … :::`), or
+both — plus content attributes and an HTML wrapper for the clean-copy path.
+Registered via `MarkdownEditorConfiguration.extensions`; unregistered syntax
+stays literal text. Extensions never emit ranges — the parser derives all
+geometry — and every parse cache keys on the registry fingerprint, so the
+registered set can change at runtime.
+
+**Invariant:** built-in constructs always classify first; an extension can
+never take text away from core markdown.
 
 ## [`Services/`](Sources/MarkdownEngine/Services): how does the engine talk to your app?
 

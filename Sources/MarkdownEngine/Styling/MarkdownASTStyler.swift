@@ -105,6 +105,8 @@ enum MarkdownASTStyler {
                 walk(inlines)
             case .list(_, let items):
                 for item in items { walk(item.inlines) }
+            case .ext(let node):
+                walk(node.inlines)
             default: break
             }
         }
@@ -143,6 +145,8 @@ enum MarkdownASTStyler {
                 walk(inlines)
             case .list(_, let items):
                 for item in items { walk(item.inlines) }
+            case .ext(let node):
+                walk(node.inlines)
             default: break
             }
         }
@@ -371,9 +375,40 @@ enum MarkdownASTStyler {
             styleCodeBlock(range: range, ctx: ctx, into: &attrs)
         case .thematicBreak(let range):
             styleThematicBreak(range: range, ctx: ctx, into: &attrs)
+        case .ext(let node):
+            styleExtensionBlock(node, font: font, ctx: ctx, into: &attrs)
         case .blockLatex, .table, .blank:
             break   // NSImage rendering ported next
         }
+    }
+
+    /// Extension fenced block: the extension supplies content ATTRIBUTES only;
+    /// they cover the WHOLE block (fence lines included) so the block reads as
+    /// one cohesive band — the hidden fences would otherwise sit as uncolored
+    /// blank rows above and below the body. Fence lines then mute while the
+    /// caret is inside the block and hide otherwise (mirroring code fences —
+    /// clear color, unchanged font, so the line keeps its height and layout
+    /// stays stable across the active flip).
+    private static func styleExtensionBlock(_ node: ExtensionBlockNode, font: NSFont, ctx: Ctx, into attrs: inout [StyledRange]) {
+        if let ext = ctx.extensionsByID[node.extensionID] {
+            var block = node.range
+            // Keep the block's trailing newline out, so the band doesn't
+            // bleed a full-width background onto the following line.
+            while block.length > 0 {
+                let last = ctx.ns.character(at: NSMaxRange(block) - 1)
+                guard last == 0x0A || last == 0x0D else { break }
+                block.length -= 1
+            }
+            if block.length > 0 {
+                attrs.append((block, ext.contentAttributes(theme: ctx.theme)))
+            }
+        }
+        let markerAttrs: [NSAttributedString.Key: Any] = ctx.isActive(node.range)
+            ? [.foregroundColor: ctx.theme.mutedText]
+            : [.foregroundColor: NSColor.clear]
+        attrs.append((node.openFence, markerAttrs))
+        if let close = node.closeFence { attrs.append((close, markerAttrs)) }
+        styleInlines(node.inlines, font: font, ctx: ctx, into: &attrs)
     }
 
     /// Per-line blockquote: indent, mute content, hide/show `>` markers, tag first char with bar level.
@@ -592,6 +627,8 @@ enum MarkdownASTStyler {
             case .list(_, let items):
                 // Phase A: shrink only inline markers; the list marker is hidden by the bullet/task pass.
                 for item in items { shrinkInlineMarkers(item.inlines, ctx: ctx, into: &attrs) }
+            case .ext(let node):
+                shrinkInlineMarkers(node.inlines, ctx: ctx, into: &attrs)
             case .codeBlock, .blockLatex, .table, .thematicBreak, .blank:
                 break
             }
