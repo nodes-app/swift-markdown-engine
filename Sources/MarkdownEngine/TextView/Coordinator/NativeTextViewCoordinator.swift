@@ -137,6 +137,10 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
 #endif
     var pendingPreEditActiveTokenIndices: Set<Int>? = nil
     var previousCaretLocation: Int? = nil
+    /// Full previous selection — selection-revealed task syntax needs to know
+    /// when the selection SPAN changed, not just its location (shift-extends
+    /// keep the anchor put while newly covering lines).
+    var previousSelectedRange: NSRange? = nil
     /// Drag-select suppressed a restyle; replayed on the next non-drag selection change.
     var needsRestyleAfterDrag = false
 

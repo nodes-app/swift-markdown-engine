@@ -111,6 +111,7 @@ extension NativeTextViewCoordinator {
         let safeLocation = min(rawSelRange.location, fullLength)
         let safeSelRange = NSRange(location: safeLocation, length: 0)
         previousCaretLocation = safeSelRange.location
+        previousSelectedRange = safeSelRange
         PerfTrace.begin(docLength: fullLength)
 
         // Edit descriptor, hoisted above the wiki sync so both it and the
@@ -434,13 +435,31 @@ extension NativeTextViewCoordinator {
         let currentBulletSyntax = MarkdownStyler.bulletSyntaxRange(at: selLoc, in: docText)
         let bulletSyntaxChanged = prevBulletSyntax?.location != currentBulletSyntax?.location
             || prevBulletSyntax?.length != currentBulletSyntax?.length
+        // Task syntax also reveals while a SELECTION sweeps it (styler is
+        // selection-aware), but none of the caret-based signals above fire
+        // when only the selection SPAN changes (shift-extend keeps the
+        // anchor put). Cheap gate: only spans whose paragraphs contain a
+        // task-marker prefix matter — plain selections never trigger.
+        let paragraphsTouchTaskSyntax: (NSRange?) -> Bool = { range in
+            guard let range, range.length > 0 else { return false }
+            let clamped = NSIntersectionRange(range, NSRange(location: 0, length: nsText.length))
+            guard clamped.length > 0 else { return false }
+            let span = nsText.paragraphRange(for: clamped)
+            for needle in ["- [", "* [", "+ ["]
+            where nsText.range(of: needle, options: [], range: span).location != NSNotFound { return true }
+            return false
+        }
+        let selectionSpanChanged = previousSelectedRange != selRange
+            && ((previousSelectedRange?.length ?? 0) > 0 || selRange.length > 0)
+            && (paragraphsTouchTaskSyntax(previousSelectedRange) || paragraphsTouchTaskSyntax(selRange))
         // Mid-drag restyle is suppressed (revealing markers shifts the layout → drag hit-test lands short, dropping trailing chars) and replayed on release.
         let isDragSelecting = currentEventType == .leftMouseDragged || currentEventType == .periodic
         if shouldSkipSelectionRestyle {
             needsRestyleAfterDrag = false // textDidChange restyles this edit cycle.
         } else if isDragSelecting {
             needsRestyleAfterDrag = true
-        } else if tokensChanged || taskSyntaxChanged || hrLineChanged || bulletSyntaxChanged || needsRestyleAfterDrag {
+        } else if tokensChanged || taskSyntaxChanged || hrLineChanged || bulletSyntaxChanged
+                    || selectionSpanChanged || needsRestyleAfterDrag {
             needsRestyleAfterDrag = false
             // Candidates are built ONLY when a restyle actually runs — this
             // used to happen unconditionally on every selection change,
@@ -452,6 +471,16 @@ extension NativeTextViewCoordinator {
             if let prevLoc = previousCaretLocation, prevLoc != caretLoc {
                 let safePrev = min(prevLoc, nsText.length)
                 paragraphCandidates.append(nsText.paragraphRange(for: NSRange(location: safePrev, length: 0)))
+            }
+            // Selection-revealed task syntax lives anywhere in the selected
+            // span (old and new) — scope the restyle over both so extends
+            // reveal newly covered task lines and deselects re-hide the old
+            // ones. Gated on the task probe so plain selections never widen
+            // the scope beyond the caret paragraphs.
+            for span in [previousSelectedRange, selRange] where paragraphsTouchTaskSyntax(span) {
+                guard let span else { continue }
+                let clamped = NSIntersectionRange(span, NSRange(location: 0, length: nsText.length))
+                if clamped.length > 0 { paragraphCandidates.append(nsText.paragraphRange(for: clamped)) }
             }
             // Latex/imageEmbed tokens only inside the caret/previous-caret
             // paragraphs (binary-searched); the rendered↔raw flip of a token
@@ -574,6 +603,7 @@ extension NativeTextViewCoordinator {
 
         self.previousActiveTokenIndices = self.activeTokenIndices
         self.previousCaretLocation = caretLoc
+        self.previousSelectedRange = selRange
 
         // Skip during a pending edit — viewRect is stale until textDidChange's restyle runs; otherwise the overlay flashes to the old Y before settling.
         if !shouldSkipSelectionRestyle {

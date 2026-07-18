@@ -27,6 +27,7 @@ enum MarkdownASTStyler {
         fontName: String,
         fontSize: CGFloat,
         caretLocation: Int = -1,
+        selection: NSRange? = nil,
         wikiLinkIDProvider: @escaping (NSRange) -> String? = { _ in nil },
         scopedRanges: [NSRange]? = nil,
         precomputedBlocks: [Block]? = nil,
@@ -61,6 +62,7 @@ enum MarkdownASTStyler {
             codeParagraphStyle: codePara,
             inlineMarkerFont: NSFont(name: fontName, size: hiddenSize) ?? .systemFont(ofSize: hiddenSize),
             caret: caretLocation,
+            selection: selection,
             config: configuration,
             extensionsByID: configuration.extensionsByID,
             wikiLinkID: wikiLinkIDProvider,
@@ -202,7 +204,10 @@ enum MarkdownASTStyler {
         let taskRevealed: Bool = {
             guard let box = item.checkbox else { return false }
             let syntax = NSRange(location: item.marker.location, length: NSMaxRange(box) - item.marker.location)
+            // Caret edit OR a selection sweeping the syntax reveals the raw
+            // `- [ ]` — matching how token-based elements reveal on selection.
             return NSLocationInRange(ctx.caret, syntax) || ctx.caret == NSMaxRange(box)
+                || ctx.selectionIntersects(syntax)
         }()
         // Hidden task item shares the bullet geometry: `[ ] ` collapses to ~zero
         // advance below, so the hanging indent measures only `- ` and task
@@ -312,10 +317,24 @@ enum MarkdownASTStyler {
         let codeParagraphStyle: NSParagraphStyle
         let inlineMarkerFont: NSFont
         let caret: Int
+        /// The full selected range (nil/empty when the selection is a bare
+        /// caret). Token-based elements already reveal on selection via
+        /// `activeTokenIndices(selection:)`; this brings the same signal to
+        /// non-token elements (task checkboxes). Proven root cause: the
+        /// caret-only reveal can hit at most ONE selected task line — every
+        /// other selected line stayed hidden.
+        let selection: NSRange?
         let config: MarkdownEditorConfiguration
         let extensionsByID: [String: any MarkdownExtension]
         let wikiLinkID: (NSRange) -> String?
         let scopedRanges: [NSRange]?
+
+        /// True when a non-empty selection overlaps `range` — the selection
+        /// counterpart of `isActive` for elements that reveal on select.
+        func selectionIntersects(_ range: NSRange) -> Bool {
+            guard let selection, selection.length > 0 else { return false }
+            return NSIntersectionRange(selection, range).length > 0
+        }
 
         /// Active (syntax revealed) when the caret is inside the range or at its end (minus a newline).
         func isActive(_ range: NSRange) -> Bool {

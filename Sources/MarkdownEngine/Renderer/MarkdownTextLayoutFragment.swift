@@ -530,22 +530,30 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
 
         ts.enumerateAttribute(.bulletMarker, in: range, options: []) { [weak self] value, attrRange, _ in
             guard let self, (value as? Bool) == true else { return }
-            // Leave a selected marker alone so the highlighted raw char shows.
-            if selectionRanges.contains(where: { NSIntersectionRange($0, attrRange).length > 0 }) { return }
             guard let pos = self.drawPosition(forDocumentCharAt: attrRange.location, point: point) else { return }
 
             let font = (ts.attribute(.font, at: attrRange.location, effectiveRange: nil) as? NSFont)
                 ?? (self.textLayoutManager?.textContainer?.textView?.font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize))
-            let bulletAttrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: theme.bodyText]
-            let bullet = "•" as NSString
+            // A `.bulletMarker` range means the styler painted the raw char
+            // `.clear`, so something must ALWAYS be drawn over the slot. Outside
+            // a selection that's the rendered `•`; while the marker sits inside
+            // a selection the raw source char (`-`/`*`/`+`) is painted instead,
+            // so selecting a list line reveals its raw syntax. (The styler's own
+            // reveal is caret-based and doesn't fire for selections — an earlier
+            // selection-skip here drew nothing over the cleared char, which left
+            // an empty slot wherever the selection anchor wasn't in the marker.)
+            let isSelected = selectionRanges.contains(where: { NSIntersectionRange($0, attrRange).length > 0 })
+            let raw = storageString.substring(with: attrRange)
+            let glyph = (isSelected ? raw : "•") as NSString
+            let glyphAttrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: theme.bodyText]
 
-            let markerWidth = storageString.substring(with: attrRange).size(withAttributes: [.font: font]).width
-            let bulletWidth = bullet.size(withAttributes: bulletAttrs).width
-            let xOffset = max(0, (markerWidth - bulletWidth) / 2)
+            let markerWidth = (raw as NSString).size(withAttributes: [.font: font]).width
+            let glyphWidth = glyph.size(withAttributes: glyphAttrs).width
+            let xOffset = max(0, (markerWidth - glyphWidth) / 2)
             // Flipped context: text origin is its top edge, baseline sits one
             // ascent below — so top = baseline − ascent aligns the glyph.
             let topY = pos.baselineY - font.ascender
-            bullet.draw(at: CGPoint(x: pos.x + xOffset, y: topY), withAttributes: bulletAttrs)
+            glyph.draw(at: CGPoint(x: pos.x + xOffset, y: topY), withAttributes: glyphAttrs)
         }
     }
 
@@ -553,10 +561,6 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
 
     private func drawTaskCheckboxes(at point: CGPoint, in context: CGContext) {
         guard let ts = textStorage, let range = fragmentNSRange, range.length > 0 else { return }
-        let selectionRanges: [NSRange] = {
-            guard let tv = textLayoutManager?.textContainer?.textView else { return [] }
-            return tv.selectedRanges.map { $0.rangeValue }.filter { $0.length > 0 }
-        }()
 
         NSGraphicsContext.saveGraphicsState()
         defer { NSGraphicsContext.restoreGraphicsState() }
@@ -565,8 +569,14 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
 
         ts.enumerateAttribute(.taskCheckbox, in: range, options: []) { [weak self] value, attrRange, _ in
             guard let self, value != nil else { return }
-            if selectionRanges.contains(where: { NSIntersectionRange($0, attrRange).length > 0 }) { return }
-
+            // A `.taskCheckbox` range means the styler cleared the raw `- [ ]`
+            // (and collapsed the box's advance), so the box must ALWAYS be
+            // drawn — including while the range sits inside a selection. An
+            // earlier selection-skip here left an empty marker-width gap (the
+            // bullet-marker blank-slot bug's twin). Unlike bullets, the raw
+            // source can't be painted here instead: the hidden `[ ]` advance
+            // is collapsed, so raw glyphs would overlap the content — raw
+            // reveal stays caret-based (taskRevealed in the styler).
             let isChecked = (value as? Bool) ?? false
             guard let pos = drawPosition(forDocumentCharAt: attrRange.location, point: point) else { return }
 

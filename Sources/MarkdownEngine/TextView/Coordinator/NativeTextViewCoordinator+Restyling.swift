@@ -86,6 +86,9 @@ extension NativeTextViewCoordinator {
                 fontSize: fontSize,
                 layoutBridge: layoutBridge,
                 caretLocation: caretLocation,
+                // Selection-revealed syntax (task checkboxes) needs the full
+                // range, not just the caret; read-only suppresses it like the caret.
+                selection: textView.isEditable ? textView.selectedRange() : nil,
                 activeTokenIndices: activeTokenIndices,
                 // FIX: apply .wikiLinkID attributes on load/node-switch too. Without this the uuid
                 // survived only in the range-keyed wikiLinkMetadata; once a later writeback shifted a
@@ -148,6 +151,10 @@ extension NativeTextViewCoordinator {
             baseFont: baseFont,
             paragraphStyle: paragraphStyle,
             caretLocation: textView.isEditable ? textView.selectedRange().location : -1,
+            // Selection-revealed task syntax: this is the per-keystroke /
+            // selection-change restyle path, so the styler needs the full
+            // selected range here too (read-only suppresses it like the caret).
+            selection: textView.isEditable ? textView.selectedRange() : nil,
             activeTokenIndices: activeTokenIndices,
             wikiLinkIDProvider: { [weak self] range in
                 self?.wikiLinkID(for: range)
