@@ -32,6 +32,7 @@ public struct MarkdownEditorConfiguration: Sendable {
     public var codeBlock: CodeBlockStyle
     public var inlineCode: InlineCodeStyle
     public var lists: ListStyle
+    public var taskCheckbox: TaskCheckboxStyle
     public var headings: HeadingStyle
     public var imageEmbed: ImageEmbedStyle
     public var blockLatex: BlockLatexStyle
@@ -81,6 +82,7 @@ public struct MarkdownEditorConfiguration: Sendable {
         codeBlock: CodeBlockStyle = .default,
         inlineCode: InlineCodeStyle = .default,
         lists: ListStyle = .default,
+        taskCheckbox: TaskCheckboxStyle = .default,
         headings: HeadingStyle = .default,
         imageEmbed: ImageEmbedStyle = .default,
         blockLatex: BlockLatexStyle = .default,
@@ -105,6 +107,7 @@ public struct MarkdownEditorConfiguration: Sendable {
         self.codeBlock = codeBlock
         self.inlineCode = inlineCode
         self.lists = lists
+        self.taskCheckbox = taskCheckbox
         self.headings = headings
         self.imageEmbed = imageEmbed
         self.blockLatex = blockLatex
@@ -300,6 +303,33 @@ public struct ListStyle: Sendable {
     }
 
     public static let `default` = ListStyle()
+}
+
+// MARK: - Task checkboxes
+
+/// SF Symbol names used to draw task-list checkboxes (`- [ ]` / `- [x]`).
+///
+/// Any SF Symbol available on the deployment target can be substituted, for
+/// example `"circle"` / `"checkmark.circle.fill"`. A name that doesn't
+/// resolve falls back to the corresponding default symbol at draw time, so a
+/// typo degrades to the stock look instead of drawing nothing. Tint colors
+/// stay theme-driven (`MarkdownEditorTheme/mutedText` unchecked,
+/// `MarkdownEditorTheme/bodyText` checked).
+public struct TaskCheckboxStyle: Sendable {
+    /// SF Symbol drawn for an unchecked task item (`[ ]`).
+    public var uncheckedSymbolName: String
+    /// SF Symbol drawn for a checked task item (`[x]`).
+    public var checkedSymbolName: String
+
+    public init(
+        uncheckedSymbolName: String = "square",
+        checkedSymbolName: String = "checkmark.square.fill"
+    ) {
+        self.uncheckedSymbolName = uncheckedSymbolName
+        self.checkedSymbolName = checkedSymbolName
+    }
+
+    public static let `default` = TaskCheckboxStyle()
 }
 
 // MARK: - Headings
