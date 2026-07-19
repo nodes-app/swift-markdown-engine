@@ -96,6 +96,13 @@ struct ContentView: View {
         // Unregistered syntax stays literal text.
         config.extensions = [HighlightExtension(), StrikethroughExtension(),]
 
+        // Custom task-checkbox symbols: any SF Symbol pair works; unresolvable
+        // names fall back to the stock square / checkmark.square.fill.
+        config.taskCheckbox = .init(
+            uncheckedSymbolName: "square",
+            checkedSymbolName: "square.fill"
+        )
+
         return config
     }
 }
@@ -113,6 +120,7 @@ private var sampleMarkdown: String {
     [
         markdownHeader,
         inlineFormattingSection,
+        taskListSection,
         extensionSection,
         tableSection,
         latexSection,
@@ -120,6 +128,17 @@ private var sampleMarkdown: String {
         markdownFooter,
     ].joined(separator: "\n\n")
 }
+
+/// Task-list demo: the checkbox glyphs are SF Symbols configured via
+/// `TaskCheckboxStyle` — this demo swaps the default checkmark for a
+/// filled square. Click a box to toggle it.
+private let taskListSection = """
+## Task lists
+
+- [x] Configure custom checkbox symbols
+- [ ] Click a box to toggle it
+- [ ] Ship it
+"""
 
 /// Extension seam demo: `==highlight==` and `~~strikethrough~~` are NOT part
 /// of the core grammar anymore — they're supplied by the opt-in
