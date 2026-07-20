@@ -21,6 +21,13 @@ import MarkdownEngineLatex
 
 struct ContentView: View {
     @State private var text: String = sampleMarkdown
+
+    // Engine modes, flipped live from the toolbar.
+    @State private var isReadOnly = false
+    @State private var showRawSource = false
+    @State private var useReadingColumn = false
+
+    // Scroll-away header demo.
     @State private var showHeader = false
     @State private var headerExpanded = true
 
@@ -28,19 +35,47 @@ struct ContentView: View {
         NativeTextViewWrapper(
             text: $text,
             configuration: configuration,
+            isEditable: !isReadOnly,
+            placeholder: NSAttributedString(
+                string: "Empty document — start typing, markdown styles live…",
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 16),
+                    .foregroundColor: NSColor.secondaryLabelColor,
+                ]
+            ),
             header: showHeader ? AnyView(demoHeader) : nil,
             headerCollapsedHeight: 40,
             headerExpanded: headerExpanded
         )
+        // `readingWidth` is applied when the underlying NSView is built, so
+        // flipping the reading column recreates the editor via `.id`. The
+        // `text` binding survives; scroll position resets — fine for a demo.
+        .id(useReadingColumn)
         .toolbar {
             ToolbarItemGroup {
-                // Scroll-away header: an embedder-supplied SwiftUI view hosted
-                // above the body that scrolls with it. "Expanded" animates
-                // between the full content height and `headerCollapsedHeight`
-                // (the top row stays visible; the rows below clip away).
-                Toggle("Header", isOn: $showHeader)
-                Toggle("Expanded", isOn: $headerExpanded)
-                    .disabled(!showHeader)
+                Toggle(isOn: $isReadOnly) {
+                    Label("Read-only", systemImage: isReadOnly ? "lock" : "lock.open")
+                }
+                .help("Read-only: the styled document stays scrollable and selectable, editing is off")
+
+                Toggle(isOn: $showRawSource) {
+                    Label("Raw source", systemImage: "chevron.left.forwardslash.chevron.right")
+                }
+                .help("Raw markdown source: no styling, no syntax hiding")
+
+                Toggle(isOn: $useReadingColumn) {
+                    Label("Reading column", systemImage: "arrow.right.and.line.vertical.and.arrow.left")
+                }
+                .help("Centered fixed-width reading column — wide tables still break out to full width")
+
+                Menu {
+                    Toggle("Show header", isOn: $showHeader)
+                    Toggle("Expanded", isOn: $headerExpanded)
+                        .disabled(!showHeader)
+                } label: {
+                    Label("Header", systemImage: "rectangle.topthird.inset.filled")
+                }
+                .help("Scroll-away header: an embedder-supplied SwiftUI view hosted above the document")
             }
         }
     }
@@ -92,9 +127,8 @@ struct ContentView: View {
 
         // Opt-in constructs beyond pure markdown. The core engine no longer
         // knows `==highlight==` or `~~strikethrough~~` — they are extensions
-        // you register; `::: … :::` containers are a fenced BLOCK extension.
-        // Unregistered syntax stays literal text.
-        config.extensions = [HighlightExtension(), StrikethroughExtension(),]
+        // you register. Unregistered syntax stays literal text.
+        config.extensions = [HighlightExtension(), StrikethroughExtension()]
 
         // Custom task-checkbox symbols: any SF Symbol pair works; unresolvable
         // names fall back to the stock square / checkmark.square.fill.
@@ -103,14 +137,18 @@ struct ContentView: View {
             checkedSymbolName: "square.fill"
         )
 
+        // Toolbar-driven modes.
+        config.rawSourceMode = showRawSource
+        config.readingWidth = useReadingColumn ? 620 : nil
+
         return config
     }
 }
 
 /// Builds the demo markdown shown when the editor first loads.
 ///
-/// The text is composed from a fixed header/footer plus three feature
-/// sections — inline formatting, block math, and code — that swap between
+/// The text is composed from a fixed header/footer plus feature sections.
+/// Three of them — inline formatting, block math, and code — swap between
 /// a full showcase and a short "feature unavailable" note depending on
 /// which optional bridge products are linked.
 ///
@@ -120,6 +158,7 @@ private var sampleMarkdown: String {
     [
         markdownHeader,
         inlineFormattingSection,
+        blocksSection,
         taskListSection,
         extensionSection,
         tableSection,
@@ -128,6 +167,23 @@ private var sampleMarkdown: String {
         markdownFooter,
     ].joined(separator: "\n\n")
 }
+
+/// Blockquote + list demo: quotes keep inline styling; lists auto-continue
+/// on Return, renumber, and change nesting with Tab / Shift-Tab.
+private let blocksSection = """
+## Blockquotes & lists
+
+> Blockquotes keep full **inline** styling — and quote markers hide like every other marker.
+
+Lists auto-continue on Return; Tab and Shift-Tab move the nesting level:
+
+- Unordered lists
+  - nest two spaces per level
+    - up to three levels deep
+
+1. Ordered lists renumber as you edit
+2. and auto-continue too
+"""
 
 /// Task-list demo: the checkbox glyphs are SF Symbols configured via
 /// `TaskCheckboxStyle` — this demo swaps the default checkmark for a
@@ -151,7 +207,6 @@ This ==highlighted text== comes from `HighlightExtension`, and this \
 ~~struck-through text~~ from `StrikethroughExtension`. Unregistered, the exact \
 same characters would stay literal markdown. Nesting works too: \
 ==with *italic* inside== and ~~also *nested*~~.
-
 """
 
 /// Table layout demo: the first table's cells WRAP to the available width
@@ -162,17 +217,19 @@ private let tableSection = """
 
 Cells wrap to the available width:
 
-| Rechtsform | Gründungskosten | Laufende Kosten/Jahr |
-|---|---|---|
-| Einzelunternehmen (Kleingewerbe) | 20–60€ (Gewerbeanmeldung) | ~0€ (nur Steuerberater optional, 300–800€) |
-| GbR (mit zwei Gesellschaftern) | 20–60€ x Anzahl Gesellschafter (jeder meldet einzeln an) | Gesellschaftervertrag empfohlen (Anwalt: 500–1.500€ einmalig) |
-| UG (haftungsbeschränkt) | Notar + Handelsregister: ~300–500€ (Musterprotokoll) bis 1.000€+ | IHK-Beitrag (~150–400€), Steuerberater fast Pflicht |
+| Novel | Opening line |
+|---|---|
+| Der Zauberberg (1924) | "Ein einfacher junger Mensch reiste im Hochsommer von Hamburg, seiner Vaterstadt, nach Davos-Platz im Graubündischen." |
+| The Master and Margarita (1966–67) | "At the sunset hour of one warm spring day two men were to be seen at Patriarch's Ponds." (trans. Michael Glenny) |
+| The Picture of Dorian Gray (1890) | "The studio was filled with the rich odour of roses, and when the light summer wind stirred amidst the trees of the garden, there came through the open door the heavy scent of the lilac, or the more delicate perfume of the pink-flowering thorn." |
 
 Too many columns → horizontal scroll instead of crushed cells:
 
-| Rechtsformvergleich | Gründungskostenaufstellung | Haftungsbeschränkung | Steuerberaterkosten | Handelsregistereintrag | Stammkapitalanforderung |
-|---|---|---|---|---|---|
-| Einzelunternehmen | Gewerbeanmeldung | unbeschränkt | optional | nein | keines |
+| Movement | Landmark novel | Narrative signature | Characteristic preoccupations | Philosophical undercurrents | Contemporaneous reception | Posthumous reputation | Author | Structural device | Central symbol | Typical setting | Enduring influence |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Modernism | Der Zauberberg | Essayistic time-dilation | Sanatorium cosmopolitanism | Schopenhauer-inflected pessimism | Immediate bestseller | Cornerstone of literary modernism | Thomas Mann | Bildungsroman inversion | The mountain as timeless enclosure | Alpine sanatorium | Shaped the European novel of ideas |
+| Menippean satire | The Master and Margarita | Novel-within-a-novel | Cowardice and censorship | Faustian epigraph | Suppressed, samizdat-circulated | Perennial Russian favorite | Mikhail Bulgakov | Interleaved dual narratives | The devil as satirical mirror | Soviet Moscow and biblical Jerusalem | Model for satire under censorship |
+| Aestheticism | The Picture of Dorian Gray | Epigrammatic wit | Portrait-as-conscience | Paterian hedonism | Scandalized reviewers | Perpetually adapted | Oscar Wilde | Portrait as moral ledger | The aging portrait | Fin de siècle London | Touchstone for art for art’s sake |
 """
 
 private let markdownHeader = """
@@ -180,7 +237,7 @@ private let markdownHeader = """
 
 A native macOS Markdown editor built on **TextKit 2**, bridged to SwiftUI — brought to you by [nodes-web.com](https://nodes-web.com).
 
-Edit this text live. Formatting updates as you type.
+Edit this text live. Formatting updates as you type — and the toolbar flips engine modes at runtime: read-only, raw markdown source, and a centered reading column.
 
 ---
 """
