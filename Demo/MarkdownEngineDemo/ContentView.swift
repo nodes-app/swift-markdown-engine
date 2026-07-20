@@ -128,7 +128,7 @@ struct ContentView: View {
         // Opt-in constructs beyond pure markdown. The core engine no longer
         // knows `==highlight==` or `~~strikethrough~~` — they are extensions
         // you register. Unregistered syntax stays literal text.
-        config.extensions = [HighlightExtension(), StrikethroughExtension(),]
+        config.extensions = [HighlightExtension(), StrikethroughExtension()]
 
         // Custom task-checkbox symbols: any SF Symbol pair works; unresolvable
         // names fall back to the stock square / checkmark.square.fill.
@@ -147,8 +147,8 @@ struct ContentView: View {
 
 /// Builds the demo markdown shown when the editor first loads.
 ///
-/// The text is composed from a fixed header/footer plus three feature
-/// sections — inline formatting, block math, and code — that swap between
+/// The text is composed from a fixed header/footer plus feature sections.
+/// Three of them — inline formatting, block math, and code — swap between
 /// a full showcase and a short "feature unavailable" note depending on
 /// which optional bridge products are linked.
 ///
@@ -158,6 +158,7 @@ private var sampleMarkdown: String {
     [
         markdownHeader,
         inlineFormattingSection,
+        blocksSection,
         taskListSection,
         extensionSection,
         tableSection,
@@ -166,6 +167,23 @@ private var sampleMarkdown: String {
         markdownFooter,
     ].joined(separator: "\n\n")
 }
+
+/// Blockquote + list demo: quotes keep inline styling; lists auto-continue
+/// on Return, renumber, and change nesting with Tab / Shift-Tab.
+private let blocksSection = """
+## Blockquotes & lists
+
+> Blockquotes keep full **inline** styling — and quote markers hide like every other marker.
+
+Lists auto-continue on Return; Tab and Shift-Tab move the nesting level:
+
+- Unordered lists
+  - nest two spaces per level
+    - up to three levels deep
+
+1. Ordered lists renumber as you edit
+2. and auto-continue too
+"""
 
 /// Task-list demo: the checkbox glyphs are SF Symbols configured via
 /// `TaskCheckboxStyle` — this demo swaps the default checkmark for a
@@ -189,7 +207,6 @@ This ==highlighted text== comes from `HighlightExtension`, and this \
 ~~struck-through text~~ from `StrikethroughExtension`. Unregistered, the exact \
 same characters would stay literal markdown. Nesting works too: \
 ==with *italic* inside== and ~~also *nested*~~.
-
 """
 
 /// Table layout demo: the first table's cells WRAP to the available width
@@ -200,17 +217,19 @@ private let tableSection = """
 
 Cells wrap to the available width:
 
-| Rechtsform | Gründungskosten | Laufende Kosten/Jahr |
-|---|---|---|
-| Einzelunternehmen (Kleingewerbe) | 20–60€ (Gewerbeanmeldung) | ~0€ (nur Steuerberater optional, 300–800€) |
-| GbR (mit zwei Gesellschaftern) | 20–60€ x Anzahl Gesellschafter (jeder meldet einzeln an) | Gesellschaftervertrag empfohlen (Anwalt: 500–1.500€ einmalig) |
-| UG (haftungsbeschränkt) | Notar + Handelsregister: ~300–500€ (Musterprotokoll) bis 1.000€+ | IHK-Beitrag (~150–400€), Steuerberater fast Pflicht |
+| Novel | Opening line |
+|---|---|
+| Der Zauberberg (1924) | "Ein einfacher junger Mensch reiste im Hochsommer von Hamburg, seiner Vaterstadt, nach Davos-Platz im Graubündischen." |
+| The Master and Margarita (1966–67) | "At the sunset hour of one warm spring day two men were to be seen at Patriarch's Ponds." (trans. Michael Glenny) |
+| The Picture of Dorian Gray (1890) | "The studio was filled with the rich odour of roses, and when the light summer wind stirred amidst the trees of the garden, there came through the open door the heavy scent of the lilac, or the more delicate perfume of the pink-flowering thorn." |
 
 Too many columns → horizontal scroll instead of crushed cells:
 
-| Rechtsformvergleich | Gründungskostenaufstellung | Haftungsbeschränkung | Steuerberaterkosten | Handelsregistereintrag | Stammkapitalanforderung |
-|---|---|---|---|---|---|
-| Einzelunternehmen | Gewerbeanmeldung | unbeschränkt | optional | nein | keines |
+| Movement | Landmark novel | Narrative signature | Characteristic preoccupations | Philosophical undercurrents | Contemporaneous reception | Posthumous reputation |
+|---|---|---|---|---|---|---|
+| Modernism | Der Zauberberg | Essayistic time-dilation | Sanatorium cosmopolitanism | Schopenhauer-inflected pessimism | Immediate bestseller | Cornerstone of literary modernism |
+| Menippean satire | The Master and Margarita | Novel-within-a-novel | Cowardice and censorship | Faustian epigraph | Suppressed, samizdat-circulated | Perennial Russian favorite |
+| Aestheticism | The Picture of Dorian Gray | Epigrammatic wit | Portrait-as-conscience | Paterian hedonism | Scandalized reviewers | Perpetually adapted |
 """
 
 private let markdownHeader = """
