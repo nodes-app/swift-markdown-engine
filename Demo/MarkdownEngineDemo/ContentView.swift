@@ -130,13 +130,6 @@ struct ContentView: View {
         // you register. Unregistered syntax stays literal text.
         config.extensions = [HighlightExtension(), StrikethroughExtension()]
 
-        // Custom task-checkbox symbols: any SF Symbol pair works; unresolvable
-        // names fall back to the stock square / checkmark.square.fill.
-        config.taskCheckbox = .init(
-            uncheckedSymbolName: "square",
-            checkedSymbolName: "square.fill"
-        )
-
         // Toolbar-driven modes.
         config.rawSourceMode = showRawSource
         config.readingWidth = useReadingColumn ? 620 : nil
@@ -185,13 +178,12 @@ Lists auto-continue on Return; Tab and Shift-Tab move the nesting level:
 2. and auto-continue too
 """
 
-/// Task-list demo: the checkbox glyphs are SF Symbols configured via
-/// `TaskCheckboxStyle` — this demo swaps the default checkmark for a
-/// filled square. Click a box to toggle it.
+/// Task-list demo: click a checkbox to toggle it. The glyphs are SF Symbols;
+/// embedders can swap them via `TaskCheckboxStyle` (`config.taskCheckbox`).
 private let taskListSection = """
 ## Task lists
 
-- [x] Configure custom checkbox symbols
+- [x] Draw checkboxes as SF Symbols
 - [ ] Click a box to toggle it
 - [ ] Ship it
 """
