@@ -27,6 +27,9 @@ struct ContentView: View {
     @State private var showRawSource = false
     @State private var useReadingColumn = false
 
+    // Base font size; all relative sizing (headings, code, math) tracks it.
+    @State private var fontSize: CGFloat = 16
+
     // Scroll-away header demo.
     @State private var showHeader = false
     @State private var headerExpanded = true
@@ -35,11 +38,12 @@ struct ContentView: View {
         NativeTextViewWrapper(
             text: $text,
             configuration: configuration,
+            fontSize: fontSize,
             isEditable: !isReadOnly,
             placeholder: NSAttributedString(
                 string: "Empty document — start typing, markdown styles live…",
                 attributes: [
-                    .font: NSFont.systemFont(ofSize: 16),
+                    .font: NSFont.systemFont(ofSize: fontSize),
                     .foregroundColor: NSColor.secondaryLabelColor,
                 ]
             ),
@@ -67,6 +71,23 @@ struct ContentView: View {
                     Label("Reading column", systemImage: "arrow.right.and.line.vertical.and.arrow.left")
                 }
                 .help("Centered fixed-width reading column — wide tables still break out to full width")
+
+                ControlGroup {
+                    Button {
+                        fontSize = max(10, fontSize - 2)
+                    } label: {
+                        Label("Smaller text", systemImage: "textformat.size.smaller")
+                    }
+                    .disabled(fontSize <= 10)
+
+                    Button {
+                        fontSize = min(28, fontSize + 2)
+                    } label: {
+                        Label("Larger text", systemImage: "textformat.size.larger")
+                    }
+                    .disabled(fontSize >= 28)
+                }
+                .help("Base font size — headings, code, and math scale relative to it")
 
                 Menu {
                     Toggle("Show header", isOn: $showHeader)
