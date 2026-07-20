@@ -21,6 +21,13 @@ import MarkdownEngineLatex
 
 struct ContentView: View {
     @State private var text: String = sampleMarkdown
+
+    // Engine modes, flipped live from the toolbar.
+    @State private var isReadOnly = false
+    @State private var showRawSource = false
+    @State private var useReadingColumn = false
+
+    // Scroll-away header demo.
     @State private var showHeader = false
     @State private var headerExpanded = true
 
@@ -28,19 +35,47 @@ struct ContentView: View {
         NativeTextViewWrapper(
             text: $text,
             configuration: configuration,
+            isEditable: !isReadOnly,
+            placeholder: NSAttributedString(
+                string: "Empty document — start typing, markdown styles live…",
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 16),
+                    .foregroundColor: NSColor.secondaryLabelColor,
+                ]
+            ),
             header: showHeader ? AnyView(demoHeader) : nil,
             headerCollapsedHeight: 40,
             headerExpanded: headerExpanded
         )
+        // `readingWidth` is applied when the underlying NSView is built, so
+        // flipping the reading column recreates the editor via `.id`. The
+        // `text` binding survives; scroll position resets — fine for a demo.
+        .id(useReadingColumn)
         .toolbar {
             ToolbarItemGroup {
-                // Scroll-away header: an embedder-supplied SwiftUI view hosted
-                // above the body that scrolls with it. "Expanded" animates
-                // between the full content height and `headerCollapsedHeight`
-                // (the top row stays visible; the rows below clip away).
-                Toggle("Header", isOn: $showHeader)
-                Toggle("Expanded", isOn: $headerExpanded)
-                    .disabled(!showHeader)
+                Toggle(isOn: $isReadOnly) {
+                    Label("Read-only", systemImage: isReadOnly ? "lock" : "lock.open")
+                }
+                .help("Read-only: the styled document stays scrollable and selectable, editing is off")
+
+                Toggle(isOn: $showRawSource) {
+                    Label("Raw source", systemImage: "chevron.left.forwardslash.chevron.right")
+                }
+                .help("Raw markdown source: no styling, no syntax hiding")
+
+                Toggle(isOn: $useReadingColumn) {
+                    Label("Reading column", systemImage: "arrow.right.and.line.vertical.and.arrow.left")
+                }
+                .help("Centered fixed-width reading column — wide tables still break out to full width")
+
+                Menu {
+                    Toggle("Show header", isOn: $showHeader)
+                    Toggle("Expanded", isOn: $headerExpanded)
+                        .disabled(!showHeader)
+                } label: {
+                    Label("Header", systemImage: "rectangle.topthird.inset.filled")
+                }
+                .help("Scroll-away header: an embedder-supplied SwiftUI view hosted above the document")
             }
         }
     }
@@ -92,8 +127,7 @@ struct ContentView: View {
 
         // Opt-in constructs beyond pure markdown. The core engine no longer
         // knows `==highlight==` or `~~strikethrough~~` — they are extensions
-        // you register; `::: … :::` containers are a fenced BLOCK extension.
-        // Unregistered syntax stays literal text.
+        // you register. Unregistered syntax stays literal text.
         config.extensions = [HighlightExtension(), StrikethroughExtension(),]
 
         // Custom task-checkbox symbols: any SF Symbol pair works; unresolvable
@@ -102,6 +136,10 @@ struct ContentView: View {
             uncheckedSymbolName: "square",
             checkedSymbolName: "square.fill"
         )
+
+        // Toolbar-driven modes.
+        config.rawSourceMode = showRawSource
+        config.readingWidth = useReadingColumn ? 620 : nil
 
         return config
     }
@@ -180,7 +218,7 @@ private let markdownHeader = """
 
 A native macOS Markdown editor built on **TextKit 2**, bridged to SwiftUI — brought to you by [nodes-web.com](https://nodes-web.com).
 
-Edit this text live. Formatting updates as you type.
+Edit this text live. Formatting updates as you type — and the toolbar flips engine modes at runtime: read-only, raw markdown source, and a centered reading column.
 
 ---
 """
