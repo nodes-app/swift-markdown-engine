@@ -18,7 +18,8 @@
 //  The fence lines hide while the caret is outside the block and reveal
 //  muted while editing (mirroring code fences); the body keeps full inline
 //  styling plus the container background. An unclosed container runs to the end
-//  of the document, exactly like an unclosed code fence.
+//  of the document (unlike an unclosed ``` fence, which stays literal text
+//  until its closing fence exists).
 //
 
 import AppKit

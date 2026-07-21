@@ -68,6 +68,34 @@ struct BlockParserTests {
         #expect(BlockParser.parse("```\ncode\n```\n") == [b(.fencedCode, 0, 13)])
     }
 
+    @Test("an unclosed fence stays literal text — blocks below are not swallowed")
+    func unclosedFenceDoesNotSwallow() {
+        // ```\n then a table, a thematic break, block LaTeX, and a link
+        // paragraph — none of them may end up inside a code block.
+        let text = "```\n\n|a|b|\n|-|-|\n|1|2|\n\n---\n\n$$x$$\n\n[l](u)"
+        let blocks = BlockParser.parse(text)
+        #expect(!blocks.contains { $0.kind == .fencedCode })
+        #expect(blocks.contains { $0.kind == .table })
+        #expect(blocks.contains { $0.kind == .thematicBreak })
+        #expect(blocks.contains { $0.kind == .blockLatex })
+        assertTiles(text)
+    }
+
+    @Test("an unclosed fence merges into the paragraph it starts")
+    func unclosedFenceIsParagraph() {
+        #expect(BlockParser.parse("```\n[l](u)") == [b(.paragraph, 0, 10)])
+        #expect(BlockParser.parse("a\n```swift") == [b(.paragraph, 0, 10)])
+    }
+
+    @Test("a closed fence below an unclosed opener pairs with it")
+    func fencePairing() {
+        // The first ``` pairs with the next fence line — CommonMark pairing —
+        // so this is one code block followed by a paragraph.
+        let text = "```\ncode\n```\ntail"
+        #expect(BlockParser.parse(text) == [b(.fencedCode, 0, 13), b(.paragraph, 13, 4)])
+        assertTiles(text)
+    }
+
     @Test("consecutive blockquote lines form one block, ended by a non-quote line")
     func blockquote() {
         let text = "> a\n> b\nc"

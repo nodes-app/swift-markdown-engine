@@ -25,7 +25,7 @@ struct ListItem: Equatable {
 }
 
 /// An extension-supplied fenced block. `closeFence` is nil when the block is
-/// unclosed (it then runs to the end of the document, like an open ``` fence).
+/// unclosed (it then runs to the end of the document).
 struct ExtensionBlockNode: Equatable {
     let extensionID: String
     let range: NSRange

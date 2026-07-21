@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- An unclosed ``` fence no longer swallows the rest of the document: typing an
+  opening fence above existing content left every block below it (tables,
+  block LaTeX, thematic breaks, links) unrendered until the closing fence was
+  typed. A fence now forms a code block only once its closing fence exists.
+
 ## [0.10.0] - 2026-07-15
 
 ### Added

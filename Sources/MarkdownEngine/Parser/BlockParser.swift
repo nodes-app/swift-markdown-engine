@@ -274,6 +274,16 @@ enum BlockParser {
 
         func lineText(_ i: Int) -> String { nsText.substring(with: lines[i]) }
 
+        /// Line index of the fence closing a code block opened at `start`; nil when unclosed.
+        func fenceCloseIndex(from start: Int) -> Int? {
+            var scan = start + 1
+            while scan < lines.count {
+                if isFence(lineText(scan)) { return scan }
+                scan += 1
+            }
+            return nil
+        }
+
         /// Line index of the `$$` closing a block-LaTeX run opened at `start`; nil if none.
         func blockLatexCloseIndex(from start: Int) -> Int? {
             let open = lineText(start).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -295,14 +305,7 @@ enum BlockParser {
                 blocks.append(Block(kind: .blank, range: union(lines[i...end])))
                 i = end + 1
 
-            } else if isFence(line) {
-                // Opaque: consume through the closing fence (or to EOF if none).
-                var end = lines.count - 1
-                var scan = i + 1
-                while scan < lines.count {
-                    if isFence(lineText(scan)) { end = scan; break }
-                    scan += 1
-                }
+            } else if isFence(line), let end = fenceCloseIndex(from: i) {
                 blocks.append(Block(kind: .fencedCode, range: union(lines[i...end])))
                 i = end + 1
 
@@ -358,10 +361,12 @@ enum BlockParser {
                 var end = i
                 while end + 1 < lines.count {
                     let next = lineText(end + 1)
-                    if isBlank(next) || isFence(next) || isThematicBreak(next)
+                    if isBlank(next) || isThematicBreak(next)
                         || isHeading(next) || isBlockquote(next) || isListItem(next) { break }
-                    // A table (row + separator), a block-LaTeX run, or an
-                    // extension fence interrupts it.
+                    // A table (row + separator), a CLOSED code fence, a
+                    // block-LaTeX run, or an extension fence interrupts it —
+                    // an unclosed opener stays part of the paragraph.
+                    if isFence(next), fenceCloseIndex(from: end + 1) != nil { break }
                     if isTableRow(next), end + 2 < lines.count, isTableSeparator(lineText(end + 2)) { break }
                     if isBlockLatexOpen(next), blockLatexCloseIndex(from: end + 1) != nil { break }
                     if registry.blockEntry(opening: next) != nil { break }
