@@ -269,26 +269,29 @@ extension NativeTextView {
 
         recalcOverscroll(for: scrollView, targetWidth: newSize.width, debugTag: "setFrameSize")
 
-        // Width change → only wide-table paragraphs need restyling (their kern bakes in displayWidth).
+        // Width-dependent rendered blocks bake the container width into their image and kern.
         if widthChanged {
+            guard !pendingWidthDependentBlockRestyle else { return }
+            pendingWidthDependentBlockRestyle = true
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
+                self.pendingWidthDependentBlockRestyle = false
                 if self.configuration.readingWidth == nil {
-                    self.restyleWideTableParagraphsForWidthChange()
+                    self.restyleWidthDependentBlockParagraphs()
                 }
                 self.updateWideTableOverlays()
             }
         }
     }
 
-    /// Restyle only wide-table paragraphs via stamped anchor ranges; avoids re-tokenizing the doc.
-    private func restyleWideTableParagraphsForWidthChange() {
+    /// Restyle only rendered blocks whose images depend on the current container width.
+    private func restyleWidthDependentBlockParagraphs() {
         guard let storage = textStorage,
               let coord = delegate as? NativeTextViewCoordinator else { return }
         var ranges: [NSRange] = []
         var seen: Set<String> = []
         let fullRange = NSRange(location: 0, length: storage.length)
-        storage.enumerateAttribute(.scrollableBlockFullRange, in: fullRange, options: []) { value, _, _ in
+        storage.enumerateAttribute(.containerWidthDependentBlockFullRange, in: fullRange, options: []) { value, _, _ in
             guard let v = value as? NSValue else { return }
             let r = v.rangeValue
             let key = "\(r.location):\(r.length)"

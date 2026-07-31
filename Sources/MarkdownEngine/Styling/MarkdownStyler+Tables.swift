@@ -260,7 +260,7 @@ extension MarkdownStyler {
                     displayWidth: containerWidth,
                     sourceID: computedSourceID
                 )
-                : .collapsedSource(markerTexts: [])
+                : .collapsedSource(markerTexts: [], widthDependent: true)
             _ = appendRenderedStandaloneBlock(
                 for: token,
                 rawContent: source,
