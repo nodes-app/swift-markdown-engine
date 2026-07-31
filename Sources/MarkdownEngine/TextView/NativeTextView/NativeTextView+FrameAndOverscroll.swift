@@ -271,37 +271,114 @@ extension NativeTextView {
 
         // Width-dependent rendered blocks bake the container width into their image and kern.
         if widthChanged {
+            if (scrollView as? ClampedScrollView)?.isPerformingLiveResize == true {
+                restyleVisibleWidthDependentBlocksDuringLiveResize(in: scrollView)
+                return
+            }
             guard !pendingWidthDependentBlockRestyle else { return }
             pendingWidthDependentBlockRestyle = true
-            // Live window resizing runs the main run loop in event-tracking mode.
-            // Scheduling only on DispatchQueue.main can therefore defer table
-            // reflow until the user releases the resize handle.
-            RunLoop.main.perform(inModes: [.default, .eventTracking]) { [weak self] in
+            DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
                 self.pendingWidthDependentBlockRestyle = false
                 if self.configuration.readingWidth == nil {
-                    self.restyleWidthDependentBlockParagraphs()
+                    if self.restyleWidthDependentBlockParagraphs(in: nil) {
+                        self.recalcOverscroll(
+                            for: scrollView,
+                            targetWidth: self.frame.width,
+                            debugTag: "widthDependentBlock"
+                        )
+                    }
                 }
                 self.updateWideTableOverlays()
             }
         }
     }
 
+    func beginLiveViewportResize() {
+        lastLiveResizeTableWidth = nil
+    }
+
+    func endLiveViewportResize() {
+        guard lastLiveResizeTableWidth != nil else { return }
+        lastLiveResizeTableWidth = nil
+        guard configuration.readingWidth == nil,
+              let scrollView = enclosingScrollView else { return }
+        if restyleWidthDependentBlockParagraphs(in: nil) {
+            recalcOverscroll(
+                for: scrollView,
+                targetWidth: frame.width,
+                debugTag: "liveResizeEnd"
+            )
+            performWideTableOverlayUpdate()
+        }
+    }
+
+    private func restyleVisibleWidthDependentBlocksDuringLiveResize(
+        in scrollView: NSScrollView
+    ) {
+        guard configuration.readingWidth == nil else {
+            performWideTableOverlayUpdate()
+            return
+        }
+        let width = textContainer?.size.width ?? frame.width
+        if let previousWidth = lastLiveResizeTableWidth,
+           abs(width - previousWidth) < 8 {
+            return
+        }
+        lastLiveResizeTableWidth = width
+        if restyleWidthDependentBlockParagraphs(in: visibleCharacterRange()) {
+            recalcOverscroll(
+                for: scrollView,
+                targetWidth: frame.width,
+                debugTag: "liveResize"
+            )
+            performWideTableOverlayUpdate()
+        }
+    }
+
+    private func visibleCharacterRange() -> NSRange? {
+        guard let textLayoutManager,
+              let viewportRange = textLayoutManager
+                .textViewportLayoutController.viewportRange else {
+            return nil
+        }
+        let start = textLayoutManager.offset(
+            from: textLayoutManager.documentRange.location,
+            to: viewportRange.location
+        )
+        let length = textLayoutManager.offset(
+            from: viewportRange.location,
+            to: viewportRange.endLocation
+        )
+        guard start >= 0, length > 0 else { return nil }
+        return NSRange(location: start, length: length)
+    }
+
     /// Restyle only rendered blocks whose images depend on the current container width.
-    private func restyleWidthDependentBlockParagraphs() {
+    @discardableResult
+    private func restyleWidthDependentBlockParagraphs(
+        in visibleRange: NSRange?
+    ) -> Bool {
         guard let storage = textStorage,
-              let coord = delegate as? NativeTextViewCoordinator else { return }
+              let coord = delegate as? NativeTextViewCoordinator else {
+            return false
+        }
         var ranges: [NSRange] = []
         var seen: Set<String> = []
         let fullRange = NSRange(location: 0, length: storage.length)
-        storage.enumerateAttribute(.containerWidthDependentBlockFullRange, in: fullRange, options: []) { value, _, _ in
+        let enumerationRange = visibleRange.map {
+            NSIntersectionRange($0, fullRange)
+        } ?? fullRange
+        guard enumerationRange.length > 0 else { return false }
+        storage.enumerateAttribute(.containerWidthDependentBlockFullRange, in: enumerationRange, options: []) { value, _, _ in
             guard let v = value as? NSValue else { return }
             let r = v.rangeValue
             let key = "\(r.location):\(r.length)"
             if seen.insert(key).inserted { ranges.append(r) }
         }
-        guard !ranges.isEmpty else { return }
+        guard !ranges.isEmpty else { return false }
         coord.restyleParagraphs(ranges, in: self)
+        return true
     }
 
     override func scrollRangeToVisible(_ range: NSRange) {

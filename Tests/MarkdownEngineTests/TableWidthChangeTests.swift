@@ -36,12 +36,13 @@ struct TableWidthChangeTests {
             tableRange: tableRange
         )
         let initialContainerWidth = try #require(textView.textContainer?.size.width)
+        let scrollView = try #require(textView.enclosingScrollView as? ClampedScrollView)
 
+        scrollView.viewWillStartLiveResize()
         for width in [820.0, 760.0] {
             window.setContentSize(NSSize(width: width, height: 680))
             window.layoutIfNeeded()
         }
-        runNextTurn(in: .eventTracking)
 
         let liveResizeBounds = try await renderedTableBounds(
             in: textView,
@@ -57,7 +58,7 @@ struct TableWidthChangeTests {
             window.setContentSize(NSSize(width: width, height: 680))
             window.layoutIfNeeded()
         }
-        runNextTurn(in: .eventTracking)
+        scrollView.viewDidEndLiveResize()
 
         let resizedBounds = try await renderedTableBounds(
             in: textView,
@@ -69,16 +70,6 @@ struct TableWidthChangeTests {
         #expect(resizedBounds.width <= finalContainerWidth + 0.5)
         #expect(resizedBounds.width < initialBounds.width - 20)
         _ = window
-    }
-
-    private func runNextTurn(in mode: RunLoop.Mode) {
-        var didRun = false
-        RunLoop.main.perform(inModes: [mode]) {
-            didRun = true
-        }
-        let cfMode = CFRunLoopMode(mode.rawValue as CFString)
-        _ = CFRunLoopRunInMode(cfMode, 1, true)
-        #expect(didRun)
     }
 
     private func nativeTextView(in rootView: NSView) async throws -> NativeTextView {

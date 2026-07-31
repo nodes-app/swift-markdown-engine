@@ -15,6 +15,7 @@ final class ClampedScrollView: NSScrollView {
 
     /// Saved at the start of every live-resize (including spurious one-click resizes triggered by edge-cursor clicks) so the position is restored when the resize ends. Without this, NSScrollView's default top-anchor-during-resize would jolt a bottom-anchored user back up by hundreds of points on a single edge click.
     private var scrollYBeforeLiveResize: CGFloat?
+    private(set) var isPerformingLiveResize = false
 
     override var intrinsicContentSize: NSSize {
         guard fitsContent, let container = documentView as? NativeTextViewContainer else {
@@ -39,12 +40,16 @@ final class ClampedScrollView: NSScrollView {
 
     override func viewWillStartLiveResize() {
         super.viewWillStartLiveResize()
+        isPerformingLiveResize = true
+        nativeTextView?.beginLiveViewportResize()
         guard !fitsContent else { return }
         scrollYBeforeLiveResize = contentView.bounds.origin.y
     }
 
     override func viewDidEndLiveResize() {
         super.viewDidEndLiveResize()
+        nativeTextView?.endLiveViewportResize()
+        isPerformingLiveResize = false
         guard !fitsContent else { return }
         if let y = scrollYBeforeLiveResize {
             contentView.scroll(to: NSPoint(x: contentView.bounds.origin.x, y: y))

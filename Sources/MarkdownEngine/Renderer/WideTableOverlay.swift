@@ -175,9 +175,7 @@ extension NativeTextView {
         }
         if pendingWideTableOverlayUpdate { return }
         pendingWideTableOverlayUpdate = true
-        // Keep overlays responsive while AppKit is running its live-resize
-        // event-tracking loop, while still coalescing bursts to one update.
-        RunLoop.main.perform(inModes: [.default, .eventTracking]) { [weak self] in
+        DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.pendingWideTableOverlayUpdate = false
             self.performWideTableOverlayUpdate()

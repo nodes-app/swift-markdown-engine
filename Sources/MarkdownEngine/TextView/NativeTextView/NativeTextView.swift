@@ -27,6 +27,9 @@ final class NativeTextView: NSTextView {
     var pendingWideTableOverlayUpdate = false
     /// Coalesces width-dependent block restyles to the final width of each runloop.
     var pendingWidthDependentBlockRestyle = false
+    /// Last width rendered during a live resize. Visible tables update in
+    /// small increments; resize-end always applies the exact final width.
+    var lastLiveResizeTableWidth: CGFloat?
     var suppressAutoRevealOnce: Bool = false
     // Set by clickedOnLink during a mouseDown: did the delegate fire (so
     // mouseDown can re-dispatch a click AppKit dropped), and did it navigate
