@@ -32,6 +32,15 @@ extension NSAttributedString.Key {
     static let scrollableBlockTotalHeight = NSAttributedString.Key("ScrollableBlockTotalHeight")
     /// NSValue(range:) — full multi-line range of the wide-table source, used to scope width-change restyles.
     static let scrollableBlockFullRange = NSAttributedString.Key("ScrollableBlockFullRange")
+    /// NSColor accent of a callout line; the fragment fills a tinted full-width
+    /// band behind the line and paints a solid bar of this color in the gutter.
+    static let calloutTint = NSAttributedString.Key("CalloutTint")
+    /// String SF Symbol name for a callout's header line; the fragment paints it
+    /// (in the accent color) in the gutter beside the title.
+    static let calloutIcon = NSAttributedString.Key("CalloutIcon")
+    /// Bool on a collapsible callout's header line (`true` = currently collapsed).
+    /// Makes the header's gutter clickable to toggle the fold.
+    static let calloutFold = NSAttributedString.Key("CalloutFold")
 }
 
 final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
@@ -77,6 +86,9 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
     override func draw(at point: CGPoint, in context: CGContext) {
         // 1. Code-block backgrounds (behind text)
         drawCodeBlockBackground(at: point, in: context)
+
+        // 1b. Callout tinted bands (behind text)
+        drawCalloutBackground(at: point, in: context)
 
         // 2. LaTeX images (behind text — hidden markers are invisible anyway)
         drawLatexImages(at: point, in: context)
@@ -504,6 +516,68 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
                 }
             }
         }
+    }
+
+    // MARK: - Callout Background
+
+    /// Fill a tinted full-width band behind every line carrying `.calloutTint`
+    /// and paint a solid accent bar in the left gutter, so an Obsidian-style
+    /// `> [!type]` callout reads as a colored box.
+    private func drawCalloutBackground(at point: CGPoint, in context: CGContext) {
+        guard let ts = textStorage, let range = fragmentNSRange, range.length > 0 else { return }
+        var anyTint = false
+        ts.enumerateAttribute(.calloutTint, in: range, options: []) { value, _, stop in
+            if value is NSColor { anyTint = true; stop.pointee = true }
+        }
+        guard anyTint else { return }
+
+        let containerWidth = textLayoutManager?.textContainer?.size.width ?? layoutFragmentFrame.width
+        let barWidth = Self.blockquoteBarWidth
+
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        let nsContext = NSGraphicsContext(cgContext: context, flipped: true)
+        NSGraphicsContext.current = nsContext
+
+        let fragLocation = range.location
+        let leftEdge = point.x - layoutFragmentFrame.origin.x
+        for lineFragment in textLineFragments {
+            let lr = lineFragment.characterRange
+            let docStart = fragLocation + lr.location
+            guard docStart < ts.length else { continue }
+            guard let tint = ts.attribute(.calloutTint, at: docStart, effectiveRange: nil) as? NSColor else { continue }
+            let tb = lineFragment.typographicBounds
+            let bandRect = CGRect(x: leftEdge, y: point.y + tb.origin.y, width: containerWidth, height: tb.height)
+            tint.withAlphaComponent(0.12).setFill()
+            NSBezierPath(rect: bandRect).fill()
+            tint.withAlphaComponent(0.9).setFill()
+            NSBezierPath(rect: CGRect(x: leftEdge, y: bandRect.minY, width: barWidth, height: tb.height)).fill()
+
+            // Header line: paint the SF Symbol in the gutter beside the title.
+            if let symbol = ts.attribute(.calloutIcon, at: docStart, effectiveRange: nil) as? String,
+               let icon = calloutIconImage(symbol, tint: tint) {
+                let side: CGFloat = 14
+                let iconRect = CGRect(
+                    x: leftEdge + barWidth + 4,
+                    y: bandRect.minY + (tb.height - side) / 2,
+                    width: side, height: side
+                )
+                icon.draw(in: iconRect)
+            }
+        }
+    }
+
+    private func calloutIconImage(_ symbol: String, tint: NSColor) -> NSImage? {
+        let config = NSImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
+        guard let base = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
+            .withSymbolConfiguration(config) else { return nil }
+        let tinted = NSImage(size: base.size, flipped: false) { rect in
+            base.draw(in: rect)
+            tint.set()
+            rect.fill(using: .sourceAtop)
+            return true
+        }
+        return tinted
     }
 
     // MARK: - Bullet Markers
