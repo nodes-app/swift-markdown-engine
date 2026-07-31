@@ -272,7 +272,7 @@ extension NativeTextView {
         // Width-dependent rendered blocks bake the container width into their image and kern.
         if widthChanged {
             if (scrollView as? ClampedScrollView)?.isPerformingLiveResize == true {
-                restyleVisibleWidthDependentBlocksDuringLiveResize(in: scrollView)
+                restyleWidthDependentBlocksDuringLiveResize(in: scrollView)
                 return
             }
             guard !pendingWidthDependentBlockRestyle else { return }
@@ -313,7 +313,7 @@ extension NativeTextView {
         }
     }
 
-    private func restyleVisibleWidthDependentBlocksDuringLiveResize(
+    private func restyleWidthDependentBlocksDuringLiveResize(
         in scrollView: NSScrollView
     ) {
         guard configuration.readingWidth == nil else {
@@ -326,7 +326,11 @@ extension NativeTextView {
             return
         }
         lastLiveResizeTableWidth = width
-        if restyleWidthDependentBlockParagraphs(in: visibleCharacterRange()) {
+        // Container width is document-wide layout state. Limiting this pass to
+        // TextKit 2's lazy viewport leaves off-screen table attachments stamped
+        // with obsolete image and kern widths, which can widen the document and
+        // shift its horizontal origin during a rapid shrink.
+        if restyleWidthDependentBlockParagraphs(in: nil) {
             recalcOverscroll(
                 for: scrollView,
                 targetWidth: frame.width,
@@ -334,24 +338,6 @@ extension NativeTextView {
             )
             performWideTableOverlayUpdate()
         }
-    }
-
-    private func visibleCharacterRange() -> NSRange? {
-        guard let textLayoutManager,
-              let viewportRange = textLayoutManager
-                .textViewportLayoutController.viewportRange else {
-            return nil
-        }
-        let start = textLayoutManager.offset(
-            from: textLayoutManager.documentRange.location,
-            to: viewportRange.location
-        )
-        let length = textLayoutManager.offset(
-            from: viewportRange.location,
-            to: viewportRange.endLocation
-        )
-        guard start >= 0, length > 0 else { return nil }
-        return NSRange(location: start, length: length)
     }
 
     /// Restyle only rendered blocks whose images depend on the current container width.

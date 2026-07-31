@@ -27,8 +27,8 @@ final class NativeTextView: NSTextView {
     var pendingWideTableOverlayUpdate = false
     /// Coalesces width-dependent block restyles to the final width of each runloop.
     var pendingWidthDependentBlockRestyle = false
-    /// Last width rendered during a live resize. Visible tables update in
-    /// small increments; resize-end always applies the exact final width.
+    /// Last width rendered during a live resize. Width-dependent blocks update
+    /// in small increments; resize-end always applies the exact final width.
     var lastLiveResizeTableWidth: CGFloat?
     var suppressAutoRevealOnce: Bool = false
     // Set by clickedOnLink during a mouseDown: did the delegate fire (so

@@ -72,6 +72,77 @@ struct TableWidthChangeTests {
         _ = window
     }
 
+    @Test func tableOutsideLaidOutViewportReflowsDuringLiveResize() async throws {
+        let source = Self.wideSource
+            + "\n\n"
+            + String(
+                repeating: "Spacer paragraph keeps the document scrollable.\n\n",
+                count: 160
+            )
+        let wrapper = NativeTextViewWrapper(
+            text: .constant(source),
+            isEditable: false
+        )
+        let host = NSHostingController(rootView: wrapper)
+        let window = NSWindow(contentViewController: host)
+        window.minSize = NSSize(width: 680, height: 440)
+        window.styleMask.insert(.fullSizeContentView)
+        window.setContentSize(NSSize(width: 900, height: 680))
+        window.layoutIfNeeded()
+        await nextMainQueueTurn()
+
+        let textView = try await nativeTextView(in: host.view)
+        let tableRange = (source as NSString).range(of: "| Rechtsform")
+        let initialBounds = try await renderedTableBounds(
+            in: textView,
+            tableRange: tableRange
+        )
+        let initialContainerWidth = try #require(textView.textContainer?.size.width)
+        let scrollView = try #require(textView.enclosingScrollView as? ClampedScrollView)
+        let textLayoutManager = try #require(textView.textLayoutManager)
+
+        textLayoutManager.ensureLayout(for: textLayoutManager.documentRange)
+        window.layoutIfNeeded()
+        let bottomY = max(
+            0,
+            (scrollView.documentView?.bounds.height ?? 0)
+                - scrollView.contentView.bounds.height
+        )
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: bottomY))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+        await nextMainQueueTurn()
+        textLayoutManager.textViewportLayoutController.layoutViewport()
+
+        let viewportRange = try #require(
+            textLayoutManager.textViewportLayoutController.viewportRange
+        )
+        let viewportLocation = textLayoutManager.offset(
+            from: textLayoutManager.documentRange.location,
+            to: viewportRange.location
+        )
+        #expect(scrollView.contentView.bounds.origin.y > 0)
+        #expect(viewportLocation > NSMaxRange(tableRange))
+
+        scrollView.viewWillStartLiveResize()
+        for width in [820.0, 760.0] {
+            window.setContentSize(NSSize(width: width, height: 680))
+            window.layoutIfNeeded()
+        }
+
+        let liveResizeBounds = try await renderedTableBounds(
+            in: textView,
+            tableRange: tableRange
+        )
+        let liveContainerWidth = try #require(textView.textContainer?.size.width)
+
+        #expect(liveContainerWidth < initialContainerWidth)
+        #expect(liveResizeBounds.width <= liveContainerWidth + 0.5)
+        #expect(liveResizeBounds.width < initialBounds.width - 20)
+
+        scrollView.viewDidEndLiveResize()
+        _ = window
+    }
+
     private func nativeTextView(in rootView: NSView) async throws -> NativeTextView {
         for _ in 0..<20 {
             if let textView = descendantViews(in: rootView)
