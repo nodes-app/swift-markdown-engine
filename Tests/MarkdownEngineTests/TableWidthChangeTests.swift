@@ -16,7 +16,7 @@ import Testing
 @Suite("Table width changes")
 struct TableWidthChangeTests {
 
-    @Test func wrappedTableReflowsAfterRapidViewportShrink() async throws {
+    @Test func wrappedTableReflowsDuringRapidViewportShrink() async throws {
         let wrapper = NativeTextViewWrapper(
             text: .constant(Self.wideSource),
             isEditable: false
@@ -37,11 +37,27 @@ struct TableWidthChangeTests {
         )
         let initialContainerWidth = try #require(textView.textContainer?.size.width)
 
-        for width in [820.0, 760.0, 700.0, 680.0] {
+        for width in [820.0, 760.0] {
             window.setContentSize(NSSize(width: width, height: 680))
             window.layoutIfNeeded()
         }
-        await nextMainQueueTurn()
+        runNextTurn(in: .eventTracking)
+
+        let liveResizeBounds = try await renderedTableBounds(
+            in: textView,
+            tableRange: tableRange
+        )
+        let liveContainerWidth = try #require(textView.textContainer?.size.width)
+
+        #expect(liveContainerWidth < initialContainerWidth)
+        #expect(liveResizeBounds.width <= liveContainerWidth + 0.5)
+        #expect(liveResizeBounds.width < initialBounds.width - 20)
+
+        for width in [700.0, 680.0] {
+            window.setContentSize(NSSize(width: width, height: 680))
+            window.layoutIfNeeded()
+        }
+        runNextTurn(in: .eventTracking)
 
         let resizedBounds = try await renderedTableBounds(
             in: textView,
@@ -53,6 +69,16 @@ struct TableWidthChangeTests {
         #expect(resizedBounds.width <= finalContainerWidth + 0.5)
         #expect(resizedBounds.width < initialBounds.width - 20)
         _ = window
+    }
+
+    private func runNextTurn(in mode: RunLoop.Mode) {
+        var didRun = false
+        RunLoop.main.perform(inModes: [mode]) {
+            didRun = true
+        }
+        let cfMode = CFRunLoopMode(mode.rawValue as CFString)
+        _ = CFRunLoopRunInMode(cfMode, 1, true)
+        #expect(didRun)
     }
 
     private func nativeTextView(in rootView: NSView) async throws -> NativeTextView {

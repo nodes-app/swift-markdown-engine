@@ -273,7 +273,10 @@ extension NativeTextView {
         if widthChanged {
             guard !pendingWidthDependentBlockRestyle else { return }
             pendingWidthDependentBlockRestyle = true
-            DispatchQueue.main.async { [weak self] in
+            // Live window resizing runs the main run loop in event-tracking mode.
+            // Scheduling only on DispatchQueue.main can therefore defer table
+            // reflow until the user releases the resize handle.
+            RunLoop.main.perform(inModes: [.default, .eventTracking]) { [weak self] in
                 guard let self = self else { return }
                 self.pendingWidthDependentBlockRestyle = false
                 if self.configuration.readingWidth == nil {
