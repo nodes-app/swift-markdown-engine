@@ -17,10 +17,11 @@
 //                          automatically inert for every pass below.
 //    3. scanLinkFamily   — ![[…]], [[…]], ![…](…), […](…), $…$ (+ registered
 //                          extension spans) in precedence order. URLs allow
-//                          balanced parens. A
-//                          candidate overlapping a claimed span is rejected
-//                          (kept literal) — this is what stops a `$…$` from
-//                          spanning across a code span.
+//                          balanced parens. A candidate overlapping a claimed
+//                          span is rejected (kept literal), except for opaque
+//                          spans wholly nested inside a Markdown link's label.
+//                          This keeps `[x](y)` inert inside code while allowing
+//                          valid labels such as [`x`](y).
 //    4. resolveEmphasis  — `*`/`_` delimiter runs over text outside every
 //                          claimed span; may wrap claimed spans.
 //    5. buildTree        — containment tree. Emphasis nests already-collected
@@ -124,12 +125,16 @@ enum InlineParser {
                 return r
             }
         }
-        /// Region whose interior holds collected child spans — only emphasis qualifies.
+        /// Region whose interior can own already-collected child spans.
         var containerContent: NSRange? {
-            if case .emphasis(_, _, let open, let close) = self {
+            switch self {
+            case .emphasis(_, _, let open, let close):
                 return NSRange(location: NSMaxRange(open), length: close.location - NSMaxRange(open))
+            case .link(_, let textRange, _, _):
+                return textRange
+            default:
+                return nil
             }
-            return nil
         }
     }
 
@@ -203,14 +208,22 @@ enum InlineParser {
     // MARK: - 3. Link family / inline LaTeX / extension spans
 
     private static func scanLinkFamily(_ ns: NSString, len: Int, claimed: [NSRange], registry: ExtensionRegistry) -> [Span] {
-        func overlapsClaimed(_ range: NSRange) -> Bool {
-            claimed.contains { NSIntersectionRange($0, range).length > 0 }
+        func hasDisallowedClaimedOverlap(_ span: Span) -> Bool {
+            let overlaps = claimed.filter {
+                NSIntersectionRange($0, span.fullRange).length > 0
+            }
+            guard overlaps.isEmpty == false else { return false }
+            guard case .link(_, let textRange, _, _) = span else { return true }
+            return overlaps.contains {
+                rangeContains(textRange, $0) == false
+            }
         }
         var spans: [Span] = []
         var i = 0
         while i < len {
             if claimed.contains(where: { NSLocationInRange(i, $0) }) { i += 1; continue }
-            if let span = matchClaimedSpan(ns, len, at: i, registry: registry), !overlapsClaimed(span.fullRange) {
+            if let span = matchClaimedSpan(ns, len, at: i, registry: registry),
+               hasDisallowedClaimedOverlap(span) == false {
                 spans.append(span)
                 i = NSMaxRange(span.fullRange)
             } else {

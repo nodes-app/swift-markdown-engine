@@ -102,6 +102,23 @@ struct MarkdownASTStylerTests {
         #expect(spellingStates(intersecting: prose).isEmpty)
     }
 
+    @Test("inline code inside a link receives both code and link styling")
+    func inlineCodeInsideLinkCombinesStyles() {
+        let attrs = MarkdownASTStyler.styleAttributes(
+            text: "[`App`](u)",
+            fontName: fontName,
+            fontSize: base
+        )
+        let codeContentLocation = 2
+
+        #expect(attrs.contains { range, attributes in
+            NSLocationInRange(codeContentLocation, range) && attributes[.backgroundColor] != nil
+        })
+        #expect(attrs.contains { range, attributes in
+            NSLocationInRange(codeContentLocation, range) && attributes[.link] != nil
+        })
+    }
+
     /// Effective color at `pos`: the last styled range covering it that sets `.foregroundColor`.
     private func color(in attrs: [StyledRange], at pos: Int) -> NSColor? {
         var result: NSColor?
