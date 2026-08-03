@@ -53,6 +53,23 @@ struct StreamingMarkdownDocumentTests {
         #expect(document.update(documentID: "a", text: "hello world") == .append(" world"))
     }
 
+    @Test func trustedAppendOnlySkipsPrefixValidation() {
+        let document = StreamingMarkdownDocument()
+        _ = document.update(
+            documentID: "a",
+            text: "hello world",
+            validation: .trustedAppendOnly
+        )
+
+        #expect(
+            document.update(
+                documentID: "a",
+                text: "hxllo world!!!",
+                validation: .trustedAppendOnly
+            ) == .append("!!!")
+        )
+    }
+
     @Test func utf16TailExtractionHandlesEmoji() {
         let document = StreamingMarkdownDocument()
         _ = document.update(documentID: "answer", text: "Hi 👋")

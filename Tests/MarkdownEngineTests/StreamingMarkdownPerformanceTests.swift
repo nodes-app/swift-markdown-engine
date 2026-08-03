@@ -12,12 +12,17 @@ import Testing
 struct StreamingMarkdownPerformanceTests {
     private static let benchmarkEnvironmentKey = "STREAMING_MARKDOWN_BENCHMARK"
 
-    @Test func compareFullRenderWithAppendOnlyStreaming() {
+    @Test func compareTextKitRenderingForAITokenStreaming() {
         guard ProcessInfo.processInfo.environment[Self.benchmarkEnvironmentKey] == "1" else {
             return
         }
 
-        let updates = generatedUpdates(totalUTF16Length: 50_000, chunkLength: 100)
+        let totalUTF16Length = 30_000
+        let chunkLength = 32
+        let updates = generatedAIResponseUpdates(
+            totalUTF16Length: totalUTF16Length,
+            chunkLength: chunkLength
+        )
         let fullRender = medianDuration(of: 3) {
             let stack = makeStack()
             for text in updates {
@@ -25,29 +30,51 @@ struct StreamingMarkdownPerformanceTests {
                 stack.textView.recalcOverscroll(for: stack.scrollView, debugTag: "benchmarkFull")
             }
         }
-        let appendOnly = medianDuration(of: 3) {
-            let stack = makeStack()
-            for text in updates {
-                stack.coordinator.updateStreamingDocument(
-                    stack.textView,
-                    in: stack.scrollView,
-                    documentID: "benchmark",
-                    text: text,
-                    forceReset: false
-                )
-            }
+        let safe = medianDuration(of: 3) {
+            renderStreaming(updates, validation: .safe)
+        }
+        let trustedAppendOnly = medianDuration(of: 3) {
+            renderStreaming(updates, validation: .trustedAppendOnly)
         }
 
-        let speedup = fullRender / appendOnly
-        let speedupText = String(format: "%.2f", speedup)
+        let safeSpeedup = fullRender / safe
+        let trustedSpeedup = fullRender / trustedAppendOnly
         print(
-            "STREAMING_MARKDOWN_BENCHMARK "
-                + "updates=\(updates.count) utf16=50000 chunk=100 "
+            "STREAMING_MARKDOWN_TEXTKIT_BENCHMARK "
+                + "updates=\(updates.count) utf16=\(totalUTF16Length) chunk=\(chunkLength) "
                 + "full_ms=\(milliseconds(fullRender)) "
-                + "streaming_ms=\(milliseconds(appendOnly)) "
-                + "speedup=\(speedupText)x"
+                + "safe_ms=\(milliseconds(safe)) "
+                + "safe_speedup=\(String(format: "%.2f", safeSpeedup))x "
+                + "trusted_ms=\(milliseconds(trustedAppendOnly)) "
+                + "trusted_speedup=\(String(format: "%.2f", trustedSpeedup))x"
         )
-        #expect(appendOnly < fullRender)
+        #expect(safe < fullRender)
+        #expect(trustedAppendOnly < safe)
+    }
+
+    private func renderStreaming(
+        _ updates: [String],
+        validation: MarkdownStreamingValidation
+    ) {
+        guard let finalText = updates.last else { return }
+        let stack = makeStack()
+        stack.coordinator.beginStreamingDocument(documentID: "benchmark")
+        for text in updates {
+            stack.coordinator.updateStreamingDocument(
+                stack.textView,
+                in: stack.scrollView,
+                documentID: "benchmark",
+                text: text,
+                validation: validation,
+                forceReset: false
+            )
+        }
+        stack.coordinator.commitStreamingDocument(
+            stack.textView,
+            scrollView: stack.scrollView,
+            text: finalText
+        )
+        stack.textView.recalcOverscroll(for: stack.scrollView, debugTag: "benchmarkCommit")
     }
 
     private func makeStack() -> (
@@ -70,18 +97,44 @@ struct StreamingMarkdownPerformanceTests {
         return (coordinator, stack.scrollView, stack.textView)
     }
 
-    private func generatedUpdates(totalUTF16Length: Int, chunkLength: Int) -> [String] {
-        let line = "let value = compute(\"streaming markdown\") // generated response\n"
-        var complete = "```swift\n"
-        while (complete as NSString).length < totalUTF16Length - 4 {
-            complete += line
+    private func generatedAIResponseUpdates(
+        totalUTF16Length: Int,
+        chunkLength: Int
+    ) -> [String] {
+        let section = """
+        ## Implementation notes
+
+        The renderer receives **small cumulative token updates** and keeps completed text stable.
+
+        - Validate the public contract.
+        - Update only the TextKit tail.
+        - Parse Markdown once when generation completes.
+
+        ```swift
+        for await delta in stream {
+            response.append(delta)
+            render(response)
         }
-        complete = (complete as NSString).substring(to: totalUTF16Length - 4) + "```\n"
+        ```
+
+        This paragraph mixes `inline code`, emphasis, and a [documentation link](https://example.com).
+
+
+        """
+        var complete = "# Streaming Markdown response\n\n"
+        while (complete as NSString).length < totalUTF16Length {
+            complete += section
+        }
+        complete = (complete as NSString).substring(to: totalUTF16Length)
 
         let ns = complete as NSString
-        return stride(from: chunkLength, through: ns.length, by: chunkLength).map { length in
+        var updates = stride(from: chunkLength, through: ns.length, by: chunkLength).map { length in
             ns.substring(to: min(length, ns.length))
         }
+        if updates.last.map({ ($0 as NSString).length }) != ns.length {
+            updates.append(complete)
+        }
+        return updates
     }
 
     private func medianDuration(of iterations: Int, operation: () -> Void) -> Double {

@@ -15,6 +15,19 @@ public enum MarkdownStreamingState: Sendable, Equatable {
     case streaming
 }
 
+/// Selects how an active streaming transaction validates cumulative updates.
+public enum MarkdownStreamingValidation: Sendable, Equatable {
+    /// Verifies that every cumulative update preserves the previously rendered prefix.
+    /// This is the default and safely falls back to a reset when the prefix changes.
+    case safe
+
+    /// Trusts the producer's append-only contract and skips prefix verification.
+    ///
+    /// Use this only for AI/token streaming pipelines that construct each cumulative
+    /// value by appending trusted deltas to the previous value.
+    case trustedAppendOnly
+}
+
 /// Tracks the append cursor for one streaming document.
 ///
 /// This deliberately does not retain or update an AST: streaming presentation is
@@ -38,33 +51,46 @@ final class StreamingMarkdownDocument {
         prefixFingerprint = 0
     }
 
-    func update(documentID: String, text: String, forceReset: Bool = false) -> Mutation {
+    func update(
+        documentID: String,
+        text: String,
+        validation: MarkdownStreamingValidation = .safe,
+        forceReset: Bool = false
+    ) -> Mutation {
         let newLength = (text as NSString).length
 
         guard !forceReset,
               self.documentID == documentID,
               newLength >= utf16Length else {
-            adopt(documentID: documentID, text: text)
+            adopt(documentID: documentID, text: text, validation: validation)
             return .reset(text)
         }
 
         if newLength == utf16Length {
+            guard validation == .safe else { return .none }
             let currentHash = fingerprint(text, utf16Length: newLength)
             guard currentHash == prefixFingerprint else {
-                adopt(documentID: documentID, text: text)
+                adopt(documentID: documentID, text: text, validation: validation)
                 return .reset(text)
             }
             return .none
         }
 
-        let currentPrefixHash = fingerprint(text, utf16Length: utf16Length)
-        guard currentPrefixHash == prefixFingerprint else {
-            adopt(documentID: documentID, text: text)
-            return .reset(text)
+        if validation == .safe {
+            let currentPrefixHash = fingerprint(text, utf16Length: utf16Length)
+            guard currentPrefixHash == prefixFingerprint else {
+                adopt(documentID: documentID, text: text, validation: validation)
+                return .reset(text)
+            }
         }
 
         let tail = (text as NSString).substring(from: utf16Length)
-        adoptStreamingAppend(documentID: documentID, text: text, newLength: newLength)
+        adoptStreamingAppend(
+            documentID: documentID,
+            text: text,
+            newLength: newLength,
+            validation: validation
+        )
         return .append(tail)
     }
 
@@ -74,16 +100,29 @@ final class StreamingMarkdownDocument {
         prefixFingerprint = 0
     }
 
-    private func adopt(documentID: String, text: String) {
+    private func adopt(
+        documentID: String,
+        text: String,
+        validation: MarkdownStreamingValidation
+    ) {
         self.documentID = documentID
         utf16Length = (text as NSString).length
-        prefixFingerprint = fingerprint(text, utf16Length: utf16Length)
+        prefixFingerprint = validation == .safe
+            ? fingerprint(text, utf16Length: utf16Length)
+            : 0
     }
 
-    private func adoptStreamingAppend(documentID: String, text: String, newLength: Int) {
+    private func adoptStreamingAppend(
+        documentID: String,
+        text: String,
+        newLength: Int,
+        validation: MarkdownStreamingValidation
+    ) {
         self.documentID = documentID
         utf16Length = newLength
-        prefixFingerprint = fingerprint(text, utf16Length: newLength)
+        prefixFingerprint = validation == .safe
+            ? fingerprint(text, utf16Length: newLength)
+            : 0
     }
 
     private func fingerprint(_ text: String, utf16Length: Int) -> UInt64 {

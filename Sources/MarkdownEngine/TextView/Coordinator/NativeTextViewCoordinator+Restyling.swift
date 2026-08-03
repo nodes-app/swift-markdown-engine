@@ -35,11 +35,13 @@ extension NativeTextViewCoordinator {
         in scrollView: NSScrollView,
         documentID: String,
         text: String,
+        validation: MarkdownStreamingValidation = .safe,
         forceReset: Bool
     ) {
         let mutation = streamingDocument.update(
             documentID: documentID,
             text: text,
+            validation: validation,
             forceReset: forceReset
         )
         guard mutation != .none else { return }

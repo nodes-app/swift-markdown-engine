@@ -93,6 +93,41 @@ highlighting, themes, wiki-link state, and more.
 > `documentId: "your-doc-id"` so undo history and pending replacements
 > stay scoped to each editor instance.
 
+### AI and token streaming
+
+For generated responses, set `streamingState` to `.streaming` while cumulative
+text updates arrive, then return it to `.idle` to commit one full Markdown parse,
+style, and syntax-highlight pass:
+
+```swift
+NativeTextViewWrapper(
+    text: .constant(response),
+    documentId: responseID,
+    isEditable: false,
+    streamingState: isGenerating ? .streaming : .idle
+)
+```
+
+Streaming uses `.safe` prefix validation by default. It detects replacement or
+mutation of previously rendered content and falls back to a full plain-text reset.
+
+AI/token pipelines that build every cumulative value exclusively by appending
+trusted deltas can opt out of that validation scan:
+
+```swift
+NativeTextViewWrapper(
+    text: .constant(response),
+    documentId: responseID,
+    isEditable: false,
+    streamingState: isGenerating ? .streaming : .idle,
+    streamingValidation: .trustedAppendOnly
+)
+```
+
+Use `.trustedAppendOnly` only when the producer guarantees that existing content
+cannot change during the transaction. Violating that contract can leave the
+displayed prefix out of sync until the final `.idle` commit rebuilds the document.
+
 ## Customization
 
 ### Service Protocols

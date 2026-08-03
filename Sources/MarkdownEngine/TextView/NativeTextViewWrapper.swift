@@ -73,6 +73,8 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     public var isEditable: Bool
     /// Explicitly begins or commits an append-only generated-text transaction.
     public var streamingState: MarkdownStreamingState
+    /// Prefix-validation policy used while ``streamingState`` is ``MarkdownStreamingState/streaming``.
+    public var streamingValidation: MarkdownStreamingValidation
     /// Optional paste hook. Return a Markdown image-embed string (e.g.
     /// `"![[my-image]]"`) to insert at the caret, or `nil` to fall through
     /// to the system's default plain-text paste.
@@ -140,6 +142,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         documentId: String = "default",
         isEditable: Bool = true,
         streamingState: MarkdownStreamingState = .idle,
+        streamingValidation: MarkdownStreamingValidation = .safe,
         onPasteImage: ((NSPasteboard) -> String?)? = nil,
         onLinkClick: ((String) -> Void)? = nil,
         onCaretRectChange: ((CGRect) -> Void)? = nil,
@@ -164,6 +167,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         self.documentId = documentId
         self.isEditable = isEditable
         self.streamingState = streamingState
+        self.streamingValidation = streamingValidation
         self.onPasteImage = onPasteImage
         self.onLinkClick = onLinkClick
         self.onCaretRectChange = onCaretRectChange
@@ -327,7 +331,11 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.streamingState = streamingState
         if streamingState == .streaming {
             context.coordinator.beginStreamingDocument(documentID: documentId)
-            _ = context.coordinator.streamingDocument.update(documentID: documentId, text: text)
+            _ = context.coordinator.streamingDocument.update(
+                documentID: documentId,
+                text: text,
+                validation: streamingValidation
+            )
         }
         context.coordinator.onCaretRectChange = onCaretRectChange
         context.coordinator.onBuildContextMenu = onBuildContextMenu
@@ -625,6 +633,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
                 in: nsView,
                 documentID: documentId,
                 text: text,
+                validation: streamingValidation,
                 forceReset: isNodeSwitch || previousStreamingState != .streaming || fontChanged
             )
             context.coordinator.didInitialFormatting = true
