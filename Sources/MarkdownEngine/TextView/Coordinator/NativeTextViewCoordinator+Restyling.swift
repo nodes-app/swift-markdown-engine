@@ -13,6 +13,21 @@
 import AppKit
 
 extension NativeTextViewCoordinator {
+    /// Starts a new append-only transaction for `documentID`.
+    public func beginStreamingDocument(documentID: String) {
+        streamingDocument.begin(documentID: documentID)
+    }
+
+    /// Ends the append-only transaction and performs one authoritative Markdown render.
+    public func commitStreamingDocument(
+        _ textView: NSTextView,
+        scrollView: NSScrollView,
+        text: String
+    ) {
+        streamingDocument.finish()
+        rebuildTextStorageAndStyle(textView, from: text)
+    }
+
     /// Applies externally generated text without parsing or touching previously
     /// rendered storage. The final `.editor` update remains authoritative.
     func updateStreamingDocument(

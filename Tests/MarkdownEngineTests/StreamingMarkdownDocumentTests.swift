@@ -29,6 +29,30 @@ struct StreamingMarkdownDocumentTests {
         #expect(document.update(documentID: "other", text: "Other") == .reset("Other"))
     }
 
+    @Test func changedPrefixDoesNotAppend() {
+        let document = StreamingMarkdownDocument()
+        _ = document.update(documentID: "a", text: "hello world")
+
+        #expect(
+            document.update(documentID: "a", text: "hello brave world")
+                == .reset("hello brave world")
+        )
+    }
+
+    @Test func sameLengthReplacementResets() {
+        let document = StreamingMarkdownDocument()
+        _ = document.update(documentID: "a", text: "hello")
+
+        #expect(document.update(documentID: "a", text: "hxllo") == .reset("hxllo"))
+    }
+
+    @Test func validAppendStaysFast() {
+        let document = StreamingMarkdownDocument()
+        _ = document.update(documentID: "a", text: "hello")
+
+        #expect(document.update(documentID: "a", text: "hello world") == .append(" world"))
+    }
+
     @Test func utf16TailExtractionHandlesEmoji() {
         let document = StreamingMarkdownDocument()
         _ = document.update(documentID: "answer", text: "Hi 👋")
@@ -98,8 +122,11 @@ struct StreamingMarkdownRenderingTests {
         ) as? NSFont
         #expect(streamedFont?.pointSize == 16)
 
-        stack.coordinator.streamingDocument.finish()
-        stack.coordinator.rebuildTextStorageAndStyle(stack.textView, from: complete)
+        stack.coordinator.commitStreamingDocument(
+            stack.textView,
+            scrollView: stack.scrollView,
+            text: complete
+        )
 
         let parsed = stack.coordinator.parsedDocument(for: stack.textView.string)
         #expect(parsed.tokens.contains { $0.kind == .heading })

@@ -71,8 +71,8 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     public var documentId: String
     /// When `false` the editor renders read-only with no caret.
     public var isEditable: Bool
-    /// Selects the normal parsed editor pipeline or the append-only generated-text path.
-    public var renderingMode: MarkdownRenderingMode
+    /// Explicitly begins or commits an append-only generated-text transaction.
+    public var streamingState: MarkdownStreamingState
     /// Optional paste hook. Return a Markdown image-embed string (e.g.
     /// `"![[my-image]]"`) to insert at the caret, or `nil` to fall through
     /// to the system's default plain-text paste.
@@ -139,7 +139,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         fontSize: CGFloat = 16,
         documentId: String = "default",
         isEditable: Bool = true,
-        renderingMode: MarkdownRenderingMode = .editor,
+        streamingState: MarkdownStreamingState = .idle,
         onPasteImage: ((NSPasteboard) -> String?)? = nil,
         onLinkClick: ((String) -> Void)? = nil,
         onCaretRectChange: ((CGRect) -> Void)? = nil,
@@ -163,7 +163,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         self.fontSize = fontSize
         self.documentId = documentId
         self.isEditable = isEditable
-        self.renderingMode = renderingMode
+        self.streamingState = streamingState
         self.onPasteImage = onPasteImage
         self.onLinkClick = onLinkClick
         self.onCaretRectChange = onCaretRectChange
@@ -253,7 +253,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         textView.isRichText = true
         let initialDisplayText: String
         let initialWikiLinkMetadata: [WikiLinkService.RangeKey: WikiLinkService.LinkMetadata]
-        if renderingMode == .streamingReadOnly {
+        if streamingState == .streaming {
             initialDisplayText = text
             initialWikiLinkMetadata = [:]
         } else {
@@ -324,7 +324,11 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
 
         context.coordinator.textView = textView
         context.coordinator.wikiLinkMetadata = initialWikiLinkMetadata
-        context.coordinator.renderingMode = renderingMode
+        context.coordinator.streamingState = streamingState
+        if streamingState == .streaming {
+            context.coordinator.beginStreamingDocument(documentID: documentId)
+            _ = context.coordinator.streamingDocument.update(documentID: documentId, text: text)
+        }
         context.coordinator.onCaretRectChange = onCaretRectChange
         context.coordinator.onBuildContextMenu = onBuildContextMenu
         context.coordinator.onInlineSelectionChange = onInlineSelectionChange
@@ -397,7 +401,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         reconcileHeader(textView: textView, context: context)
 
         let isNodeSwitch = context.coordinator.documentId != documentId
-        let renderingModeChanged = context.coordinator.renderingMode != renderingMode
+        let streamingStateChanged = context.coordinator.streamingState != streamingState
 
         // Drop remembered offsets for documents no longer retained (always keep
         // the current one). Only rebuilds the dict when something must go.
@@ -563,7 +567,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         if context.coordinator.didInitialFormatting
             && context.coordinator.lastSyncedText == text
             && !fontChanged
-            && !renderingModeChanged {
+            && !streamingStateChanged {
             return
         }
         if fontChanged {
@@ -610,21 +614,28 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         // Sync coordinator inputs before either rendering pipeline uses them.
         context.coordinator.fontName = fontName
         context.coordinator.fontSize = fontSize
-        context.coordinator.renderingMode = renderingMode
-        if renderingMode == .streamingReadOnly {
+        let previousStreamingState = context.coordinator.streamingState
+        context.coordinator.streamingState = streamingState
+        if streamingState == .streaming {
+            if previousStreamingState != .streaming || isNodeSwitch {
+                context.coordinator.beginStreamingDocument(documentID: documentId)
+            }
             context.coordinator.updateStreamingDocument(
                 textView,
                 in: nsView,
                 documentID: documentId,
                 text: text,
-                forceReset: isNodeSwitch || renderingModeChanged || fontChanged
+                forceReset: isNodeSwitch || previousStreamingState != .streaming || fontChanged
             )
             context.coordinator.didInitialFormatting = true
             return
         }
-        if renderingModeChanged {
-            context.coordinator.streamingDocument.finish()
-            context.coordinator.didInitialFormatting = false
+        if previousStreamingState == .streaming {
+            context.coordinator.commitStreamingDocument(textView, scrollView: nsView, text: text)
+            context.coordinator.didInitialFormatting = true
+            textView.recalcOverscroll(for: nsView)
+            (nsView as? ClampedScrollView)?.clampToInsets()
+            return
         }
         // Skip on switch: textView.string still holds the OUTGOING doc here, so the "?"
         // tag would force a full ensureLayout of the doc about to be discarded (~274ms /

@@ -5,18 +5,14 @@
 
 import Foundation
 
-/// Selects how externally supplied document updates are rendered.
-public enum MarkdownRenderingMode: Sendable, Equatable {
-    /// Normal editor/document behavior: parse and style the complete Markdown document.
-    case editor
+/// Controls the explicit lifecycle of an append-only generated document.
+public enum MarkdownStreamingState: Sendable, Equatable {
+    /// Normal parsed Markdown rendering.
+    case idle
 
-    /// Read-only append-only behavior for generated text.
-    ///
-    /// While this mode is active, updates must preserve the existing text and only
-    /// append new characters. The engine renders appended text with base attributes,
-    /// without parsing Markdown or invoking syntax highlighting. Switch back to
-    /// ``editor`` when generation completes to run one authoritative full render.
-    case streamingReadOnly
+    /// An active append-only transaction. Markdown parsing and syntax highlighting
+    /// are deferred until the state returns to ``idle``.
+    case streaming
 }
 
 /// Tracks the append cursor for one streaming document.
@@ -34,42 +30,70 @@ final class StreamingMarkdownDocument {
 
     private(set) var documentID: String?
     private(set) var utf16Length = 0
-    private var lastText = ""
+    private var prefixFingerprint: UInt64 = 0
+
+    func begin(documentID: String) {
+        self.documentID = documentID
+        utf16Length = 0
+        prefixFingerprint = 0
+    }
 
     func update(documentID: String, text: String, forceReset: Bool = false) -> Mutation {
         let newLength = (text as NSString).length
 
-        guard forceReset == false,
+        guard !forceReset,
               self.documentID == documentID,
               newLength >= utf16Length else {
-            adopt(documentID: documentID, text: text, utf16Length: newLength)
+            adopt(documentID: documentID, text: text)
             return .reset(text)
         }
 
         if newLength == utf16Length {
-            guard text != lastText else { return .none }
-            adopt(documentID: documentID, text: text, utf16Length: newLength)
+            let currentHash = fingerprint(text, utf16Length: newLength)
+            guard currentHash == prefixFingerprint else {
+                adopt(documentID: documentID, text: text)
+                return .reset(text)
+            }
+            return .none
+        }
+
+        let currentPrefixHash = fingerprint(text, utf16Length: utf16Length)
+        guard currentPrefixHash == prefixFingerprint else {
+            adopt(documentID: documentID, text: text)
             return .reset(text)
         }
 
-        // `.streamingReadOnly` is an append-only contract, so avoid an O(document)
-        // prefix comparison on every update. Extract only the newly appended UTF-16
-        // tail; callers end a stream by switching modes and replace a stream by using
-        // a different document ID.
-        let appendedText = (text as NSString).substring(from: utf16Length)
-        adopt(documentID: documentID, text: text, utf16Length: newLength)
-        return .append(appendedText)
+        let tail = (text as NSString).substring(from: utf16Length)
+        adoptStreamingAppend(documentID: documentID, text: text, newLength: newLength)
+        return .append(tail)
     }
 
     func finish() {
         documentID = nil
         utf16Length = 0
-        lastText = ""
+        prefixFingerprint = 0
     }
 
-    private func adopt(documentID: String, text: String, utf16Length: Int) {
+    private func adopt(documentID: String, text: String) {
         self.documentID = documentID
-        self.utf16Length = utf16Length
-        lastText = text
+        utf16Length = (text as NSString).length
+        prefixFingerprint = fingerprint(text, utf16Length: utf16Length)
+    }
+
+    private func adoptStreamingAppend(documentID: String, text: String, newLength: Int) {
+        self.documentID = documentID
+        utf16Length = newLength
+        prefixFingerprint = fingerprint(text, utf16Length: newLength)
+    }
+
+    private func fingerprint(_ text: String, utf16Length: Int) -> UInt64 {
+        let nsText = text as NSString
+        let prefix = nsText.substring(with: NSRange(location: 0, length: utf16Length))
+        var hash: UInt64 = 1_469_598_103_934_665_603
+        for byte in prefix.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return hash
     }
 }

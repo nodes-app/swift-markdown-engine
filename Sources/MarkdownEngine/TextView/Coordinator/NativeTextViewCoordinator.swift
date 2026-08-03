@@ -73,7 +73,7 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var onInlinePreviewKey: ((InlinePreviewKey) -> Bool)?
     var onCodeBlockSelectionChange: (([CodeBlockSelection]) -> Void)?
     var didInitialFormatting: Bool = false
-    var renderingMode: MarkdownRenderingMode = .editor
+    var streamingState: MarkdownStreamingState = .idle
     let streamingDocument = StreamingMarkdownDocument()
     /// One-shot guard so `updateCodeBlockSelection` only forces a full-document layout once per document.
     var didEnsureLayoutForCurrentDocument: Bool = false
