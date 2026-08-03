@@ -73,6 +73,8 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var onInlinePreviewKey: ((InlinePreviewKey) -> Bool)?
     var onCodeBlockSelectionChange: (([CodeBlockSelection]) -> Void)?
     var didInitialFormatting: Bool = false
+    var renderingMode: MarkdownRenderingMode = .editor
+    let streamingDocument = StreamingMarkdownDocument()
     /// One-shot guard so `updateCodeBlockSelection` only forces a full-document layout once per document.
     var didEnsureLayoutForCurrentDocument: Bool = false
     /// True only while `rebuildTextStorageAndStyle` runs. Assigning `textView.string`
@@ -466,4 +468,3 @@ extension NSTextView {
         return boundingRect
     }
 }
-

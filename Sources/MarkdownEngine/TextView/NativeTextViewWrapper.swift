@@ -71,6 +71,8 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     public var documentId: String
     /// When `false` the editor renders read-only with no caret.
     public var isEditable: Bool
+    /// Selects the normal parsed editor pipeline or the append-only generated-text path.
+    public var renderingMode: MarkdownRenderingMode
     /// Optional paste hook. Return a Markdown image-embed string (e.g.
     /// `"![[my-image]]"`) to insert at the caret, or `nil` to fall through
     /// to the system's default plain-text paste.
@@ -137,6 +139,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         fontSize: CGFloat = 16,
         documentId: String = "default",
         isEditable: Bool = true,
+        renderingMode: MarkdownRenderingMode = .editor,
         onPasteImage: ((NSPasteboard) -> String?)? = nil,
         onLinkClick: ((String) -> Void)? = nil,
         onCaretRectChange: ((CGRect) -> Void)? = nil,
@@ -160,6 +163,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         self.fontSize = fontSize
         self.documentId = documentId
         self.isEditable = isEditable
+        self.renderingMode = renderingMode
         self.onPasteImage = onPasteImage
         self.onLinkClick = onLinkClick
         self.onCaretRectChange = onCaretRectChange
@@ -247,8 +251,19 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         textView.isEditable = isEditable
         textView.isSelectable = true
         textView.isRichText = true
-        let initialState = WikiLinkService.makeDisplayState(from: text) { configuration.services.wikiLinks.name(forID: $0) }
-        textView.string = initialState.display
+        let initialDisplayText: String
+        let initialWikiLinkMetadata: [WikiLinkService.RangeKey: WikiLinkService.LinkMetadata]
+        if renderingMode == .streamingReadOnly {
+            initialDisplayText = text
+            initialWikiLinkMetadata = [:]
+        } else {
+            let initialState = WikiLinkService.makeDisplayState(from: text) {
+                configuration.services.wikiLinks.name(forID: $0)
+            }
+            initialDisplayText = initialState.display
+            initialWikiLinkMetadata = initialState.metadata
+        }
+        textView.string = initialDisplayText
         textView.delegate = context.coordinator
         textView.isVerticallyResizable = true
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
@@ -308,7 +323,8 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         scrollView.reflectScrolledClipView(scrollView.contentView)
 
         context.coordinator.textView = textView
-        context.coordinator.wikiLinkMetadata = initialState.metadata
+        context.coordinator.wikiLinkMetadata = initialWikiLinkMetadata
+        context.coordinator.renderingMode = renderingMode
         context.coordinator.onCaretRectChange = onCaretRectChange
         context.coordinator.onBuildContextMenu = onBuildContextMenu
         context.coordinator.onInlineSelectionChange = onInlineSelectionChange
@@ -381,6 +397,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         reconcileHeader(textView: textView, context: context)
 
         let isNodeSwitch = context.coordinator.documentId != documentId
+        let renderingModeChanged = context.coordinator.renderingMode != renderingMode
 
         // Drop remembered offsets for documents no longer retained (always keep
         // the current one). Only rebuilds the dict when something must go.
@@ -545,7 +562,8 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         }
         if context.coordinator.didInitialFormatting
             && context.coordinator.lastSyncedText == text
-            && !fontChanged {
+            && !fontChanged
+            && !renderingModeChanged {
             return
         }
         if fontChanged {
@@ -589,6 +607,25 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         let font = NSFont(name: fontName, size: fontSize) ?? NSFont.systemFont(ofSize: fontSize)
         textView.font = font
         textView.baseFont = font
+        // Sync coordinator inputs before either rendering pipeline uses them.
+        context.coordinator.fontName = fontName
+        context.coordinator.fontSize = fontSize
+        context.coordinator.renderingMode = renderingMode
+        if renderingMode == .streamingReadOnly {
+            context.coordinator.updateStreamingDocument(
+                textView,
+                in: nsView,
+                documentID: documentId,
+                text: text,
+                forceReset: isNodeSwitch || renderingModeChanged || fontChanged
+            )
+            context.coordinator.didInitialFormatting = true
+            return
+        }
+        if renderingModeChanged {
+            context.coordinator.streamingDocument.finish()
+            context.coordinator.didInitialFormatting = false
+        }
         // Skip on switch: textView.string still holds the OUTGOING doc here, so the "?"
         // tag would force a full ensureLayout of the doc about to be discarded (~274ms /
         // 7714 frags @346k). recalcOverscroll#2 after the rebuild measures the new doc;
@@ -599,10 +636,6 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         }
         (nsView as? ClampedScrollView)?.clampToInsets()
 
-        // Sync coordinator's font fields BEFORE the rebuild so the helper
-        // reads the current values from the View struct.
-        context.coordinator.fontName = fontName
-        context.coordinator.fontSize = fontSize
         context.coordinator.rebuildTextStorageAndStyle(
             textView,
             from: text,

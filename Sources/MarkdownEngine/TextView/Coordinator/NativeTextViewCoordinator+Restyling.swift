@@ -13,6 +13,75 @@
 import AppKit
 
 extension NativeTextViewCoordinator {
+    /// Applies externally generated text without parsing or touching previously
+    /// rendered storage. The final `.editor` update remains authoritative.
+    func updateStreamingDocument(
+        _ textView: NativeTextView,
+        in scrollView: NSScrollView,
+        documentID: String,
+        text: String,
+        forceReset: Bool
+    ) {
+        let mutation = streamingDocument.update(
+            documentID: documentID,
+            text: text,
+            forceReset: forceReset
+        )
+        guard mutation != .none else { return }
+
+        let (baseFont, paragraphStyle) = TextStylingService.makeBaseFontAndStyle(
+            fontName: fontName,
+            fontSize: fontSize,
+            layoutBridge: layoutBridge,
+            configuration: configuration
+        )
+        let baseAttributes: [NSAttributedString.Key: Any] = [
+            .font: baseFont,
+            .foregroundColor: configuration.theme.bodyText,
+            .paragraphStyle: paragraphStyle,
+        ]
+
+        isRebuildingDocument = true
+        defer { isRebuildingDocument = false }
+        let replacedDocument: Bool
+        switch mutation {
+        case .none:
+            return
+        case .reset(let completeText):
+            replacedDocument = true
+            textView.textStorage?.setAttributedString(
+                NSAttributedString(string: completeText, attributes: baseAttributes)
+            )
+        case .append(let tail):
+            replacedDocument = false
+            textView.textStorage?.append(
+                NSAttributedString(string: tail, attributes: baseAttributes)
+            )
+        }
+
+        lastSyncedText = text
+        lastComputedStorage = text
+        previousDisplayLength = (text as NSString).length
+        parseGeneration &+= 1
+        cachedParsedDocument = nil
+        cachedParsedText = nil
+        activeTokenIndices = []
+        cachedCodeBlockTokens = []
+        wikiLinkMetadata = [:]
+        resolvedCaretColor = nil
+        parseState.invalidate()
+        textView.refreshPlaceholderVisibility()
+
+        // The end-fragment measurement keeps TextKit's work scoped to the changed
+        // tail. The debug tag intentionally avoids recalcOverscroll's full-layout
+        // path, which is reserved for document switches and width changes.
+        textView.recalcOverscroll(for: scrollView, debugTag: "streamAppend")
+        scrollView.invalidateIntrinsicContentSize()
+        if replacedDocument {
+            onCodeBlockSelectionChange?([])
+        }
+    }
+
     /// Atomically rebuilds contents + base attrs + Markdown styling from storage-form `text`.
     func rebuildTextStorageAndStyle(
         _ textView: NSTextView,
