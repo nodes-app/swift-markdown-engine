@@ -14,6 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   wherever a fill should read as a block.
 
 ### Changed
+- **Inline parse cost is linear in the spans per region, not quadratic.** Every
+  pass after the first consulted the claimed ranges by scanning the whole array
+  — once per character in `scanEscapes` and `collectDelimiterRuns`, once per
+  candidate in `scanLinkFamily` — and `buildTree` decided containment by testing
+  each span against every other. The passes walk the string left to right and
+  claimed ranges never partially overlap, so a cursor over the sorted ranges answers both
+  questions in amortised constant time, and sorting spans by start ascending /
+  length descending turns containment into a single ordered walk. A paragraph of
+  240 code spans parses in 0.5ms rather than 33ms; 6x the spans now costs 6x the
+  parse instead of ~30x. Affects every claimed-span construct — code, escapes,
+  links, images, wiki links, inline LaTeX, emphasis, and extension spans. No
+  parse result changes.
 - `==highlight==` fills the line box. AppKit paints `.backgroundColor` over
   ascent + descent only, so the marker fell short of the line height by the
   leading plus `paragraph.lineHeightExtraSpacing`, and a highlight that wrapped

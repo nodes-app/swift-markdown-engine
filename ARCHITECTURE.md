@@ -45,7 +45,10 @@ regexes are gone, replaced by hand-written scanners and a real syntax tree.
    escapes → link family (`![[…]]`, `[[…]]`, `![…](…)`, `[…](…)`, `~~…~~`,
    `$…$`) → emphasis (`*`/`_` delimiter runs) → `buildTree`. Each pass claims
    spans only in regions not already claimed, so there are never partial
-   overlaps and the tree is a clean containment tree.
+   overlaps and the tree is a clean containment tree. That invariant is also
+   what keeps the pass linear in span count: claimed ranges are consulted
+   through a cursor rather than rescanned, and `buildTree` derives containment
+   from a sort instead of comparing spans pairwise.
 3. **`MarkdownAST` / `DocumentAST.parse`** combines the two into the semantic
    document AST — `[BlockNode]`, each inline-bearing block carrying its parsed
    `[InlineNode]` children in absolute document coordinates. `BlockNode`,
