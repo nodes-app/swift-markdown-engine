@@ -176,7 +176,7 @@ the bundled `SwiftMathBridge`.** Hand-rolling a `LatexRenderer` has
 real footguns the bridge already handles — appearance-aware text color,
 zero-sized output guards (`lockFocus` crashes on 0×0 images),
 window-vs-NSApp appearance distinction, single-letter padding, and an
-internal cache keyed by (latex, font size, appearance, theme color).
+internal cache keyed by (latex, render mode, font size, appearance, theme color).
 
 ```swift
 import MarkdownEngineLatex

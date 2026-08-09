@@ -154,12 +154,45 @@ public struct PlainTextSyntaxHighlighter: SyntaxHighlighter {
 
 // MARK: - LaTeX
 
-/// Renders LaTeX formulas to images for inline display.
+/// The typesetting mode of a LaTeX formula.
+public enum LatexRenderMode: Hashable, Sendable {
+    case inline
+    case display
+}
+
+/// Renders LaTeX formulas to images.
+///
+/// Implement `render(latex:mode:fontSize:theme:)`. The mode-less overload is
+/// the pre-mode signature, kept so existing conformers still compile; a
+/// renderer only needs to implement one of the two.
 public protocol LatexRenderer: Sendable {
-    /// Render `latex` at the requested font size, optionally tinted by `theme`.
+    /// Render `latex` without an explicit mode.
+    ///
+    /// The pre-mode entry point. Conformers written against the mode-aware
+    /// method don't need to implement this.
     /// - Returns: A rendered result, or `nil` if the renderer cannot produce
     ///   an image (unsupported syntax, missing dependency, …).
     func render(latex: String, fontSize: CGFloat, theme: MarkdownEditorTheme) -> LatexRenderResult?
+
+    /// Render `latex` using the mode implied by its Markdown delimiters:
+    /// `.display` for `$$ … $$`, `.inline` for `$ … $`.
+    ///
+    /// This is the only overload the engine calls.
+    func render(latex: String, mode: LatexRenderMode, fontSize: CGFloat, theme: MarkdownEditorTheme) -> LatexRenderResult?
+}
+
+public extension LatexRenderer {
+    /// Mode-unaware renderers keep receiving the same delimiter-free LaTeX.
+    func render(latex: String, mode: LatexRenderMode, fontSize: CGFloat, theme: MarkdownEditorTheme) -> LatexRenderResult? {
+        render(latex: latex, fontSize: fontSize, theme: theme)
+    }
+
+    /// Bottoms out the forwarding chain so a mode-aware conformer isn't forced
+    /// to write an unused mode-less method. A renderer implementing neither
+    /// overload renders nothing, the documented "cannot produce an image" case.
+    func render(latex: String, fontSize: CGFloat, theme: MarkdownEditorTheme) -> LatexRenderResult? {
+        nil
+    }
 }
 
 /// Output of a LaTeX render call.

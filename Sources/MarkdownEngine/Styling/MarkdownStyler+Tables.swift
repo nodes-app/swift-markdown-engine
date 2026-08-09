@@ -434,7 +434,12 @@ extension MarkdownStyler {
                     .font: codeFont, .backgroundColor: codeBackgroundColor, .foregroundColor: theme.bodyText
                 ]))
             case .inlineLatex(let range, let content, _):
-                if let entry = latex.render(latex: ns.substring(with: content), fontSize: pointSize, theme: theme) {
+                if let entry = latex.render(
+                    latex: ns.substring(with: content),
+                    mode: .inline,
+                    fontSize: pointSize,
+                    theme: theme
+                ) {
                     let attachment = NSTextAttachment()
                     attachment.image = entry.image
                     attachment.bounds = CGRect(x: 0, y: entry.baselineOffset,
