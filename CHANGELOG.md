@@ -52,6 +52,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its em — its optical centre sits about a quarter of the font size above the
   lowercase centre, and that gap grows with the size, so box-centring would let
   a larger mark climb toward the top of its line.
+- **Directive glyph presentation**: a self-contained call (`@marker`,
+  `@glyph(star.fill)`) collapses its source behind an SF Symbol, replacement
+  text, or an image supplied by the directive's `presentation`, and reveals the
+  real characters again under the caret. The source is never removed from the
+  storage — it collapses to zero width the same way inline LaTeX does — so
+  selection, find, copy, and undo still see it. `Demo/` gains `@icon`, `@flag`,
+  `@emoji`, and `@pagebreak` as embedder-side directives — anything carrying
+  curated data or document policy is an app concern, not an engine primitive.
 
 ### Changed
 - An ordered list's painted number no longer reverts to the source digit under

@@ -8,19 +8,14 @@
 //  which covers delimiter-shaped constructs (`==x==`, `::: … :::`) and cannot
 //  express a name plus a typed argument list.
 //
-//  This file is the PARSING half of the seam: the protocol, the syntax rule,
-//  and the argument schema. Presentation (font transforms, glyphs) and
-//  autocomplete extend the protocol in follow-up changes; nothing here styles
-//  anything yet.
-//
 //  Two forms, both TREE-SHAPED — a directive's effect never escapes its own
 //  node:
 //
-//    * self-contained — `@pagebreak`, `@date(format: iso)`. A leaf.
+//    * self-contained — `@pagebreak`, `@date(format: iso)`. A leaf, drawn as
+//      a glyph in place of its own source.
 //    * container      — `@font(size: 18){text}`. The body is re-parsed as
-//      markdown, and will later be styled with the directive's font transform
-//      COMPOSED over the inherited font, so `@font(size: 18){**bold**}` comes
-//      out bold AND 18pt.
+//      markdown and styled with the directive's font transform COMPOSED over
+//      the inherited font, so `@font(size: 18){**bold**}` is bold AND 18pt.
 //
 //  There is deliberately no "applies to everything after me" form. That would
 //  make styling depend on document position rather than tree position, which
@@ -249,6 +244,26 @@ public struct DirectiveStyle {
     }
 }
 
+/// What a self-contained directive draws in place of its collapsed source.
+///
+/// The source text is never removed — it collapses to zero width via the
+/// engine's existing clear-colour + negative-kern mechanism (the one inline
+/// LaTeX uses), and the glyph is drawn by `MarkdownTextLayoutFragment`.
+/// "Markers shrink, they don't disappear" still holds.
+public enum DirectivePresentation {
+    /// Style the source text only — no glyph. The default, and what a
+    /// directive falls back to when its glyph can't be produced.
+    case literal
+    /// An SF Symbol drawn at the directive's position.
+    case symbol(name: String, tint: NSColor?)
+    /// Replacement TEXT drawn in the inherited font — an emoji, a flag, a
+    /// formatted date. Rendered as a glyph rather than substituted into the
+    /// storage, so the source characters survive for selection and undo.
+    case text(String)
+    /// A pre-rendered image; `baselineOffset` matches the LaTeX convention.
+    case image(NSImage, baselineOffset: CGFloat)
+}
+
 /// Everything a directive may read while deciding how to present itself.
 /// Read-only by construction — a directive cannot reach the text storage.
 public struct DirectiveContext {
@@ -278,15 +293,16 @@ public protocol MarkdownDirective: Sendable {
     /// Used for dispatch and cache keying — never shown to users.
     var id: String { get }
     var syntax: DirectiveSyntax { get }
-
     /// Container form: how the body is styled. Ignored for self-contained.
     /// Called during styling; must be cheap and synchronous.
     func style(arguments: DirectiveArguments, context: DirectiveContext) -> DirectiveStyle
 
+    /// Self-contained form: what to draw. Ignored for container.
+    func presentation(arguments: DirectiveArguments, context: DirectiveContext) -> DirectivePresentation
+
     /// Clean-copy path. `bodyHTML` is already escaped / recursively rendered
     /// (empty for self-contained).
     func html(arguments: DirectiveArguments, bodyHTML: String) -> String
-
 }
 
 public extension MarkdownDirective {
@@ -297,10 +313,11 @@ public extension MarkdownDirective {
 
     func style(arguments: DirectiveArguments, context: DirectiveContext) -> DirectiveStyle { .inherit }
 
+    func presentation(arguments: DirectiveArguments, context: DirectiveContext) -> DirectivePresentation { .literal }
+
     func html(arguments: DirectiveArguments, bodyHTML: String) -> String {
         bodyHTML.isEmpty
             ? "<span data-directive=\"\(id)\"></span>"
             : "<span data-directive=\"\(id)\">\(bodyHTML)</span>"
     }
-
 }

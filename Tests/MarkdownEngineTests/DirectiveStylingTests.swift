@@ -7,8 +7,8 @@
 //
 //    * a container's syntax shrinks when the caret leaves and reveals when it
 //      enters, and the shrink never bleeds into the body;
-//    * a self-contained call renders as plain literal text (no glyph until
-//      Phase 3, and crucially nothing that collapses it to nothing);
+//    * a self-contained call collapses its source behind a glyph and reveals
+//      it again under the caret, without the characters ever being removed;
 //    * an unknown or unregistered directive id can't crash or restyle a
 //      neighbour;
 //    * a scoped restyle matches the full pass.
@@ -22,7 +22,7 @@ import Foundation
 import Testing
 @testable import MarkdownEngine
 
-@Suite("Directives — Phase 1 styling")
+@Suite("Directives — structural styling")
 struct DirectiveStylingTests {
 
     private let base: CGFloat = 14
@@ -100,16 +100,28 @@ struct DirectiveStylingTests {
 
     // MARK: - Self-contained
 
-    @Test("a self-contained call renders as literal text — nothing collapses it")
-    func selfContainedStaysVisible() {
+    @Test("a self-contained call collapses its source and reveals it under the caret")
+    func selfContainedFlips() {
         let text = "before @marker after"
-        let attrs = style(text)
         let location = (text as NSString).range(of: "@marker").location
-        // No shrink font and no negative kern anywhere in the call.
-        for (range, a) in attrs where NSIntersectionRange(range, NSRange(location: location, length: 7)).length > 0 {
-            #expect((a[.font] as? NSFont)?.pointSize != hiddenSize)
-            #expect((a[.kern] as? CGFloat ?? 0) >= 0)
+        func fonts(caret: Int) -> [CGFloat] {
+            style(text, caret: caret)
+                .filter { NSIntersectionRange($0.range, NSRange(location: location, length: 7)).length > 0 }
+                .compactMap { ($0.attributes[.font] as? NSFont)?.pointSize }
         }
+        #expect(fonts(caret: -1).contains(hiddenSize))              // collapsed
+        #expect(!fonts(caret: location + 2).contains(hiddenSize))   // revealed
+    }
+
+    @Test("the collapsed source is never removed from the text")
+    func collapsedSourceSurvives() {
+        // The whole point of collapsing rather than deleting: selection, find,
+        // copy, and undo still see the real characters.
+        let text = "before @marker after"
+        let covered = style(text)
+            .filter { NSIntersectionRange($0.range, (text as NSString).range(of: "@marker")).length > 0 }
+        #expect(!covered.isEmpty)
+        #expect((text as NSString).range(of: "@marker").length == 7)
     }
 
     // MARK: - Isolation
