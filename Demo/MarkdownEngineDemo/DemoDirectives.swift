@@ -23,6 +23,21 @@ import MarkdownEngine
 /// An SF Symbol drawn inline, sized to the surrounding text.
 struct IconDirective: MarkdownDirective {
 
+    /// A curated shortlist — the system ships thousands of symbols and exposes
+    /// no enumeration API. A real app would back this with its own catalogue;
+    /// the engine offers whatever `valueCompletions` returns.
+    private static let suggested = [
+        "star.fill", "star", "heart.fill", "bolt.fill", "flame.fill",
+        "checkmark.circle.fill", "xmark.circle.fill", "exclamationmark.triangle.fill",
+        "info.circle.fill", "questionmark.circle.fill", "bell.fill", "bookmark.fill",
+        "tag.fill", "pin.fill", "paperclip", "link", "calendar", "clock.fill",
+        "person.fill", "envelope.fill", "phone.fill", "house.fill", "gearshape.fill",
+        "magnifyingglass", "trash.fill", "folder.fill", "doc.fill", "book.fill",
+        "lightbulb.fill", "hammer.fill", "wrench.fill", "leaf.fill", "globe",
+        "arrow.right", "arrow.up.right", "arrow.down.to.line", "chevron.right",
+        "hand.thumbsup.fill", "hand.raised.fill", "eye.fill", "lock.fill",
+    ]
+
     private static let palette: [String: NSColor] = [
         "red": .systemRed, "orange": .systemOrange, "yellow": .systemYellow,
         "green": .systemGreen, "mint": .systemMint, "teal": .systemTeal,
@@ -43,9 +58,27 @@ struct IconDirective: MarkdownDirective {
         )
     }
 
+    var completion: DirectiveCompletion {
+        DirectiveCompletion(id: id, title: "icon", subtitle: "Draw an SF Symbol inline",
+                            keywords: ["symbol", "glyph", "image"],
+                            snippet: "@icon(|)", symbolName: "star")
+    }
+
     func presentation(arguments: DirectiveArguments, context: DirectiveContext) -> DirectivePresentation {
         guard !context.isActive, let name = arguments.positional.first?.asString else { return .literal }
         return .symbol(name: name, tint: arguments.string("color").flatMap { Self.palette[$0.lowercased()] })
+    }
+
+    func valueCompletions(for parameter: DirectiveParameter, prefix: String) -> [DirectiveCompletionItem] {
+        let needle = prefix.lowercased()
+        guard parameter.label == nil else {
+            return Self.palette.keys.sorted()
+                .filter { needle.isEmpty || $0.hasPrefix(needle) }
+                .map { DirectiveCompletionItem(title: $0, subtitle: "Colour", insertion: $0) }
+        }
+        return Self.suggested
+            .filter { needle.isEmpty || $0.hasPrefix(needle) }
+            .map { DirectiveCompletionItem(title: $0, subtitle: "SF Symbol", insertion: $0, symbolName: $0) }
     }
 
     func html(arguments: DirectiveArguments, bodyHTML: String) -> String {
@@ -55,12 +88,12 @@ struct IconDirective: MarkdownDirective {
 
 // MARK: - @flag(JP)
 
-/// A country flag from an ISO region code — a directive whose glyph is
-/// COMPUTED rather than drawn from an asset.
+/// A country flag from an ISO region code — the reference case for
+/// argument-value completion against a domain too large to declare.
 ///
-/// Dataset-free: codes come from `Locale.Region.isoRegions` and the flag is
-/// built from the code's regional-indicator scalars. Nothing to ship, nothing
-/// to keep current.
+/// Dataset-free: codes come from `Locale.Region.isoRegions`, names from the
+/// user's locale, and the flag is computed from the code's regional-indicator
+/// scalars. Nothing to ship, nothing to keep current.
 struct FlagDirective: MarkdownDirective {
 
     var syntax: DirectiveSyntax {
@@ -72,11 +105,34 @@ struct FlagDirective: MarkdownDirective {
         )
     }
 
+    var completion: DirectiveCompletion {
+        DirectiveCompletion(id: id, title: "flag", subtitle: "Country flag from an ISO code",
+                            keywords: ["country", "nation"],
+                            snippet: "@flag(|)", symbolName: "flag")
+    }
+
     func presentation(arguments: DirectiveArguments, context: DirectiveContext) -> DirectivePresentation {
         guard !context.isActive,
               let code = arguments.positional.first?.asString,
               let flag = Self.flag(for: code) else { return .literal }
         return .text(flag)
+    }
+
+    func valueCompletions(for parameter: DirectiveParameter, prefix: String) -> [DirectiveCompletionItem] {
+        let needle = prefix.lowercased()
+        return Self.regions
+            .filter { needle.isEmpty
+                || $0.code.lowercased().hasPrefix(needle)
+                || $0.name.lowercased().hasPrefix(needle) }
+            // Code matches first — typing `us` wants US, not Uruguay.
+            .sorted { a, b in
+                let aCode = a.code.lowercased().hasPrefix(needle)
+                let bCode = b.code.lowercased().hasPrefix(needle)
+                return aCode == bCode ? a.name < b.name : aCode
+            }
+            .prefix(50)
+            .map { DirectiveCompletionItem(title: $0.code, subtitle: $0.name,
+                                           detail: $0.flag, insertion: $0.code) }
     }
 
     func html(arguments: DirectiveArguments, bodyHTML: String) -> String {
@@ -112,6 +168,12 @@ struct PageBreakDirective: MarkdownDirective {
 
     var syntax: DirectiveSyntax { DirectiveSyntax(name: "pagebreak", form: .selfContained) }
 
+    var completion: DirectiveCompletion {
+        DirectiveCompletion(id: id, title: "pagebreak", subtitle: "Force a page break when printing",
+                            keywords: ["page", "break", "print"],
+                            snippet: "@pagebreak", symbolName: "arrow.down.to.line")
+    }
+
     func presentation(arguments: DirectiveArguments, context: DirectiveContext) -> DirectivePresentation {
         context.isActive ? .literal : .symbol(name: "arrow.down.to.line", tint: context.theme.mutedText)
     }
@@ -144,12 +206,26 @@ struct EmojiDirective: MarkdownDirective {
         )
     }
 
+    var completion: DirectiveCompletion {
+        DirectiveCompletion(
+            id: id, title: "emoji", subtitle: "Insert an emoji by name",
+            keywords: ["smiley", "reaction"], snippet: "@emoji(|)", symbolName: "face.smiling"
+        )
+    }
+
     func presentation(arguments: DirectiveArguments, context: DirectiveContext) -> DirectivePresentation {
         guard !context.isActive,
               let name = arguments.positional.first?.asString,
               let glyph = Self.table.first(where: { $0.name == name })?.glyph
         else { return .literal }
         return .text(glyph)
+    }
+
+    func valueCompletions(for parameter: DirectiveParameter, prefix: String) -> [DirectiveCompletionItem] {
+        let needle = prefix.lowercased()
+        return Self.table
+            .filter { needle.isEmpty || $0.name.hasPrefix(needle) }
+            .map { DirectiveCompletionItem(title: $0.name, detail: $0.glyph, insertion: $0.name) }
     }
 
     func html(arguments: DirectiveArguments, bodyHTML: String) -> String {

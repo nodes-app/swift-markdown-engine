@@ -61,6 +61,12 @@ struct SelfContainedPair: MarkdownDirective {
 struct MarkerDirective: MarkdownDirective {
     var syntax: DirectiveSyntax { DirectiveSyntax(name: "marker", form: .selfContained) }
 
+    var completion: DirectiveCompletion {
+        DirectiveCompletion(id: id, title: "marker", subtitle: "A fixed glyph",
+                            keywords: ["rule", "divider"], snippet: "@marker",
+                            symbolName: "arrow.down.to.line")
+    }
+
     func presentation(arguments: DirectiveArguments, context: DirectiveContext) -> DirectivePresentation {
         context.isActive ? .literal : .symbol(name: "arrow.down.to.line", tint: context.theme.mutedText)
     }
@@ -84,6 +90,11 @@ struct GlyphDirective: MarkdownDirective {
         )
     }
 
+    var completion: DirectiveCompletion {
+        DirectiveCompletion(id: id, title: "glyph", subtitle: "Draw a symbol",
+                            keywords: ["symbol", "icon"], snippet: "@glyph(|)", symbolName: "star")
+    }
+
     func presentation(arguments: DirectiveArguments, context: DirectiveContext) -> DirectivePresentation {
         guard !context.isActive, let name = arguments.positional.first?.asString else { return .literal }
         let tint: NSColor? = switch arguments.string("color") {
@@ -95,6 +106,16 @@ struct GlyphDirective: MarkdownDirective {
         return .symbol(name: name, tint: tint)
     }
 
+    func valueCompletions(for parameter: DirectiveParameter, prefix: String) -> [DirectiveCompletionItem] {
+        // Only the positional slot is dynamic; `color:` falls through to the
+        // schema-derived default.
+        guard parameter.label == nil else {
+            return defaultValueCompletions(for: parameter, prefix: prefix)
+        }
+        return Self.symbols
+            .filter { prefix.isEmpty || $0.hasPrefix(prefix.lowercased()) }
+            .map { DirectiveCompletionItem(title: $0, subtitle: "Symbol", insertion: $0, symbolName: $0) }
+    }
 }
 
 /// Self-contained, renders replacement TEXT chosen by argument, with dynamic
@@ -115,6 +136,11 @@ struct RegionDirective: MarkdownDirective {
         )
     }
 
+    var completion: DirectiveCompletion {
+        DirectiveCompletion(id: id, title: "region", subtitle: "Region flag",
+                            keywords: ["country", "flag"], snippet: "@region(|)", symbolName: "flag")
+    }
+
     func presentation(arguments: DirectiveArguments, context: DirectiveContext) -> DirectivePresentation {
         guard !context.isActive,
               let code = arguments.positional.first?.asString,
@@ -123,5 +149,29 @@ struct RegionDirective: MarkdownDirective {
         return .text(entry.glyph)
     }
 
+    func valueCompletions(for parameter: DirectiveParameter, prefix: String) -> [DirectiveCompletionItem] {
+        let needle = prefix.lowercased()
+        return Self.table
+            .filter { needle.isEmpty
+                || $0.code.lowercased().hasPrefix(needle)
+                || $0.name.lowercased().hasPrefix(needle) }
+            .map { DirectiveCompletionItem(title: $0.code, subtitle: $0.name,
+                                           detail: $0.glyph, insertion: $0.code) }
+    }
 }
 
+extension MarkdownDirective {
+    /// Reach the protocol's default `valueCompletions` from an override.
+    func defaultValueCompletions(for parameter: DirectiveParameter, prefix: String) -> [DirectiveCompletionItem] {
+        let values: [String]
+        switch parameter.kind {
+        case .keyword(let allowed) where !allowed.isEmpty: values = allowed
+        case .boolean:                                     values = ["true", "false"]
+        default:                                           return []
+        }
+        let needle = prefix.lowercased()
+        return values
+            .filter { needle.isEmpty || $0.lowercased().hasPrefix(needle) }
+            .map { DirectiveCompletionItem(title: $0, subtitle: parameter.documentation, insertion: $0) }
+    }
+}

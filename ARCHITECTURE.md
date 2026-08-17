@@ -7,7 +7,7 @@ Sources/
 ├── MarkdownEngine/                          # core target — zero deps
 │   ├── Configuration/                       # MarkdownEditorConfiguration + MarkdownEditorTheme
 │   ├── Extensions/                          # the extension seam: MarkdownExtension + bundled opt-ins
-│   ├── Directives/                          # the directive seam: @font(size: 18){…} — parsing, styling, glyphs
+│   ├── Directives/                          # the directive seam: @font(size: 18){…} — parsing, styling, glyphs, completion
 │   ├── Services/                            # 4 protocols, no-op defaults, WikiLinkService
 │   ├── Parser/                              # two-phase AST: BlockParser → InlineParser → DocumentAST (+ token projection)
 │   ├── Styling/                             # MarkdownASTStyler (AST walk) + MarkdownStyler facade for NSImage passes
@@ -146,6 +146,31 @@ existing corpus.
 **Invariant:** every rejection — unregistered name, malformed call, wrong form,
 unbalanced or multi-line run — leaves the candidate literal. Nothing here can
 produce a partial construct.
+
+### Autocomplete
+
+`DirectiveCompletionScanner` answers "what is the caret completing?" — a
+directive NAME (`@fo|`) or one of its ARGUMENT VALUES (`@icon(sta|`). It cannot
+use the AST: mid-typing, `@ico` and `@icon(sta` are precisely what the parser
+REJECTS, so it is a separate, forgiving backwards scan over the current line,
+bounded to 256 characters per caret move. It reuses the parser's boundary rule,
+so it can never offer a directive the parser would refuse.
+
+The engine owns the CANDIDATES because it owns the registry — names come from
+the registered directives, values from `MarkdownDirective.valueCompletions`,
+whose default answers whatever the declared schema can (closed keyword sets,
+booleans). A directive only implements it when its domain is dynamic or too
+large to declare, which is how `@flag` offers every ISO region without shipping
+a dataset. A newly registered directive therefore appears in the picker with no
+embedder change.
+
+The engine ships **no picker UI**, exactly as for `[[wiki-links]]`: it publishes
+the context through `onDirectiveCompletion`, reports the anchor via
+`onCaretRectChange`, routes ↑/↓/↵/Esc through `onInlinePreviewKey`, and applies
+a pick pushed into `pendingDirectiveCompletion`. Detection and commit live in
+`Coordinator/NativeTextViewCoordinator+Directives.swift`; the commit path is
+deliberately separate from `applyInlineReplacement`, which runs the wiki-link
+storage/display transform.
 
 ## [`Services/`](Sources/MarkdownEngine/Services): how does the engine talk to your app?
 
