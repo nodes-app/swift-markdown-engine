@@ -60,6 +60,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   selection, find, copy, and undo still see it. `Demo/` gains `@icon`, `@flag`,
   `@emoji`, and `@pagebreak` as embedder-side directives — anything carrying
   curated data or document policy is an app concern, not an engine primitive.
+- **Directive autocomplete** for both directive names and argument values,
+  riding the existing inline-preview seam (`onDirectiveCompletion`,
+  `pendingDirectiveCompletion`); the engine detects the trigger, ranks the
+  candidates from the registry and from the directive's own
+  `valueCompletions`, routes ↑/↓/↵/Esc, and ships no picker UI. The default
+  `valueCompletions` already answers anything the declared schema can — closed
+  keyword sets and booleans — so a directive implements it only when its domain
+  is dynamic or too large to declare.
 
 ### Changed
 - An ordered list's painted number no longer reverts to the source digit under

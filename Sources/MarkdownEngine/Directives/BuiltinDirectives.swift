@@ -53,6 +53,17 @@ public struct FontDirective: MarkdownDirective {
         )
     }
 
+    public var completion: DirectiveCompletion {
+        DirectiveCompletion(
+            id: id,
+            title: "font",
+            subtitle: "Set size, family, or weight for a span",
+            keywords: ["size", "typeface", "typography"],
+            snippet: "@font(size: |){}",
+            symbolName: "textformat.size"
+        )
+    }
+
     public func style(arguments: DirectiveArguments, context: DirectiveContext) -> DirectiveStyle {
         // An invalid call mutes rather than restyles, so a typo reads as broken
         // instead of silently doing nothing.
@@ -109,6 +120,17 @@ public struct ColorDirective: MarkdownDirective {
                 .init(label: nil, kind: .keyword([]), isRequired: true,
                       documentation: "Standard colour name, or a name from your asset catalog."),
             ]
+        )
+    }
+
+    public var completion: DirectiveCompletion {
+        DirectiveCompletion(
+            id: id,
+            title: "color",
+            subtitle: "Tint a span",
+            keywords: ["colour", "tint", "foreground"],
+            snippet: "@color(|){}",
+            symbolName: "paintpalette"
         )
     }
 
