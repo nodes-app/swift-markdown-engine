@@ -8,19 +8,14 @@
 //  which covers delimiter-shaped constructs (`==x==`, `::: … :::`) and cannot
 //  express a name plus a typed argument list.
 //
-//  This file is the PARSING half of the seam: the protocol, the syntax rule,
-//  and the argument schema. Presentation (font transforms, glyphs) and
-//  autocomplete extend the protocol in follow-up changes; nothing here styles
-//  anything yet.
-//
 //  Two forms, both TREE-SHAPED — a directive's effect never escapes its own
 //  node:
 //
-//    * self-contained — `@pagebreak`, `@date(format: iso)`. A leaf.
+//    * self-contained — `@pagebreak`, `@date(format: iso)`. A leaf, drawn as
+//      a glyph in place of its own source.
 //    * container      — `@font(size: 18){text}`. The body is re-parsed as
-//      markdown, and will later be styled with the directive's font transform
-//      COMPOSED over the inherited font, so `@font(size: 18){**bold**}` comes
-//      out bold AND 18pt.
+//      markdown and styled with the directive's font transform COMPOSED over
+//      the inherited font, so `@font(size: 18){**bold**}` is bold AND 18pt.
 //
 //  There is deliberately no "applies to everything after me" form. That would
 //  make styling depend on document position rather than tree position, which
@@ -249,6 +244,26 @@ public struct DirectiveStyle {
     }
 }
 
+/// What a self-contained directive draws in place of its collapsed source.
+///
+/// The source text is never removed — it collapses to zero width via the
+/// engine's existing clear-colour + negative-kern mechanism (the one inline
+/// LaTeX uses), and the glyph is drawn by `MarkdownTextLayoutFragment`.
+/// "Markers shrink, they don't disappear" still holds.
+public enum DirectivePresentation {
+    /// Style the source text only — no glyph. The default, and what a
+    /// directive falls back to when its glyph can't be produced.
+    case literal
+    /// An SF Symbol drawn at the directive's position.
+    case symbol(name: String, tint: NSColor?)
+    /// Replacement TEXT drawn in the inherited font — an emoji, a flag, a
+    /// formatted date. Rendered as a glyph rather than substituted into the
+    /// storage, so the source characters survive for selection and undo.
+    case text(String)
+    /// A pre-rendered image; `baselineOffset` matches the LaTeX convention.
+    case image(NSImage, baselineOffset: CGFloat)
+}
+
 /// Everything a directive may read while deciding how to present itself.
 /// Read-only by construction — a directive cannot reach the text storage.
 public struct DirectiveContext {
@@ -268,6 +283,43 @@ public struct DirectiveContext {
     }
 }
 
+// MARK: - Completion metadata
+
+/// What the embedder's picker shows for this directive. Synthesised from the
+/// syntax by default, so a directive only overrides it to add prose.
+public struct DirectiveCompletion: Sendable, Equatable {
+    /// Directive id this completion inserts.
+    public let id: String
+    /// Display name, e.g. `font`.
+    public var title: String
+    /// One-line description for the picker row.
+    public var subtitle: String
+    /// Extra match terms, so typing `size` can find `font`.
+    public var keywords: [String]
+    /// Text inserted on pick, with `|` marking the caret landing spot —
+    /// e.g. `@font(size: |){}`. Exactly one `|`; the engine strips it and
+    /// reports the offset when it applies the replacement.
+    public var snippet: String
+    /// SF Symbol for the picker row.
+    public var symbolName: String?
+
+    public init(
+        id: String,
+        title: String,
+        subtitle: String = "",
+        keywords: [String] = [],
+        snippet: String,
+        symbolName: String? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.subtitle = subtitle
+        self.keywords = keywords
+        self.snippet = snippet
+        self.symbolName = symbolName
+    }
+}
+
 // MARK: - The protocol
 
 /// An embedder-contributed inline command. Register instances via
@@ -278,15 +330,32 @@ public protocol MarkdownDirective: Sendable {
     /// Used for dispatch and cache keying — never shown to users.
     var id: String { get }
     var syntax: DirectiveSyntax { get }
+    /// Picker metadata. Defaults are synthesised from `syntax`.
+    var completion: DirectiveCompletion { get }
 
     /// Container form: how the body is styled. Ignored for self-contained.
     /// Called during styling; must be cheap and synchronous.
     func style(arguments: DirectiveArguments, context: DirectiveContext) -> DirectiveStyle
 
+    /// Self-contained form: what to draw. Ignored for container.
+    func presentation(arguments: DirectiveArguments, context: DirectiveContext) -> DirectivePresentation
+
     /// Clean-copy path. `bodyHTML` is already escaped / recursively rendered
     /// (empty for self-contained).
     func html(arguments: DirectiveArguments, bodyHTML: String) -> String
 
+    /// Candidate VALUES for one parameter, filtered by what the user has typed
+    /// so far. Called as the caret moves inside a call's parens.
+    ///
+    /// The default covers everything the schema can answer on its own — closed
+    /// keyword sets and booleans — so a directive only implements this when
+    /// its values are dynamic or too numerous to declare (country codes,
+    /// emoji, symbol names, a document's own headings).
+    ///
+    /// Must be cheap and synchronous: it runs on the typing path. A directive
+    /// with a large corpus filters and truncates here, and the engine offers
+    /// the result verbatim.
+    func valueCompletions(for parameter: DirectiveParameter, prefix: String) -> [DirectiveCompletionItem]
 }
 
 public extension MarkdownDirective {
@@ -295,7 +364,17 @@ public extension MarkdownDirective {
     // command never fires, check that name first.
     var id: String { syntax.name }
 
+    var completion: DirectiveCompletion {
+        DirectiveCompletion(
+            id: id,
+            title: syntax.name,
+            snippet: defaultDirectiveSnippet(for: syntax)
+        )
+    }
+
     func style(arguments: DirectiveArguments, context: DirectiveContext) -> DirectiveStyle { .inherit }
+
+    func presentation(arguments: DirectiveArguments, context: DirectiveContext) -> DirectivePresentation { .literal }
 
     func html(arguments: DirectiveArguments, bodyHTML: String) -> String {
         bodyHTML.isEmpty
@@ -303,4 +382,49 @@ public extension MarkdownDirective {
             : "<span data-directive=\"\(id)\">\(bodyHTML)</span>"
     }
 
+    /// Whatever the declared schema can answer by itself: closed keyword sets
+    /// and booleans. An open keyword set, a string, or a number has no
+    /// enumerable domain, so the default offers nothing rather than guessing.
+    func valueCompletions(for parameter: DirectiveParameter, prefix: String) -> [DirectiveCompletionItem] {
+        let values: [String]
+        switch parameter.kind {
+        case .keyword(let allowed) where !allowed.isEmpty: values = allowed
+        case .boolean:                                     values = ["true", "false"]
+        default:                                           return []
+        }
+        let needle = prefix.lowercased()
+        return values
+            .filter { needle.isEmpty || $0.lowercased().hasPrefix(needle) }
+            .map { DirectiveCompletionItem(title: $0, subtitle: parameter.documentation, insertion: $0) }
+    }
+}
+
+/// `@font(size: |){}` — the first argument slot gets the caret; container
+/// forms get braces. Free function so the default `completion` can reach it
+/// without a static-member lookup on an existential.
+func defaultDirectiveSnippet(for syntax: DirectiveSyntax) -> String {
+    let marker = syntax.marker.map(String.init) ?? String(DirectiveRegistrySettings.default.defaultMarker)
+    var out = marker + syntax.name
+    if !syntax.parameters.isEmpty {
+        let slots = syntax.parameters
+            .filter { $0.isRequired || $0.defaultValue == nil }
+            .map { $0.label.map { "\($0): |" } ?? "|" }
+        out += "(" + (slots.isEmpty ? "|" : slots.joined(separator: ", ")) + ")"
+    }
+    switch syntax.form {
+    case .container, .either: out += "{}"
+    case .selfContained:      break
+    }
+    // Exactly one caret marker: keep the first, drop the rest.
+    guard let first = out.firstIndex(of: "|") else { return out + "|" }
+    var cleaned = out
+    var index = cleaned.index(after: first)
+    while index < cleaned.endIndex {
+        if cleaned[index] == "|" {
+            cleaned.remove(at: index)
+        } else {
+            index = cleaned.index(after: index)
+        }
+    }
+    return cleaned
 }
