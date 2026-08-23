@@ -54,6 +54,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a larger mark climb toward the top of its line.
 
 ### Changed
+- The span-density regression tests assert on counted work instead of elapsed
+  time, so they run on CI again. `InlineParser.parse` can report an
+  `InlineParseCost` — claimed-range probes and containment tests — which is a
+  pure function of the input and therefore reads the same on a laptop and on a
+  contended runner. Linear measures 6.0x for 6x the spans; the pre-rewrite
+  pairwise containment measures 33.9x. The wall-clock assertions stay for
+  absolute numbers, still opt-in via `MDE_PERF=1`.
 - An ordered list's painted number no longer reverts to the source digit under
   the caret or a selection. The number is positional, so in a run written
   `1./1./1.` a click inside a marker — or a select-all — flipped every number
