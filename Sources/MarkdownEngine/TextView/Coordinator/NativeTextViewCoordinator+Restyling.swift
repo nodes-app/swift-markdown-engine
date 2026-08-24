@@ -91,9 +91,23 @@ extension NativeTextViewCoordinator {
         if rawMode {
             // Base attributes only — the source stays verbatim and unstyled.
             activeTokenIndices = []
+            // Raw mode draws no code-block overlays; drop the styled document's
+            // tokens so a later no-`parsed` refresh doesn't substring this text
+            // with them.
+            cachedCodeBlockTokens = []
+            lastCodeSelKey = nil
         } else {
             let parsed = parsedDocument(for: displayText)
             parsedForReplay = parsed
+            // A rebuild replaces the text under the code-block token cache, but
+            // only the typing/caret delegate paths refresh that cache — a
+            // programmatic swap (document switch, external binding change) never
+            // does. The deferred no-`parsed` refresh in `updateNSView` then cut
+            // substrings out of THIS text with the PREVIOUS document's ranges:
+            // out of range on any shorter text → NSRangeException → abort. This
+            // parse is the current text's, so hand its tokens over here.
+            cachedCodeBlockTokens = parsed.codeBlockTokensWithIndices
+            lastCodeSelKey = nil
             let tokens = parsed.tokens
             // Hide caret from styling when read-only, else clicks reveal raw token syntax.
             let caretLocation = textView.isEditable ? textView.selectedRange().location : -1
