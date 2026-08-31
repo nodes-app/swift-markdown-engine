@@ -69,6 +69,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   line-break, programmatic, and undo/redo edits still widen ordered-list runs
   when downstream display numbers can change.
 
+### Fixed
+- A live swap of `MarkdownEditorConfiguration` now reaches the styler. Only a
+  handful of fields (`heightBehavior`, `rawSourceMode`, `lists`, and the
+  fingerprint-gated `services` / `extensions` / `directives`) used to sync in
+  `updateNSView`; everything else — `theme`, `paragraph`, `link`, `markers`,
+  `codeBlock`, `inlineCode`, `taskCheckbox`, `blockquote`, `headings`,
+  `imageEmbed`, `blockLatex`, `inlineLatex`, `thematicBreak`,
+  `cursorFollowsSpanInk` — was captured once in `makeCoordinator` and never
+  refreshed, so an embedder flipping between two configurations (a light/dark
+  palette toggle, a heading-metric change, a link-ink update) kept whatever
+  those fields were at first mount. `updateNSView` now compares the pure-style
+  fields via an internal `styleSignature`, copies them across when they
+  differ, and forces a rebuild so the new palette / metrics reach text
+  storage. The fingerprint-gated paths above stay as they were — services and
+  grammar changes still restyle through their own branches, and a
+  configuration whose style fields are unchanged pays only a struct compare.
+  Value-typed configuration sub-structs (`MarkdownEditorTheme`, `MarkerStyle`,
+  `HeadingStyle`, `LinkStyle`, `ParagraphStyle`, and the rest) now conform to
+  `Equatable` so the compare is a synthesized member-by-member check rather
+  than a bespoke traversal.
+
 ## [0.12.0] - 2026-08-10
 
 ### Added

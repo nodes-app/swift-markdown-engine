@@ -155,12 +155,79 @@ public struct MarkdownEditorConfiguration: Sendable {
     public static let `default` = MarkdownEditorConfiguration()
 }
 
+// MARK: - Style-only reconciliation
+
+extension MarkdownEditorConfiguration {
+    /// Snapshot of the value-typed style fields, compared in `updateNSView`
+    /// to decide whether a live swap needs a restyle. Excludes fingerprint-
+    /// gated fields (services, extensions/directives) and lifecycle knobs —
+    /// they have their own sync paths.
+    internal var styleSignature: StyleSignature {
+        StyleSignature(
+            theme: theme,
+            markers: markers,
+            codeBlock: codeBlock,
+            inlineCode: inlineCode,
+            taskCheckbox: taskCheckbox,
+            headings: headings,
+            imageEmbed: imageEmbed,
+            blockLatex: blockLatex,
+            inlineLatex: inlineLatex,
+            blockquote: blockquote,
+            thematicBreak: thematicBreak,
+            link: link,
+            paragraph: paragraph,
+            cursorFollowsSpanInk: cursorFollowsSpanInk
+        )
+    }
+
+    /// Copy every style-only field from `other` into `self`. Fields that
+    /// already have their own sync path in `updateNSView` are left alone.
+    internal mutating func adoptStyleFields(from other: MarkdownEditorConfiguration) {
+        theme = other.theme
+        markers = other.markers
+        codeBlock = other.codeBlock
+        inlineCode = other.inlineCode
+        taskCheckbox = other.taskCheckbox
+        headings = other.headings
+        imageEmbed = other.imageEmbed
+        blockLatex = other.blockLatex
+        inlineLatex = other.inlineLatex
+        blockquote = other.blockquote
+        thematicBreak = other.thematicBreak
+        link = other.link
+        paragraph = other.paragraph
+        cursorFollowsSpanInk = other.cursorFollowsSpanInk
+    }
+
+    /// Snapshot of the pure-style fields, compared to decide whether a live
+    /// configuration swap needs a restyle. Internal because the layout that
+    /// makes it convenient here is an implementation detail — callers ask
+    /// via `styleSignature` and let Equatable do the compare.
+    internal struct StyleSignature: Equatable {
+        let theme: MarkdownEditorTheme
+        let markers: MarkerStyle
+        let codeBlock: CodeBlockStyle
+        let inlineCode: InlineCodeStyle
+        let taskCheckbox: TaskCheckboxStyle
+        let headings: HeadingStyle
+        let imageEmbed: ImageEmbedStyle
+        let blockLatex: BlockLatexStyle
+        let inlineLatex: InlineLatexStyle
+        let blockquote: BlockquoteStyle
+        let thematicBreak: ThematicBreakStyle
+        let link: LinkStyle
+        let paragraph: ParagraphStyle
+        let cursorFollowsSpanInk: Bool
+    }
+}
+
 // MARK: - Spell checking
 
 /// Initial state for the three "Spelling and Grammar" toggles. Only consulted
 /// at `makeNSView` time; afterwards the user's context-menu choices take
 /// precedence and are surfaced via ``NativeTextViewWrapper/onSpellCheckingPolicyChanged``.
-public struct SpellCheckingPolicy: Sendable {
+public struct SpellCheckingPolicy: Sendable, Equatable {
     /// Mirrors `NSTextView.isContinuousSpellCheckingEnabled`.
     public var continuousSpellChecking: Bool
     /// Mirrors `NSTextView.isGrammarCheckingEnabled`.
@@ -184,7 +251,7 @@ public struct SpellCheckingPolicy: Sendable {
 // MARK: - Scroll bars
 
 /// Scroll bar visibility. Default: vertical only, autohide on.
-public struct ScrollersPolicy: Sendable {
+public struct ScrollersPolicy: Sendable, Equatable {
     public var hasVerticalScroller: Bool
     public var hasHorizontalScroller: Bool
     public var autohidesScrollers: Bool
@@ -213,7 +280,7 @@ public struct ScrollersPolicy: Sendable {
 // MARK: - Text insets
 
 /// Margins inside the text view (`NSTextView.textContainerInset`). Scroll bar stays at the outer edge.
-public struct TextInsets: Sendable {
+public struct TextInsets: Sendable, Equatable {
     public var horizontal: CGFloat
     public var vertical: CGFloat
 
@@ -235,7 +302,7 @@ public struct TextInsets: Sendable {
 /// any range translation between displayed and stored text — cursor movement,
 /// find/replace, selection, and copy/paste all stay trivially correct.
 /// The trade-off is a sub-pixel residue at extreme zoom levels.
-public struct MarkerStyle: Sendable {
+public struct MarkerStyle: Sendable, Equatable {
     /// Font size used for "hidden" inline markers. Effectively invisible at
     /// normal zoom while keeping displayed-range == stored-range.
     public var hiddenMarkerFontSize: CGFloat
@@ -261,7 +328,7 @@ public struct MarkerStyle: Sendable {
 // MARK: - Code blocks
 
 /// Styling for fenced code blocks (```language ... ```).
-public struct CodeBlockStyle: Sendable {
+public struct CodeBlockStyle: Sendable, Equatable {
     /// Code-block font size as a fraction of the document base font size.
     public var fontSizeScale: CGFloat
     /// Vertical paragraph spacing applied above and below the code block.
@@ -285,7 +352,7 @@ public struct CodeBlockStyle: Sendable {
 // MARK: - Inline code
 
 /// Styling for inline `` `code` `` spans.
-public struct InlineCodeStyle: Sendable {
+public struct InlineCodeStyle: Sendable, Equatable {
     /// Inline-code reuses the code block font size scale by default.
     public var fontSizeScale: CGFloat
 
@@ -299,7 +366,7 @@ public struct InlineCodeStyle: Sendable {
 // MARK: - Lists
 
 /// Behavior toggles and metrics for ordered / unordered list editing.
-public struct ListStyle: Sendable {
+public struct ListStyle: Sendable, Equatable {
     /// Master switch for list-related editing helpers (auto-continue,
     /// auto-indent, marker conversion). When `false`, lists are still
     /// rendered, but typing-time conveniences are skipped.
@@ -340,7 +407,7 @@ public struct ListStyle: Sendable {
 /// typo degrades to the stock look instead of drawing nothing. Tint colors
 /// stay theme-driven (`MarkdownEditorTheme/mutedText` unchecked,
 /// `MarkdownEditorTheme/bodyText` checked).
-public struct TaskCheckboxStyle: Sendable {
+public struct TaskCheckboxStyle: Sendable, Equatable {
     /// SF Symbol drawn for an unchecked task item (`[ ]`).
     public var uncheckedSymbolName: String
     /// SF Symbol drawn for a checked task item (`[x]`).
@@ -380,7 +447,7 @@ public struct TaskCheckboxStyle: Sendable {
 /// The mark is presentation only. The source text is untouched, the caret
 /// still reveals the raw `***` when it enters the line, and copy, export and
 /// find all see the original characters.
-public struct ThematicBreakStyle: Sendable {
+public struct ThematicBreakStyle: Sendable, Equatable {
 
     /// A centered mark and the size it draws at.
     ///
@@ -453,7 +520,7 @@ extension ThematicBreakStyle {
 
 /// Per-level heading metrics. Defaults follow the historical Nodes ratios,
 /// which are loosely based on browser default heading sizes.
-public struct HeadingStyle: Sendable {
+public struct HeadingStyle: Sendable, Equatable {
     /// Font-size multiplier per heading level (1...6).
     public var fontMultipliers: [CGFloat]
     /// Top spacing in `em` units per heading level (1...6).
@@ -483,7 +550,7 @@ public struct HeadingStyle: Sendable {
 // MARK: - Image embeds (![[...]])
 
 /// Sizing and spacing rules for `![[Name]]` image embeds.
-public struct ImageEmbedStyle: Sendable {
+public struct ImageEmbedStyle: Sendable, Equatable {
     /// Minimum allowed display width (points) for an embedded image.
     public var minimumWidth: CGFloat
     /// Fallback maximum width if no usable text container width is available.
@@ -515,7 +582,7 @@ public struct ImageEmbedStyle: Sendable {
 // MARK: - LaTeX
 
 /// Vertical spacing for block-LaTeX `$$...$$` paragraphs.
-public struct BlockLatexStyle: Sendable {
+public struct BlockLatexStyle: Sendable, Equatable {
     /// Top spacing for $$...$$ block paragraphs.
     public var paragraphSpacingBefore: CGFloat
     /// Bottom spacing for $$...$$ block paragraphs.
@@ -538,12 +605,17 @@ public struct BlockLatexStyle: Sendable {
 
 /// Reserved for future inline-LaTeX (`$...$`) tuning. Currently has no
 /// effect; inline LaTeX inherits font size from the surrounding context.
-public struct InlineLatexStyle: Sendable {
+public struct InlineLatexStyle: Sendable, Equatable {
     /// Reserved for future inline-LaTeX tuning — currently the engine inherits
     /// font size from the surrounding heading context.
     public var placeholder: Void
 
     public init() { self.placeholder = () }
+
+    /// Two `InlineLatexStyle` values are always equal — the struct exists as
+    /// a reservation point and carries no state. Written by hand because the
+    /// synthesized conformance can't compare `Void`.
+    public static func == (lhs: InlineLatexStyle, rhs: InlineLatexStyle) -> Bool { true }
 
     public static let `default` = InlineLatexStyle()
 }
@@ -556,7 +628,7 @@ public struct InlineLatexStyle: Sendable {
 /// extra spacing. Set `extraLineHeight` to add breathing room, matching
 /// the pattern used by `ListStyle.extraLineHeight` and
 /// `ParagraphStyle.lineHeightExtraSpacing`.
-public struct BlockquoteStyle: Sendable {
+public struct BlockquoteStyle: Sendable, Equatable {
     /// Extra height (points) added to the default line height for blockquote lines.
     public var extraLineHeight: CGFloat
 
@@ -570,7 +642,7 @@ public struct BlockquoteStyle: Sendable {
 // MARK: - Links
 
 /// Foreground alpha values applied to link content in different states.
-public struct LinkStyle: Sendable {
+public struct LinkStyle: Sendable, Equatable {
     /// Foreground alpha for the visible label of an active markdown link.
     public var activeLinkAlpha: CGFloat
     /// Foreground alpha applied to "incomplete" link content (e.g. `[text]`
@@ -588,7 +660,7 @@ public struct LinkStyle: Sendable {
 // MARK: - Paragraphs
 
 /// Default paragraph spacing and line height applied to body text.
-public struct ParagraphStyle: Sendable {
+public struct ParagraphStyle: Sendable, Equatable {
     /// Extra paragraph spacing as a fraction of the document's default line height.
     public var spacingFactor: CGFloat
     /// Extra height (points) added to the default paragraph line height.
@@ -607,7 +679,7 @@ public struct ParagraphStyle: Sendable {
 /// Controls the empty space below the last line so that typing at the bottom
 /// of a long document remains comfortable instead of pinning to the viewport
 /// bottom edge.
-public struct OverscrollPolicy: Sendable {
+public struct OverscrollPolicy: Sendable, Equatable {
     /// Desired overscroll as a fraction of the visible viewport height.
     public var percent: CGFloat
     /// Hard upper bound for the overscroll in points.
@@ -640,7 +712,7 @@ public struct OverscrollPolicy: Sendable {
 
 /// Tuning for the auto-scroll boost that engages while the user drags a
 /// selection past the visible viewport edges.
-public struct DragSelectionPolicy: Sendable {
+public struct DragSelectionPolicy: Sendable, Equatable {
     /// Movement threshold (points) before the auto-scroll boost engages.
     public var movementThreshold: CGFloat
     /// Distance from the window edge that triggers the boost.
@@ -668,7 +740,7 @@ public struct DragSelectionPolicy: Sendable {
 // MARK: - Safe-area insets
 
 /// Reserves space on the scroll view for system overlays (e.g. a translucent toolbar to scroll underneath). Maps to `NSScrollView.contentInsets`; scroll bar follows the inset.
-public struct SafeAreaInsets: Sendable {
+public struct SafeAreaInsets: Sendable, Equatable {
     public var top: CGFloat
     public var leading: CGFloat
     public var trailing: CGFloat
