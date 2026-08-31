@@ -71,6 +71,24 @@ public struct MarkdownEditorConfiguration: Sendable {
     /// Runtime-switchable; a flip rebuilds immediately and drops the document's
     /// undo stack (actions from the other mode would replay at stale ranges).
     public var rawSourceMode: Bool
+    /// Hide a syntax marker (`#`, `**`, `` ` ``, `>`, link brackets) once the
+    /// caret leaves its span. `true` — the default — is the live-styling look
+    /// the engine is built around.
+    ///
+    /// Set it to `false` for a source-style pane that keeps every marker on
+    /// screen while still styling the document: headings stay large, code
+    /// blocks keep their background and syntax highlighting, and the markers
+    /// render in ``MarkdownEditorTheme/mutedText`` at their normal size —
+    /// exactly what an active span already looks like, applied everywhere.
+    ///
+    /// This is not ``rawSourceMode``: styling stays on, so the two differ in
+    /// what they cost you. ``rawSourceMode`` also drops smart input and the
+    /// wiki-link display transform; this leaves both intact.
+    ///
+    /// Markers that stand in for drawn content — task checkboxes, list
+    /// bullets, thematic breaks, image embeds, LaTeX — keep hiding either way.
+    /// Revealing them would double-draw the glyph and its source.
+    public var hidesInactiveMarkers: Bool
     /// Opt-in constructs beyond pure markdown (e.g. `==highlight==`). Empty by
     /// default: unregistered syntax stays literal text. Order defines match
     /// precedence among extensions; built-in constructs always win first.
@@ -117,6 +135,7 @@ public struct MarkdownEditorConfiguration: Sendable {
         spellChecking: SpellCheckingPolicy = .default,
         heightBehavior: HeightBehavior = .scrolls,
         rawSourceMode: Bool = false,
+        hidesInactiveMarkers: Bool = true,
         extensions: [any MarkdownExtension] = [],
         cursorFollowsSpanInk: Bool = false,
         directives: [any MarkdownDirective] = [],
@@ -146,6 +165,7 @@ public struct MarkdownEditorConfiguration: Sendable {
         self.spellChecking = spellChecking
         self.heightBehavior = heightBehavior
         self.rawSourceMode = rawSourceMode
+        self.hidesInactiveMarkers = hidesInactiveMarkers
         self.extensions = extensions
         self.cursorFollowsSpanInk = cursorFollowsSpanInk
         self.directives = directives

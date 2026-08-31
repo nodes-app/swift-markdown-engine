@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`MarkdownEditorConfiguration.hidesInactiveMarkers`** (default `true`, the
+  current behavior): set it to `false` for a source-style pane that keeps every
+  syntax marker on screen — headings, emphasis, fences, blockquote `>`, link
+  brackets — while the document stays fully styled, code blocks included. It is
+  not `rawSourceMode`, which turns styling off and gives up smart input and the
+  wiki-link display transform. Markers standing in for drawn content (task
+  checkboxes, bullets, thematic breaks, image embeds, LaTeX) keep hiding either
+  way, since revealing them would draw the glyph and its source at once.
 - **Directive seam (parsing)**: opt-in named inline commands with typed
   arguments, for constructs that need a name and parameters rather than
   delimiters. A `MarkdownDirective` declares a name, a form — self-contained
