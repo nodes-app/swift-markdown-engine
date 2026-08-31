@@ -18,6 +18,11 @@ extension NativeTextView {
             // the cursor; stay silent — our tracking areas fire beneath it and
             // any set here fights the overlay's cursor (flicker).
             if isEditable { NSCursor.arrow.set() }
+        } else if isOverInlineBox(event) {
+            // A box is an embedder-drawn control sitting in the line. Its own
+            // view sets the cursor it wants; ours must not fight it, and super
+            // sets the I-beam on every move.
+            NSCursor.pointingHand.set()
         } else if isEditable, isOverTaskCheckboxBox(event) {
             // The box is a clickable control, not text. super sets the I-beam
             // on every move, so setting the arrow after it flickers — skip
@@ -39,6 +44,8 @@ extension NativeTextView {
     override func mouseEntered(with event: NSEvent) {
         if isInCursorExclusionZone(event) {
             if isEditable { NSCursor.arrow.set() }
+        } else if isOverInlineBox(event) {
+            NSCursor.pointingHand.set()
         } else if isEditable, isOverTaskCheckboxBox(event) {
             NSCursor.arrow.set()
         } else if isEditable, isOverWideTableOverlay(event) {

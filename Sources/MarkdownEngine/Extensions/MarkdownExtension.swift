@@ -54,6 +54,22 @@ public struct InlineSyntax: Sendable, Equatable {
     /// Reject when the character after `close` equals `close`'s last character.
     /// `~~` uses this (strict GFM-ish run handling); `==` does not. Default `false`.
     public var rejectsCloserRun: Bool
+    /// Lay the span out as a fixed-width box instead of as text: markers and
+    /// content collapse to nothing and this many points of line space are kept
+    /// in their place, wrapping with the paragraph like any other run.
+    ///
+    /// For a construct that reads as a control rather than as prose — a
+    /// citation playhead, a chip, a token — where the embedder draws the box
+    /// itself and needs the text to make room for it. The reserved space is
+    /// what makes that possible: an embedder cannot reserve it through
+    /// ``MarkdownExtension/contentAttributes(theme:)``, because those
+    /// attributes cover the whole content range uniformly and cannot carry a
+    /// width that is independent of the character count.
+    ///
+    /// A box's markers never reveal at the caret and its inner markup is not
+    /// laid out; the box is the span's entire visual form. `nil` (the default)
+    /// lays the span out as text with the usual marker mute/reveal.
+    public var inlineBoxWidth: CGFloat?
 
     public init(
         open: String,
@@ -61,7 +77,8 @@ public struct InlineSyntax: Sendable, Equatable {
         parsesContent: Bool = true,
         requiresNonEmptyContent: Bool = true,
         rejectsOpenerRun: Bool = true,
-        rejectsCloserRun: Bool = false
+        rejectsCloserRun: Bool = false,
+        inlineBoxWidth: CGFloat? = nil
     ) {
         self.open = open
         self.close = close
@@ -69,6 +86,7 @@ public struct InlineSyntax: Sendable, Equatable {
         self.requiresNonEmptyContent = requiresNonEmptyContent
         self.rejectsOpenerRun = rejectsOpenerRun
         self.rejectsCloserRun = rejectsCloserRun
+        self.inlineBoxWidth = inlineBoxWidth
     }
 }
 
@@ -208,7 +226,8 @@ struct ExtensionRegistry {
                 if let s = ext.inline {
                     parts += ["i", framed(s.open), framed(s.close),
                               "\(s.parsesContent)", "\(s.requiresNonEmptyContent)",
-                              "\(s.rejectsOpenerRun)", "\(s.rejectsCloserRun)"]
+                              "\(s.rejectsOpenerRun)", "\(s.rejectsCloserRun)",
+                              s.inlineBoxWidth.map { "\($0)" } ?? "-"]
                 }
                 if let b = ext.block {
                     parts += ["b", framed(b.fence)]

@@ -946,6 +946,15 @@ extension NativeTextViewCoordinator {
         if commandSelector == #selector(NSResponder.insertBacktab(_:)) {
             return handleBacktab(textView)
         }
+        // A box is invisible in the line, so deleting it one character at a
+        // time would peel it back into raw syntax mid-sentence: a box on
+        // either side of the caret goes in one keystroke.
+        if commandSelector == #selector(NSResponder.deleteBackward(_:)) {
+            if InlineBoxCaret.handleDeleteBackward(textView: textView) { return true }
+        }
+        if commandSelector == #selector(NSResponder.deleteForward(_:)) {
+            if InlineBoxCaret.handleDeleteForward(textView: textView) { return true }
+        }
         // While an inline [[…]] / ![[…]] preview is open, route ↑/↓/Enter/Esc to the embedder's
         // autocomplete list (it returns true to consume the key; false → normal editor handling).
         if (isWikiLinkActive || isImageEmbedActive), let handler = onInlinePreviewKey {

@@ -83,8 +83,16 @@ enum MarkdownASTStyler {
         let codeRanges = collectCodeRanges(in: blocks)
         let checkboxRanges = collectCheckboxRanges(in: blocks)
         let linkRanges = collectLinkRanges(in: blocks)
-        styleAutoLinks(ctx: ctx, codeRanges: codeRanges, linkRanges: linkRanges, into: &attrs)
-        styleIncompleteLinkBrackets(ctx: ctx, codeRanges: codeRanges, checkboxRanges: checkboxRanges, into: &attrs)
+        // A box span is a control, not text, so the text passes must not paint
+        // link ink into it — `[t=…]` reads as an incomplete link otherwise.
+        let boxRanges = collectInlineBoxRanges(in: blocks, ctx: ctx)
+        styleAutoLinks(ctx: ctx, codeRanges: codeRanges, linkRanges: linkRanges + boxRanges, into: &attrs)
+        styleIncompleteLinkBrackets(
+            ctx: ctx,
+            codeRanges: codeRanges + boxRanges,
+            checkboxRanges: checkboxRanges,
+            into: &attrs
+        )
         return attrs
     }
 
@@ -113,6 +121,42 @@ enum MarkdownASTStyler {
             case .ext(let node):
                 walk(node.inlines)
             default: break
+            }
+        }
+        return ranges
+    }
+
+    /// Full ranges of extension spans laid out as boxes
+    /// (`InlineSyntax.inlineBoxWidth`), which the text/regex passes skip.
+    private static func collectInlineBoxRanges(in blocks: [BlockNode], ctx: Ctx) -> [NSRange] {
+        guard ctx.extensionsByID.values.contains(where: { $0.inline?.inlineBoxWidth != nil }) else { return [] }
+        var ranges: [NSRange] = []
+        func walk(_ nodes: [InlineNode]) {
+            for node in nodes {
+                switch node {
+                case .ext(let node):
+                    if ctx.extensionsByID[node.extensionID]?.inline?.inlineBoxWidth != nil {
+                        ranges.append(node.range)
+                    }
+                    walk(node.children)
+                case .emphasis(_, _, _, let children),
+                     .link(_, _, _, _, let children):
+                    walk(children)
+                default:
+                    break
+                }
+            }
+        }
+        for block in blocks {
+            switch block {
+            case .paragraph(_, let inlines), .heading(_, _, _, let inlines), .blockquote(_, let inlines):
+                walk(inlines)
+            case .list(_, let items):
+                for item in items { walk(item.inlines) }
+            case .ext(let node):
+                walk(node.inlines)
+            default:
+                break
             }
         }
         return ranges
@@ -825,13 +869,24 @@ enum MarkdownASTStyler {
                 // Extension-contributed span: the extension supplies content
                 // ATTRIBUTES only; every range comes from the parser, so a
                 // misbehaving extension can restyle its own span at worst.
-                if let ext = ctx.extensionsByID[node.extensionID] {
+                let ext = ctx.extensionsByID[node.extensionID]
+                let boxWidth = ext?.inline?.inlineBoxWidth
+                if let ext {
                     attrs.append((node.contentRange, ext.contentAttributes(theme: ctx.theme)))
                 }
-                if ctx.isActive(node.range) {
+                // A box has no text to reveal: the delimiters stay inside it,
+                // so the caret moving in and out of the span changes nothing.
+                if boxWidth == nil, ctx.isActive(node.range) {
                     for marker in node.markers { attrs.append((marker, [.foregroundColor: ctx.theme.mutedText])) }
                 }
                 styleInlines(node.children, font: font, ctx: ctx, into: &attrs)
+                // Last, so the reserved space wins over the content and child
+                // attributes above: a box IS the span's visual form.
+                if let boxWidth {
+                    reserveInlineBox(
+                        width: boxWidth, id: node.extensionID, over: node.range, ctx: ctx, into: &attrs
+                    )
+                }
 
             case .code(let range, let contentRange):
                 attrs.append((contentRange, [.font: ctx.codeFont, .backgroundColor: ctx.codeBackground]))
@@ -853,6 +908,34 @@ enum MarkdownASTStyler {
                 break   // ported in later increments
             }
         }
+    }
+
+    /// Collapse a construct's own characters and keep `width` points of line
+    /// space where they were, so the paragraph lays out and wraps around a box
+    /// the embedder draws into (`InlineSyntax.inlineBoxWidth`).
+    ///
+    /// The whole span goes to the hidden marker font, then the space rides as
+    /// kerning on its FIRST character: the box is one advance, so a caret
+    /// stepping through the span never lands inside it and the line's height is
+    /// the paragraph's, not the box's.
+    private static func reserveInlineBox(
+        width: CGFloat, id: String, over range: NSRange, ctx: Ctx, into attrs: inout [StyledRange]
+    ) {
+        guard range.length > 0, width > 0 else { return }
+        let hidden = ctx.inlineMarkerFont
+        attrs.append((range, [
+            .font: hidden,
+            .foregroundColor: NSColor.clear,
+            .kern: -hidden.pointSize,
+            // The span keeps no glyphs of its own, so mark it: pointer, caret,
+            // and delete handling all need to recognize the box afterwards.
+            .inlineExtensionBox: id,
+        ]))
+        attrs.append((NSRange(location: range.location, length: 1), [
+            .font: hidden,
+            .foregroundColor: NSColor.clear,
+            .kern: width - hidden.pointSize,
+        ]))
     }
 
     private static func styleLink(
@@ -935,6 +1018,9 @@ enum MarkdownASTStyler {
                 if !active { shrink(markers, ctx: ctx, into: &attrs) }
                 shrinkInlineMarkers(children, ctx: ctx, forceReveal: active, into: &attrs)
             case .ext(let node):
+                // A box span is already collapsed, and its reserved advance
+                // rides on a marker character — shrinking would overwrite it.
+                if ctx.extensionsByID[node.extensionID]?.inline?.inlineBoxWidth != nil { continue }
                 let active = forceReveal || ctx.isActive(node.range)
                 if !active { shrink(node.markers, ctx: ctx, into: &attrs) }
                 shrinkInlineMarkers(node.children, ctx: ctx, forceReveal: active, into: &attrs)

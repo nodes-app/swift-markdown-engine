@@ -13,6 +13,11 @@ import Foundation
 extension NSAttributedString.Key {
     public static let wikiLinkID = NSAttributedString.Key("NodeLinkID")
     public static let taskCheckbox = NSAttributedString.Key("TaskCheckbox")
+    /// Extension id of a span laid out as a fixed-width box
+    /// (`InlineSyntax.inlineBoxWidth`). The span has no glyphs of its own, so
+    /// this is how the text view recognizes a box under the pointer, under the
+    /// caret, or in front of a delete.
+    static let inlineExtensionBox = NSAttributedString.Key("InlineExtensionBox")
 }
 
 enum MarkdownTokenKind: Equatable {
