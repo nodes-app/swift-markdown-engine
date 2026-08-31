@@ -32,6 +32,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `NativeTextViewWrapper.onTextMutation` reports exact, completed native edits
   for embedders that maintain their own source authority or mirror edits into
   another presentation.
+- `NativeTextViewWrapper.onURLLinkClick` lets an embedder route a click on a
+  `[label](href)` link through its own model instead of falling straight
+  through to AppKit's `NSWorkspace.open`. The parallel to the existing
+  `onLinkClick` — which already covered wiki links — closes the gap for a
+  document whose Markdown URL hrefs are meaningful to the embedder (open
+  the target with the right app, navigate inside the app, resolve a
+  relative href against a base directory). The hook receives the URL the
+  styler attached to the label (see `LinkStyle.bareHrefs` for how bare
+  hrefs are shaped) and the label's range in the current display text, so
+  it can correlate the click with the embedder's own document model without
+  reaching into the text view. Returning `true` consumes the click;
+  returning `false` (or leaving the hook `nil`) falls back to the previous
+  behavior. Wiki-link clicks still go through `onLinkClick` — this hook is
+  Markdown-URL-links only.
 - `MarkdownEditorConfiguration.thematicBreak` (`ThematicBreakStyle`) gives each
   thematic-break marker its own look. CommonMark treats `---`, `***` and `___`
   as one construct with one rendering, so an embedder who wanted a novel-style
