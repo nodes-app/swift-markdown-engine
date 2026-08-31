@@ -695,6 +695,20 @@ extension NativeTextViewCoordinator {
                     self.onCaretRectChange?(previewRect)
                 }
             }
+        } else if isTyping,
+                  let tag = tagContext(at: selLocation, in: nsString, codeTokens: codeTokens),
+                  let tagRect = tv.viewRect(forCharacterRange: tag.range, using: layoutBridge) {
+            // Not inside a bracketed token, but the caret is in a `#tag` — offer
+            // tag autocomplete anchored at the tag.
+            let selection = WikiLinkSelection(
+                displayRange: tag.range,
+                storageRange: nil,
+                placeholder: tag.text
+            )
+            inlineSelectionState = InlineSelectionState(kind: .tag, selection: selection)
+            DispatchQueue.main.async {
+                self.onCaretRectChange?(tagRect)
+            }
         }
 
         DispatchQueue.main.async {

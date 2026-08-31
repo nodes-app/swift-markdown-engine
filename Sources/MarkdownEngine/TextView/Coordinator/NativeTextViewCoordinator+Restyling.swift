@@ -420,13 +420,21 @@ extension NativeTextViewCoordinator {
             return
         }
 
-        // Image embeds and node links share one path: insert DISPLAY form `![[Name]]` / `[[Name]]`
-        // with the opaque suffix on the `.wikiLinkID` side-channel (displayFragmentAndID handles `!`).
-        let replacementInfo = WikiLinkService.displayFragmentAndID(from: request.storageFragment)
-        let replacementDisplay = replacementInfo.display
-        let linkID = replacementInfo.id
+        let replacementDisplay: String
+        let linkID: String?
+        if request.isLiteralMode {
+            // Literal insertion (e.g. a `#tag`): insert the fragment verbatim.
+            replacementDisplay = request.storageFragment
+            linkID = nil
+        } else {
+            // Image embeds and node links share one path: insert DISPLAY form `![[Name]]` / `[[Name]]`
+            // with the opaque suffix on the `.wikiLinkID` side-channel (displayFragmentAndID handles `!`).
+            let replacementInfo = WikiLinkService.displayFragmentAndID(from: request.storageFragment)
+            replacementDisplay = replacementInfo.display
+            linkID = replacementInfo.id
+        }
 
-        let undoActionName = request.isImageEmbedMode ? "Insert Image Embed" : "Insert Link"
+        let undoActionName = request.isLiteralMode ? "Insert Tag" : "Insert Link"
         textView.breakUndoCoalescing()
 
         isProgrammaticEdit = true
@@ -452,10 +460,12 @@ extension NativeTextViewCoordinator {
         textView.undoManager?.setActionName(undoActionName)
         textView.breakUndoCoalescing()
 
-        let caretRange = WikiLinkService.caretRangeAfterReplacing(
-            displayRange: range,
-            with: request.storageFragment
-        )
+        let caretRange = request.isLiteralMode
+            ? NSRange(location: range.location + (replacementDisplay as NSString).length, length: 0)
+            : WikiLinkService.caretRangeAfterReplacing(
+                displayRange: range,
+                with: request.storageFragment
+            )
         let documentLength = (textView.string as NSString).length
         let clampedCaret = NSRange(location: min(max(caretRange.location, 0), documentLength), length: 0)
 
