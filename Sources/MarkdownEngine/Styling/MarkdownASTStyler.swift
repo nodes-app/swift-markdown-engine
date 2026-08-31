@@ -77,7 +77,11 @@ enum MarkdownASTStyler {
         for block in blocks where ctx.inScope(block.range) {
             styleBlock(block, font: baseFont, ctx: ctx, into: &attrs)
         }
-        shrinkInactiveMarkers(in: blocks, ctx: ctx, into: &attrs)
+        // The one pass that hides heading and inline markers; skipping it is what
+        // `hidesInactiveMarkers: false` means. Everything else still styles.
+        if configuration.hidesInactiveMarkers {
+            shrinkInactiveMarkers(in: blocks, ctx: ctx, into: &attrs)
+        }
 
         // Text/regex passes (AST-agnostic); AST code ranges drive the "skip inside code" checks.
         let codeRanges = collectCodeRanges(in: blocks)
@@ -599,6 +603,11 @@ enum MarkdownASTStyler {
             let last = ns.character(at: caret - 1)
             return last != 0x0A && last != 0x0D
         }
+        /// Whether a marker span shows its source: because the caret is in it,
+        /// or because the embedder asked for every marker to stay visible.
+        func revealsMarkers(_ range: NSRange) -> Bool {
+            !config.hidesInactiveMarkers || isActive(range)
+        }
         var theme: MarkdownEditorTheme { config.theme }
         var text: String { ns as String }
         var fullRange: NSRange { NSRange(location: 0, length: ns.length) }
@@ -679,7 +688,7 @@ enum MarkdownASTStyler {
                 attrs.append((block, ext.contentAttributes(theme: ctx.theme)))
             }
         }
-        let markerAttrs: [NSAttributedString.Key: Any] = ctx.isActive(node.range)
+        let markerAttrs: [NSAttributedString.Key: Any] = ctx.revealsMarkers(node.range)
             ? [.foregroundColor: ctx.theme.mutedText]
             : [.foregroundColor: NSColor.clear]
         attrs.append((node.openFence, markerAttrs))
@@ -734,7 +743,7 @@ enum MarkdownASTStyler {
             if contentRange.length > 0 {
                 attrs.append((contentRange, [.foregroundColor: ctx.theme.mutedText]))
             }
-            if ctx.isActive(tokenRange) {
+            if ctx.revealsMarkers(tokenRange) {
                 attrs.append((markerRange, [.foregroundColor: ctx.theme.mutedText]))
             } else {
                 attrs.append((markerRange, [.foregroundColor: NSColor.clear, .font: ctx.inlineMarkerFont]))
@@ -760,7 +769,7 @@ enum MarkdownASTStyler {
             }
         }
         // Use the whole block range (not codeRange): an incomplete fence collapses codeRange to the ```.
-        let markerAttrs: [NSAttributedString.Key: Any] = ctx.isActive(range)
+        let markerAttrs: [NSAttributedString.Key: Any] = ctx.revealsMarkers(range)
             ? [.foregroundColor: ctx.theme.mutedText, .font: ctx.codeFont]
             : [.foregroundColor: NSColor.clear, .font: ctx.codeFont]   // hiddenMarkerFont == codeFont
         attrs.append((parts.openFence, markerAttrs))
