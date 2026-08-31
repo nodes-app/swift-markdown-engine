@@ -569,20 +569,64 @@ public struct BlockquoteStyle: Sendable {
 
 // MARK: - Links
 
-/// Foreground alpha values applied to link content in different states.
+/// Foreground alpha values applied to link content in different states, plus
+/// how the styler treats a link whose `href` does not carry its own scheme.
 public struct LinkStyle: Sendable {
     /// Foreground alpha for the visible label of an active markdown link.
     public var activeLinkAlpha: CGFloat
     /// Foreground alpha applied to "incomplete" link content (e.g. `[text]`
     /// without a target).
     public var incompleteLinkAlpha: CGFloat
+    /// How the styler treats an `[label](href)` link whose `href` does not
+    /// carry a scheme. Defaults to ``BareHrefPolicy/assumeHTTPS`` so existing
+    /// documents keep opening the way they always have — see ``BareHrefPolicy``
+    /// for the reason an embedder might want to preserve the source string
+    /// instead.
+    public var bareHrefs: BareHrefPolicy
 
-    public init(activeLinkAlpha: CGFloat = 0.55, incompleteLinkAlpha: CGFloat = 0.7) {
+    public init(
+        activeLinkAlpha: CGFloat = 0.55,
+        incompleteLinkAlpha: CGFloat = 0.7,
+        bareHrefs: BareHrefPolicy = .assumeHTTPS
+    ) {
         self.activeLinkAlpha = activeLinkAlpha
         self.incompleteLinkAlpha = incompleteLinkAlpha
+        self.bareHrefs = bareHrefs
     }
 
     public static let `default` = LinkStyle()
+}
+
+/// How the styler treats an `[label](href)` link whose `href` does not
+/// carry its own scheme.
+///
+/// CommonMark leaves the choice to the renderer. The engine's historical
+/// behavior is to prepend `https://` so that a bare href like `docs/` in
+/// `[docs](docs/)` falls through to the browser rather than to some non-URL
+/// handler, which is the right guess for a document whose hrefs are all
+/// web-shaped.
+///
+/// An embedder whose `href` values are meaningful outside of the web — a
+/// relative path resolved against a base directory, an opaque id looked up
+/// in the embedder's own model, a custom scheme registered elsewhere in the
+/// app — needs the source string through untouched so it can route the
+/// click itself. Setting this to ``preserveAsWritten`` skips the prepend,
+/// so both the `.link` attribute on the styled text and any embedder-side
+/// click handler receive the `href` as authored.
+///
+/// Note: without an embedder-supplied click hook, AppKit's default handler
+/// still runs for a link with a `.link` attribute — a preserved bare href
+/// there resolves against no base and typically opens nothing. Pair this
+/// with your own click hook for the routing you want.
+public enum BareHrefPolicy: Sendable, Equatable {
+    /// Prepend `https://` to any `href` that does not already contain `://`.
+    /// The historical behavior and the default.
+    case assumeHTTPS
+
+    /// Hand the source `href` to the styler and click delegate unchanged.
+    /// Use this when your hrefs are meaningful outside of the web (relative
+    /// paths, opaque ids, custom schemes registered elsewhere in your app).
+    case preserveAsWritten
 }
 
 // MARK: - Paragraphs

@@ -32,6 +32,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `NativeTextViewWrapper.onTextMutation` reports exact, completed native edits
   for embedders that maintain their own source authority or mirror edits into
   another presentation.
+- `LinkStyle.bareHrefs` (`BareHrefPolicy`) lets an embedder opt out of the
+  styler's `https://` prepend for `[label](href)` links whose `href` does not
+  already carry a scheme. `.assumeHTTPS` is the default and reproduces the
+  historical behavior exactly — the guess is right when every href in the
+  document is web-shaped. `.preserveAsWritten` hands the source string
+  through to both the `.link` attribute on the styled text and any
+  embedder-side click handler, for embedders whose hrefs are meaningful
+  outside of the web: relative paths resolved against a base directory,
+  opaque ids the embedder looks up in its own model, custom schemes
+  registered elsewhere in the app. Standalone the opt-out only silences the
+  guess; AppKit's default click handler still runs for a link that carries a
+  `.link` attribute, so a preserved bare href there resolves against no base
+  and typically opens nothing. An embedder pairs this with its own click
+  hook to get the routing it wants.
 - `MarkdownEditorConfiguration.thematicBreak` (`ThematicBreakStyle`) gives each
   thematic-break marker its own look. CommonMark treats `---`, `***` and `___`
   as one construct with one rendering, so an embedder who wanted a novel-style

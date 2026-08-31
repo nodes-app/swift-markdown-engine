@@ -861,7 +861,10 @@ enum MarkdownASTStyler {
     ) {
         attrs.append((range, [.spellingState: 0]))
         var urlString = ctx.ns.substring(with: urlRange)
-        if !urlString.contains("://") { urlString = "https://\(urlString)" }
+        // Historical https:// prepend; see `BareHrefPolicy` for the opt-out.
+        if ctx.config.link.bareHrefs == .assumeHTTPS, !urlString.contains("://") {
+            urlString = "https://\(urlString)"
+        }
         let isActive = ctx.isActive(range)
         if let url = URL(string: urlString) {
             if isActive {
