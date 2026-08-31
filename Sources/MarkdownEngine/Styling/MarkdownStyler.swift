@@ -256,6 +256,7 @@ enum MarkdownStyler {
         let imgT0 = DispatchTime.now().uptimeNanoseconds
         result += styleBlockLatex(ctx)
         result += styleInlineLatex(ctx)
+        result += styleDiagramBlocks(ctx)
         result += styleImageEmbeds(ctx)
         result += styleImageLinks(ctx)
         let imgMs = Double(DispatchTime.now().uptimeNanoseconds - imgT0) / 1_000_000
