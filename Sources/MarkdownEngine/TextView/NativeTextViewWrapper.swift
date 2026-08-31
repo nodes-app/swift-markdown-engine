@@ -539,11 +539,14 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         // embedder is the source of truth.
         let newImageFingerprint = configuration.services.images.fingerprint()
         let newWikiFingerprint = configuration.services.wikiLinks.fingerprint()
+        let newHighlighterFingerprint = configuration.services.syntaxHighlighter.fingerprint()
         let imageChanged = newImageFingerprint != context.coordinator.lastImageFingerprint
         let wikiChanged = newWikiFingerprint != context.coordinator.lastWikiFingerprint
-        if imageChanged || wikiChanged {
+        let highlighterChanged = newHighlighterFingerprint != context.coordinator.lastHighlighterFingerprint
+        if imageChanged || wikiChanged || highlighterChanged {
             context.coordinator.lastImageFingerprint = newImageFingerprint
             context.coordinator.lastWikiFingerprint = newWikiFingerprint
+            context.coordinator.lastHighlighterFingerprint = newHighlighterFingerprint
             context.coordinator.configuration.services = configuration.services
             textView.configuration.services = configuration.services
             // Only an image change needs a layout re-measure; a wiki-link rename is style-only.
@@ -724,6 +727,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         coordinator.configuration = configuration
         coordinator.lastImageFingerprint = configuration.services.images.fingerprint()
         coordinator.lastWikiFingerprint = configuration.services.wikiLinks.fingerprint()
+        coordinator.lastHighlighterFingerprint = configuration.services.syntaxHighlighter.fingerprint()
         coordinator.onCodeBlockSelectionChange = onCodeBlockSelectionChange
         coordinator.onInlinePreviewKey = onInlinePreviewKey
         coordinator.userPrefersContinuousSpellChecking = configuration.spellChecking.continuousSpellChecking
