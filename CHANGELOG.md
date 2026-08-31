@@ -69,6 +69,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   line-break, programmatic, and undo/redo edits still widen ordered-list runs
   when downstream display numbers can change.
 
+### Fixed
+- `MarkdownEditorTheme.link` reaches the screen. `NSTextView` layers its
+  `linkTextAttributes` over every `.link` range at display time — on top of
+  whatever foreground the styler emitted — and AppKit's default paints
+  those with `.linkColor` blue, so an embedder's custom link ink was
+  silently overridden after being computed and emitted. `MarkdownEditorTheme`
+  now exposes a computed `linkTextAttributes` (theme link ink + theme
+  underline + pointing-hand cursor — the same decoration AppKit's default
+  carries), and `NativeTextViewWrapper` assigns it to the text view in
+  `makeNSView` and refreshes it in `updateNSView` alongside the
+  `insertionPointColor` refresh. The theme owns the underline too:
+  `MarkdownEditorTheme.linkUnderlineStyle` defaults to `.single` (AppKit's
+  stock look), and `[]` drops it entirely for palettes where an underlined
+  link reads as clutter. With the default theme, `link` is `.linkColor`
+  and `linkUnderlineStyle` is `.single`, so the rendered result is
+  pixel-identical to before. Custom palettes finally get both configured.
+
 ## [0.12.0] - 2026-08-10
 
 ### Added
