@@ -52,6 +52,7 @@ struct ContentView: View {
             fontSize: fontSize,
             isEditable: !isReadOnly,
             isFocused: $editorIsFocused,
+            allowsTaskCheckboxInteractionWhenReadOnly: true,
             onUnhandledCommand: { command in
                 switch command {
                 case .escape: lastHostCommand = "Escape"
@@ -87,7 +88,7 @@ struct ContentView: View {
                 Toggle(isOn: $isReadOnly) {
                     Label("Read-only", systemImage: isReadOnly ? "lock" : "lock.open")
                 }
-                .help("Read-only: the styled document stays scrollable and selectable, editing is off")
+                .help("Read-only: text editing is off, while task checkboxes remain interactive")
 
                 Toggle(isOn: $showRawSource) {
                     Label("Raw source", systemImage: "chevron.left.forwardslash.chevron.right")

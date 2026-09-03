@@ -51,6 +51,7 @@ final class NativeTextView: NSTextView {
     /// `nil` preserves AppKit-owned focus. A value represents the latest
     /// explicit host request and stays pending until the view has a window.
     var requestedFocus: Bool?
+    var allowsTaskCheckboxInteractionWhenReadOnly = false
     weak var layoutBridge: LayoutBridge?
     var baseFont: NSFont = NSFont.systemFont(ofSize: NSFont.systemFontSize)
 
