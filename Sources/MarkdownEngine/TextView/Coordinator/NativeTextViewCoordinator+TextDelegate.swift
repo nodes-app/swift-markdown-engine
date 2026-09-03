@@ -1094,7 +1094,7 @@ extension NativeTextViewCoordinator {
             let isLegacyBulletGlyph = markerString.first == "•"
             let minDepth = isLegacyBulletGlyph ? 1 : 0
             if depth <= minDepth {
-                return true
+                return false
             }
 
             if wsRangeLocal.length > 0 {

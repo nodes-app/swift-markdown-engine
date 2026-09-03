@@ -86,6 +86,20 @@ struct UnhandledCommandTests {
         #expect(hostCalls == 0)
     }
 
+    @Test("Backtab on a top-level list item reaches the host")
+    func topLevelListBacktabFallsBack() {
+        let (coordinator, textView) = makeEditor("- item")
+        textView.setSelectedRange(NSRange(location: 3, length: 0))
+        var received: [MarkdownEditorCommand] = []
+        coordinator.onUnhandledCommand = { received.append($0); return true }
+
+        let consumed = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertBacktab(_:)))
+
+        #expect(consumed)
+        #expect(textView.string == "- item")
+        #expect(received == [.backtab])
+    }
+
     @Test("Host Bool result controls Tab fallback", arguments: [true, false])
     func hostResult(result: Bool) {
         let (coordinator, textView) = makeEditor("plain")
@@ -125,6 +139,48 @@ struct UnhandledCommandTests {
         #expect(textView.string == "- item")
     }
 
+    @Test("Raw mode skips list outdent but still offers Backtab to the host")
+    func rawBacktabFallsBack() {
+        let (coordinator, textView) = makeEditor("\t- item", rawSourceMode: true)
+        textView.setSelectedRange(NSRange(location: 4, length: 0))
+        var received: [MarkdownEditorCommand] = []
+        coordinator.onUnhandledCommand = { received.append($0); return true }
+
+        let consumed = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertBacktab(_:)))
+
+        #expect(consumed)
+        #expect(received == [.backtab])
+        #expect(textView.string == "\t- item")
+    }
+
+    @Test("Tab inside a fenced code block reaches the host")
+    func codeBlockTabFallsBack() {
+        let (coordinator, textView) = makeEditor("```\ncode\n```")
+        textView.setSelectedRange(NSRange(location: 6, length: 0))
+        var received: [MarkdownEditorCommand] = []
+        coordinator.onUnhandledCommand = { received.append($0); return true }
+
+        let consumed = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertTab(_:)))
+
+        #expect(consumed)
+        #expect(received == [.tab])
+        #expect(textView.string == "```\ncode\n```")
+    }
+
+    @Test("Disabled list helpers leave Tab to the host")
+    func disabledListHelpersFallBack() {
+        let (coordinator, textView) = makeEditor("- item", listHelpersEnabled: false)
+        textView.setSelectedRange(NSRange(location: 3, length: 0))
+        var received: [MarkdownEditorCommand] = []
+        coordinator.onUnhandledCommand = { received.append($0); return true }
+
+        let consumed = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertTab(_:)))
+
+        #expect(consumed)
+        #expect(received == [.tab])
+        #expect(textView.string == "- item")
+    }
+
     @Test("Unrelated selectors are ignored")
     func unrelatedSelector() {
         let (coordinator, textView) = makeEditor("plain")
@@ -149,13 +205,15 @@ struct UnhandledCommandTests {
 
     private func makeEditor(
         _ text: String,
-        rawSourceMode: Bool = false
+        rawSourceMode: Bool = false,
+        listHelpersEnabled: Bool = true
     ) -> (NativeTextViewCoordinator, NativeTextView) {
         let textView = NativeTextView(frame: NSRect(x: 0, y: 0, width: 300, height: 120))
         textView.isEditable = true
         textView.string = text
         var configuration = MarkdownEditorConfiguration.default
         configuration.rawSourceMode = rawSourceMode
+        configuration.lists.helpersEnabled = listHelpersEnabled
         textView.configuration = configuration
 
         let coordinator = NativeTextViewCoordinator(
