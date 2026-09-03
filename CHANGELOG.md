@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`SpellCheckingPolicy.automaticQuoteSubstitution`**: makes
+  `NSTextView.isAutomaticQuoteSubstitutionEnabled` configurable instead of
+  hard-coded on. Some Markdown sources need straight quotes throughout
+  (frontmatter, code-adjacent prose) where automatic curly-quote substitution
+  would corrupt the source. Defaults to `true`, preserving the prior
+  always-on behavior.
 - **Directive seam (parsing)**: opt-in named inline commands with typed
   arguments, for constructs that need a name and parameters rather than
   delimiters. A `MarkdownDirective` declares a name, a form — self-contained
