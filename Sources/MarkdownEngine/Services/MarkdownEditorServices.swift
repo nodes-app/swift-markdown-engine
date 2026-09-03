@@ -200,6 +200,8 @@ public struct MarkdownEditorBus: Sendable {
     /// Posted by the host UI to request the engine apply a heading level.
     /// Expected `userInfo["level"] as? Int`.
     public var applyHeadingRequest: Notification.Name?
+    /// Posted by the host UI to remove heading markers from the selected lines.
+    public var applyParagraphRequest: Notification.Name?
     /// Posted by the host UI to request the engine apply highlight styling.
     public var applyHighlightRequest: Notification.Name?
     /// Posted by the host UI to request the engine apply strikethrough styling.
@@ -212,6 +214,8 @@ public struct MarkdownEditorBus: Sendable {
     public var applyUnorderedListRequest: Notification.Name?
     /// Posted by the host UI to request the engine apply ordered list styling.
     public var applyOrderedListRequest: Notification.Name?
+    /// Posted by the host UI to toggle task-list markers on the selected lines.
+    public var applyTaskListRequest: Notification.Name?
     /// Posted by the host UI to insert a Markdown link.
     /// Expected `userInfo["url"] as? String`.
     public var applyLinkRequest: Notification.Name?
@@ -260,12 +264,14 @@ public struct MarkdownEditorBus: Sendable {
         applyBoldRequest: Notification.Name? = nil,
         applyItalicRequest: Notification.Name? = nil,
         applyHeadingRequest: Notification.Name? = nil,
+        applyParagraphRequest: Notification.Name? = nil,
         applyHighlightRequest: Notification.Name? = nil,
         applyStrikethroughRequest: Notification.Name? = nil,
         applyInlineCodeRequest: Notification.Name? = nil,
         applyBlockquoteRequest: Notification.Name? = nil,
         applyUnorderedListRequest: Notification.Name? = nil,
         applyOrderedListRequest: Notification.Name? = nil,
+        applyTaskListRequest: Notification.Name? = nil,
         applyLinkRequest: Notification.Name? = nil,
         applyCodeBlockRequest: Notification.Name? = nil,
         applyHorizontalRuleRequest: Notification.Name? = nil,
@@ -283,12 +289,14 @@ public struct MarkdownEditorBus: Sendable {
         self.applyBoldRequest = applyBoldRequest
         self.applyItalicRequest = applyItalicRequest
         self.applyHeadingRequest = applyHeadingRequest
+        self.applyParagraphRequest = applyParagraphRequest
         self.applyHighlightRequest = applyHighlightRequest
         self.applyStrikethroughRequest = applyStrikethroughRequest
         self.applyInlineCodeRequest = applyInlineCodeRequest
         self.applyBlockquoteRequest = applyBlockquoteRequest
         self.applyUnorderedListRequest = applyUnorderedListRequest
         self.applyOrderedListRequest = applyOrderedListRequest
+        self.applyTaskListRequest = applyTaskListRequest
         self.applyLinkRequest = applyLinkRequest
         self.applyCodeBlockRequest = applyCodeBlockRequest
         self.applyHorizontalRuleRequest = applyHorizontalRuleRequest
