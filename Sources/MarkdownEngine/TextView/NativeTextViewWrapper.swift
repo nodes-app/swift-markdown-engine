@@ -71,6 +71,10 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     public var documentId: String
     /// When `false` the editor renders read-only with no caret.
     public var isEditable: Bool
+    /// Optional two-way focus state. Set the binding to `true` to request first
+    /// responder status; user-driven focus and blur are written back. When no
+    /// binding is supplied, focus behavior remains entirely AppKit-managed.
+    public var isFocused: Binding<Bool>?
     /// Optional paste hook. Return a Markdown image-embed string (e.g.
     /// `"![[my-image]]"`) to insert at the caret, or `nil` to fall through
     /// to the system's default plain-text paste.
@@ -150,6 +154,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         fontSize: CGFloat = 16,
         documentId: String = "default",
         isEditable: Bool = true,
+        isFocused: Binding<Bool>? = nil,
         onPasteImage: ((NSPasteboard) -> String?)? = nil,
         onLinkClick: ((String) -> Void)? = nil,
         onCaretRectChange: ((CGRect) -> Void)? = nil,
@@ -176,6 +181,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         self.fontSize = fontSize
         self.documentId = documentId
         self.isEditable = isEditable
+        self.isFocused = isFocused
         self.onPasteImage = onPasteImage
         self.onLinkClick = onLinkClick
         self.onCaretRectChange = onCaretRectChange
@@ -334,6 +340,11 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.onInlineSelectionChange = onInlineSelectionChange
         context.coordinator.onInlinePreviewKey = onInlinePreviewKey
         context.coordinator.onCodeBlockSelectionChange = onCodeBlockSelectionChange
+        context.coordinator.isFocused = isFocused
+        textView.onFocusChange = { [weak coordinator = context.coordinator] focused in
+            coordinator?.reportFocusChange(focused)
+        }
+        textView.requestedFocus = isFocused?.wrappedValue
 
         textView.recalcOverscroll(for: scrollView)
         textView.setPlaceholder(placeholder)
@@ -406,6 +417,9 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         // to reach the CURRENT closures even when the pass below returns early.
         context.coordinator.onPersistScrollOffset = onPersistScrollOffset
         context.coordinator.restoreScrollOffset = restoreScrollOffset
+        context.coordinator.isFocused = isFocused
+        textView.requestedFocus = isFocused?.wrappedValue
+        textView.reconcileRequestedFocus()
 
         // Drop remembered offsets for documents no longer retained (always keep
         // the current one). Only rebuilds the dict when something must go.
