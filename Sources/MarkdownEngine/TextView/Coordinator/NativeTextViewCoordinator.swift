@@ -84,6 +84,7 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var onBuildContextMenu: ((NSMenu, NSRange) -> NSMenu)?
     var onInlineSelectionChange: ((InlineSelectionState?) -> Void)?
     var onInlinePreviewKey: ((InlinePreviewKey) -> Bool)?
+    var onUnhandledCommand: ((MarkdownEditorCommand) -> Bool)?
     var onCodeBlockSelectionChange: (([CodeBlockSelection]) -> Void)?
     var didInitialFormatting: Bool = false
     /// One-shot guard so `updateCodeBlockSelection` only forces a full-document layout once per document.

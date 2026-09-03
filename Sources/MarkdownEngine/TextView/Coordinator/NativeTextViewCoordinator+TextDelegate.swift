@@ -941,25 +941,42 @@ extension NativeTextViewCoordinator {
     }
 
     public func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-        // Raw mode: default key handling (no ⇧⇥ outdent, no preview routing).
-        if configuration.rawSourceMode { return false }
-        if commandSelector == #selector(NSResponder.insertBacktab(_:)) {
-            return handleBacktab(textView)
-        }
-        // While an inline [[…]] / ![[…]] preview is open, route ↑/↓/Enter/Esc to the embedder's
-        // autocomplete list (it returns true to consume the key; false → normal editor handling).
-        if (isWikiLinkActive || isImageEmbedActive), let handler = onInlinePreviewKey {
-            let key: InlinePreviewKey?
-            switch commandSelector {
-            case #selector(NSResponder.moveUp(_:)): key = .moveUp
-            case #selector(NSResponder.moveDown(_:)): key = .moveDown
-            case #selector(NSResponder.insertNewline(_:)): key = .confirm   // ⌘↵ → handled in performKeyEquivalent
-            case #selector(NSResponder.cancelOperation(_:)): key = .cancel
-            default: key = nil
+        if !configuration.rawSourceMode {
+            // While an inline [[…]] / ![[…]] preview is open, route ↑/↓/Enter/Esc to the embedder's
+            // autocomplete list (it returns true to consume the key; false → normal editor handling).
+            if (isWikiLinkActive || isImageEmbedActive), let handler = onInlinePreviewKey {
+                let key: InlinePreviewKey?
+                switch commandSelector {
+                case #selector(NSResponder.moveUp(_:)): key = .moveUp
+                case #selector(NSResponder.moveDown(_:)): key = .moveDown
+                case #selector(NSResponder.insertNewline(_:)): key = .confirm   // ⌘↵ → handled in performKeyEquivalent
+                case #selector(NSResponder.cancelOperation(_:)): key = .cancel
+                default: key = nil
+                }
+                if let key, handler(key) { return true }
             }
-            if let key, handler(key) { return true }
+
+            if commandSelector == #selector(NSResponder.insertTab(_:)) {
+                let parsed = parsedDocument(for: textView.string)
+                if MarkdownInputHandler.handleTabCommand(textView: textView, codeTokens: parsed.codeTokens) {
+                    return true
+                }
+            } else if commandSelector == #selector(NSResponder.insertBacktab(_:)),
+                      textView.isEditable,
+                      handleBacktab(textView) {
+                return true
+            }
         }
-        return false
+
+        let command: MarkdownEditorCommand?
+        switch commandSelector {
+        case #selector(NSResponder.cancelOperation(_:)): command = .escape
+        case #selector(NSResponder.insertTab(_:)): command = .tab
+        case #selector(NSResponder.insertBacktab(_:)): command = .backtab
+        default: command = nil
+        }
+        guard let command else { return false }
+        return onUnhandledCommand?(command) ?? false
     }
 
     public func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
@@ -1077,7 +1094,7 @@ extension NativeTextViewCoordinator {
             let isLegacyBulletGlyph = markerString.first == "•"
             let minDepth = isLegacyBulletGlyph ? 1 : 0
             if depth <= minDepth {
-                return true
+                return false
             }
 
             if wsRangeLocal.length > 0 {
