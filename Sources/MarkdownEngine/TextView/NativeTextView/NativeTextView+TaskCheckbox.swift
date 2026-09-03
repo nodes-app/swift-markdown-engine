@@ -60,7 +60,28 @@ extension NativeTextView {
         guard checkboxText.range(of: #"\[[ xX]\]"#, options: .regularExpression) != nil else { return nil }
 
         let replacement = hitIsChecked ? "[ ]" : "[x]"
-        if shouldChangeText(in: effectiveRange, replacementString: replacement) {
+        let shouldToggle: Bool
+        if isEditable {
+            shouldToggle = shouldChangeText(in: effectiveRange, replacementString: replacement)
+        } else if allowsTaskCheckboxInteractionWhenReadOnly {
+            // NSTextView rejects shouldChangeText while read-only. Consult the
+            // coordinator directly so its exact-edit bookkeeping and binding
+            // synchronization still run, without briefly enabling text input.
+            if let coordinator = delegate as? NativeTextViewCoordinator {
+                coordinator.isProgrammaticEdit = true
+                defer { coordinator.isProgrammaticEdit = false }
+                shouldToggle = coordinator.textView(
+                    self,
+                    shouldChangeTextIn: effectiveRange,
+                    replacementString: replacement
+                )
+            } else {
+                shouldToggle = true
+            }
+        } else {
+            shouldToggle = false
+        }
+        if shouldToggle {
             storage.replaceCharacters(in: effectiveRange, with: replacement)
             storage.addAttribute(.taskCheckbox, value: !hitIsChecked, range: effectiveRange)
             storage.addAttribute(.foregroundColor, value: NSColor.clear, range: effectiveRange)
