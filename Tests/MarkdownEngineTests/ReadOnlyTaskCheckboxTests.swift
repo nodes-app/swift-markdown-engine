@@ -1,6 +1,7 @@
 //
 //  ReadOnlyTaskCheckboxTests.swift
 //  MarkdownEngineTests
+//  Added to the NoFray fork on 2026-09-03 under Apache-2.0; see FORK_CHANGES.md.
 //
 
 import AppKit

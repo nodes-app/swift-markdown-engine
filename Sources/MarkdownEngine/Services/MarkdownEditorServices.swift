@@ -1,6 +1,7 @@
 //
 //  MarkdownEditorServices.swift
 //  MarkdownEngine
+//  Modified in the NoFray fork on 2026-09-03; see FORK_CHANGES.md.
 //
 //  Created by Luca Chen on 16.03.26.
 //

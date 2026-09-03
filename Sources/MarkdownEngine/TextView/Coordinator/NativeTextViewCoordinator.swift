@@ -1,6 +1,7 @@
 //
 //  NativeTextViewCoordinator.swift
 //  MarkdownEngine
+//  Modified in the NoFray fork on 2026-09-03; see FORK_CHANGES.md.
 //
 //  Created by Luca Chen on 18.02.26.
 //

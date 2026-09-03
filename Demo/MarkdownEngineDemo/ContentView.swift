@@ -1,6 +1,7 @@
 //
 //  ContentView.swift
 //  MarkdownEngine
+//  Modified in the NoFray fork on 2026-09-03; see FORK_CHANGES.md.
 //
 //  Created by Nicolas von Mallinckrodt on 29.04.26.
 //

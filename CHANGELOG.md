@@ -1,5 +1,7 @@
 # Changelog
 
+> Modified in the NoFray fork on 2026-09-03; see `FORK_CHANGES.md`.
+
 All notable changes to swift-markdown-engine are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),

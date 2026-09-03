@@ -1,6 +1,7 @@
 //
 //  MarkdownEditorCommand.swift
 //  MarkdownEngine
+//  Added to the NoFray fork on 2026-09-03 under Apache-2.0; see FORK_CHANGES.md.
 //
 
 /// An editor command the engine did not consume and is offering to its host.
