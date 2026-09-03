@@ -224,6 +224,11 @@ extension NativeTextViewWrapper.Coordinator {
         applyHeading(level: sender.tag)
     }
 
+    @objc func didMarkdownParagraph(_ sender: Any?) {
+        guard let tv = textView else { return }
+        applyBlockFormatting(MarkdownBlockFormatting.paragraphPlan(in: tv.string, selection: tv.selectedRange()))
+    }
+
     private func applyList(prefix: String) {
         guard let tv = textView else { return }
         let nsText = tv.string as NSString
@@ -260,6 +265,25 @@ extension NativeTextViewWrapper.Coordinator {
 
     @objc func didMarkdownOrderedList(_ sender: Any?) {
         applyList(prefix: "1. ")
+    }
+
+    @objc func didMarkdownTaskList(_ sender: Any?) {
+        guard let tv = textView else { return }
+        applyBlockFormatting(MarkdownBlockFormatting.taskListPlan(in: tv.string, selection: tv.selectedRange()))
+    }
+
+    private func applyBlockFormatting(_ plan: MarkdownBlockFormattingPlan?) {
+        guard let plan, let tv = textView, let storage = tv.textStorage else { return }
+        let replacement = NSMutableAttributedString(attributedString: storage.attributedSubstring(from: plan.range))
+        for edit in plan.prefixEdits.reversed() {
+            let localRange = NSRange(location: edit.range.location - plan.range.location, length: edit.range.length)
+            let attributedPrefix = NSAttributedString(string: edit.replacement, attributes: tv.typingAttributes)
+            replacement.replaceCharacters(in: localRange, with: attributedPrefix)
+        }
+        guard tv.shouldChangeText(in: plan.range, replacementString: replacement.string) else { return }
+        storage.replaceCharacters(in: plan.range, with: replacement)
+        tv.didChangeText()
+        tv.setSelectedRange(plan.selection)
     }
 
     @objc func didMarkdownBold(_ sender: Any?) {
