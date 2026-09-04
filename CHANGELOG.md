@@ -69,6 +69,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   line-break, programmatic, and undo/redo edits still widen ordered-list runs
   when downstream display numbers can change.
 
+### Fixed
+- The Obsidian-style `[[` node-bracket completion now honors
+  `ListStyle.autoClosePairsEnabled`, matching the single-`[` auto-close path.
+  Previously an embedder that disabled bracket auto-closing (to edit plain
+  Markdown source without inserted pairs) still got `[[` silently expanded to
+  `[[]]`.
+
 ## [0.12.0] - 2026-08-10
 
 ### Added
