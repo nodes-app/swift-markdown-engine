@@ -1,6 +1,7 @@
 //
 //  NativeTextViewWrapper.swift
 //  MarkdownEngine
+//  Modified in the NoFray fork on 2026-09-03; see FORK_CHANGES.md.
 //
 //  Created by Luca Chen on 18.02.26.
 //
@@ -71,6 +72,13 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     public var documentId: String
     /// When `false` the editor renders read-only with no caret.
     public var isEditable: Bool
+    /// Optional two-way focus state. Set the binding to `true` to request first
+    /// responder status; user-driven focus and blur are written back. When no
+    /// binding is supplied, focus behavior remains entirely AppKit-managed.
+    public var isFocused: Binding<Bool>?
+    /// Allows task checkboxes to remain interactive while ordinary text editing
+    /// is disabled. Defaults to `false`, preserving fully read-only behavior.
+    public var allowsTaskCheckboxInteractionWhenReadOnly: Bool
     /// Optional paste hook. Return a Markdown image-embed string (e.g.
     /// `"![[my-image]]"`) to insert at the caret, or `nil` to fall through
     /// to the system's default plain-text paste.
@@ -96,6 +104,10 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     /// Fires on ↑/↓/Enter/Esc while an inline `[[…]]` preview is open, so the
     /// embedder can drive its autocomplete list. Return `true` to consume the key.
     public var onInlinePreviewKey: ((InlinePreviewKey) -> Bool)?
+    /// Receives Escape, Tab, or Shift-Tab only after the engine declines the
+    /// command. Return `true` when the host consumed it; `false` preserves the
+    /// normal AppKit fallback. Inline previews and list editing take priority.
+    public var onUnhandledCommand: ((MarkdownEditorCommand) -> Bool)?
     /// Fires when the set of visible code blocks changes, so embedders can
     /// overlay copy buttons (see ``CodeBlockButton``).
     public var onCodeBlockSelectionChange: (([CodeBlockSelection]) -> Void)?
@@ -150,6 +162,8 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         fontSize: CGFloat = 16,
         documentId: String = "default",
         isEditable: Bool = true,
+        isFocused: Binding<Bool>? = nil,
+        allowsTaskCheckboxInteractionWhenReadOnly: Bool = false,
         onPasteImage: ((NSPasteboard) -> String?)? = nil,
         onLinkClick: ((String) -> Void)? = nil,
         onCaretRectChange: ((CGRect) -> Void)? = nil,
@@ -157,6 +171,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         onBuildContextMenu: ((NSMenu, NSRange) -> NSMenu)? = nil,
         onInlineSelectionChange: ((InlineSelectionState?) -> Void)? = nil,
         onInlinePreviewKey: ((InlinePreviewKey) -> Bool)? = nil,
+        onUnhandledCommand: ((MarkdownEditorCommand) -> Bool)? = nil,
         onCodeBlockSelectionChange: (([CodeBlockSelection]) -> Void)? = nil,
         onSpellCheckingPolicyChanged: ((SpellCheckingPolicy) -> Void)? = nil,
         placeholder: NSAttributedString? = nil,
@@ -176,6 +191,8 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         self.fontSize = fontSize
         self.documentId = documentId
         self.isEditable = isEditable
+        self.isFocused = isFocused
+        self.allowsTaskCheckboxInteractionWhenReadOnly = allowsTaskCheckboxInteractionWhenReadOnly
         self.onPasteImage = onPasteImage
         self.onLinkClick = onLinkClick
         self.onCaretRectChange = onCaretRectChange
@@ -183,6 +200,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         self.onBuildContextMenu = onBuildContextMenu
         self.onInlineSelectionChange = onInlineSelectionChange
         self.onInlinePreviewKey = onInlinePreviewKey
+        self.onUnhandledCommand = onUnhandledCommand
         self.onCodeBlockSelectionChange = onCodeBlockSelectionChange
         self.onSpellCheckingPolicyChanged = onSpellCheckingPolicyChanged
         self.placeholder = placeholder
@@ -264,6 +282,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.configuration = configuration
         textView.insertionPointColor = configuration.theme.bodyText
         textView.isEditable = isEditable
+        textView.allowsTaskCheckboxInteractionWhenReadOnly = allowsTaskCheckboxInteractionWhenReadOnly
         textView.isSelectable = true
         textView.isRichText = true
         let initialState = WikiLinkService.makeDisplayState(from: text) { configuration.services.wikiLinks.name(forID: $0) }
@@ -333,7 +352,13 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.onBuildContextMenu = onBuildContextMenu
         context.coordinator.onInlineSelectionChange = onInlineSelectionChange
         context.coordinator.onInlinePreviewKey = onInlinePreviewKey
+        context.coordinator.onUnhandledCommand = onUnhandledCommand
         context.coordinator.onCodeBlockSelectionChange = onCodeBlockSelectionChange
+        context.coordinator.isFocused = isFocused
+        textView.onFocusChange = { [weak coordinator = context.coordinator] focused in
+            coordinator?.reportFocusChange(focused)
+        }
+        textView.requestedFocus = isFocused?.wrappedValue
 
         textView.recalcOverscroll(for: scrollView)
         textView.setPlaceholder(placeholder)
@@ -406,6 +431,9 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         // to reach the CURRENT closures even when the pass below returns early.
         context.coordinator.onPersistScrollOffset = onPersistScrollOffset
         context.coordinator.restoreScrollOffset = restoreScrollOffset
+        context.coordinator.isFocused = isFocused
+        textView.requestedFocus = isFocused?.wrappedValue
+        textView.reconcileRequestedFocus()
 
         // Drop remembered offsets for documents no longer retained (always keep
         // the current one). Only rebuilds the dict when something must go.
@@ -557,6 +585,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             }
         }
         textView.isEditable = isEditable
+        textView.allowsTaskCheckboxInteractionWhenReadOnly = allowsTaskCheckboxInteractionWhenReadOnly
         textView.isSelectable = true
         // Keep the caret ink the selection handler resolved (an extension span
         // can invert it); a plain bodyText reset here stomps it on every pass.
@@ -701,6 +730,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.onBuildContextMenu = onBuildContextMenu
         context.coordinator.onInlineSelectionChange = onInlineSelectionChange
         context.coordinator.onInlinePreviewKey = onInlinePreviewKey
+        context.coordinator.onUnhandledCommand = onUnhandledCommand
         context.coordinator.onCodeBlockSelectionChange = onCodeBlockSelectionChange
         context.coordinator.didInitialFormatting = true
     }

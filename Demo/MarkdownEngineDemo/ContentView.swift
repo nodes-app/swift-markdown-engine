@@ -1,6 +1,7 @@
 //
 //  ContentView.swift
 //  MarkdownEngine
+//  Modified in the NoFray fork on 2026-09-03; see FORK_CHANGES.md.
 //
 //  Created by Nicolas von Mallinckrodt on 29.04.26.
 //
@@ -26,6 +27,8 @@ struct ContentView: View {
     @State private var isReadOnly = false
     @State private var showRawSource = false
     @State private var useReadingColumn = false
+    @State private var editorIsFocused = false
+    @State private var lastHostCommand = "None"
 
     /// Registers/unregisters BOTH opt-in seams at once. The document is written
     /// so that flipping this off is the whole explanation of what is core
@@ -35,6 +38,9 @@ struct ContentView: View {
 
     // Base font size; all relative sizing (headings, code, math) tracks it.
     @State private var fontSize: CGFloat = 16
+
+    private let paragraphRequest = Notification.Name("demo.applyParagraph")
+    private let taskListRequest = Notification.Name("demo.applyTaskList")
 
     // Scroll-away header demo.
     @State private var showHeader = false
@@ -46,6 +52,16 @@ struct ContentView: View {
             configuration: configuration,
             fontSize: fontSize,
             isEditable: !isReadOnly,
+            isFocused: $editorIsFocused,
+            allowsTaskCheckboxInteractionWhenReadOnly: true,
+            onUnhandledCommand: { command in
+                switch command {
+                case .escape: lastHostCommand = "Escape"
+                case .tab: lastHostCommand = "Tab"
+                case .backtab: lastHostCommand = "Shift-Tab"
+                }
+                return command == .escape
+            },
             placeholder: NSAttributedString(
                 string: "Empty document — start typing, markdown styles live…",
                 attributes: [
@@ -63,10 +79,17 @@ struct ContentView: View {
         .id(useReadingColumn)
         .toolbar {
             ToolbarItemGroup {
+                Button {
+                    editorIsFocused = true
+                } label: {
+                    Label("Focus editor", systemImage: "text.cursor")
+                }
+                Text("Host command: \(lastHostCommand)")
+
                 Toggle(isOn: $isReadOnly) {
                     Label("Read-only", systemImage: isReadOnly ? "lock" : "lock.open")
                 }
-                .help("Read-only: the styled document stays scrollable and selectable, editing is off")
+                .help("Read-only: text editing is off, while task checkboxes remain interactive")
 
                 Toggle(isOn: $showRawSource) {
                     Label("Raw source", systemImage: "chevron.left.forwardslash.chevron.right")
@@ -99,6 +122,16 @@ struct ContentView: View {
                     .disabled(fontSize >= 28)
                 }
                 .help("Base font size — headings, code, and math scale relative to it")
+
+                ControlGroup {
+                    Button("Paragraph") {
+                        NotificationCenter.default.post(name: paragraphRequest, object: nil)
+                    }
+                    Button("Task list") {
+                        NotificationCenter.default.post(name: taskListRequest, object: nil)
+                    }
+                }
+                .help("Apply block formatting through the embedder notification bus")
 
                 Menu {
                     Toggle("Show header", isOn: $showHeader)
@@ -144,6 +177,10 @@ struct ContentView: View {
     /// so you can see exactly what each one adds.
     private var configuration: MarkdownEditorConfiguration {
         var config = MarkdownEditorConfiguration.default
+        config.services.bus = MarkdownEditorBus(
+            applyParagraphRequest: paragraphRequest,
+            applyTaskListRequest: taskListRequest
+        )
 
         #if canImport(MarkdownEngineCodeBlocks)
         // Syntax highlighting for fenced code blocks. Auto-switches between

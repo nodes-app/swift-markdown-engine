@@ -1,6 +1,7 @@
 //
 //  NativeTextView.swift
 //  MarkdownEngine
+//  Modified in the NoFray fork on 2026-09-03; see FORK_CHANGES.md.
 //
 //  Created by Luca Chen on 18.02.26.
 //
@@ -46,6 +47,12 @@ final class NativeTextView: NSTextView {
 
     // MARK: Editor wiring
     var onPasteImage: ((NSPasteboard) -> String?)?
+    var onFocusChange: ((Bool) -> Void)?
+    private var reportedFocus = false
+    /// `nil` preserves AppKit-owned focus. A value represents the latest
+    /// explicit host request and stays pending until the view has a window.
+    var requestedFocus: Bool?
+    var allowsTaskCheckboxInteractionWhenReadOnly = false
     weak var layoutBridge: LayoutBridge?
     var baseFont: NSFont = NSFont.systemFont(ofSize: NSFont.systemFontSize)
 
@@ -73,6 +80,40 @@ final class NativeTextView: NSTextView {
     var wideTableOverlays: [Int: WideTableOverlay] = [:]
     /// Persisted horizontal scroll offset per wide table; survives restyles.
     var tableHorizontalScrollOffsets: [Int: CGFloat] = [:]
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        reconcileRequestedFocus()
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        let didBecome = super.becomeFirstResponder()
+        if didBecome && !reportedFocus {
+            reportedFocus = true
+            onFocusChange?(true)
+        }
+        return didBecome
+    }
+
+    override func resignFirstResponder() -> Bool {
+        let didResign = super.resignFirstResponder()
+        if didResign && reportedFocus {
+            reportedFocus = false
+            onFocusChange?(false)
+        }
+        return didResign
+    }
+
+    func reconcileRequestedFocus() {
+        guard let requestedFocus, let window else { return }
+        if requestedFocus {
+            if window.firstResponder !== self {
+                window.makeFirstResponder(self)
+            }
+        } else if window.firstResponder === self {
+            window.makeFirstResponder(nil)
+        }
+    }
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()

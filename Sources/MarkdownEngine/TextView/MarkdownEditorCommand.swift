@@ -1,0 +1,15 @@
+//
+//  MarkdownEditorCommand.swift
+//  MarkdownEngine
+//  Added to the NoFray fork on 2026-09-03 under Apache-2.0; see FORK_CHANGES.md.
+//
+
+/// An editor command the engine did not consume and is offering to its host.
+public enum MarkdownEditorCommand: Sendable, Equatable {
+    /// The standard AppKit cancel operation, normally produced by Escape.
+    case escape
+    /// Forward tab traversal after editor-owned list indentation declines it.
+    case tab
+    /// Backward tab traversal after editor-owned list outdentation declines it.
+    case backtab
+}

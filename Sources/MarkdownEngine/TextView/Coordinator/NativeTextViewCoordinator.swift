@@ -1,6 +1,7 @@
 //
 //  NativeTextViewCoordinator.swift
 //  MarkdownEngine
+//  Modified in the NoFray fork on 2026-09-03; see FORK_CHANGES.md.
 //
 //  Created by Luca Chen on 18.02.26.
 //
@@ -46,6 +47,7 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var undoContentSnapshots: [String: String] = [:]
     @Binding var text: String
     @Binding var isWikiLinkActive: Bool
+    var isFocused: Binding<Bool>?
     var fontName: String
     var fontSize: CGFloat
     var configuration: MarkdownEditorConfiguration = .default {
@@ -84,6 +86,7 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var onBuildContextMenu: ((NSMenu, NSRange) -> NSMenu)?
     var onInlineSelectionChange: ((InlineSelectionState?) -> Void)?
     var onInlinePreviewKey: ((InlinePreviewKey) -> Bool)?
+    var onUnhandledCommand: ((MarkdownEditorCommand) -> Bool)?
     var onCodeBlockSelectionChange: (([CodeBlockSelection]) -> Void)?
     var didInitialFormatting: Bool = false
     /// One-shot guard so `updateCodeBlockSelection` only forces a full-document layout once per document.
@@ -174,6 +177,14 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     /// resetting to `theme.bodyText`, which would stomp it on any SwiftUI pass;
     /// nil = no span, use the theme.
     var resolvedCaretColor: NSColor?
+
+    /// Mirrors an actual AppKit first-responder transition into the optional
+    /// host binding. Equality guards keep host-driven reconciliation from
+    /// feeding the same value back into SwiftUI.
+    func reportFocusChange(_ focused: Bool) {
+        guard let isFocused, isFocused.wrappedValue != focused else { return }
+        isFocused.wrappedValue = focused
+    }
 
     var cachedCodeBlockTokens: [(index: Int, token: MarkdownToken)] = []
     /// Dedupe key of the last emitted code-block selections — identical
@@ -340,6 +351,11 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
                 self?.handleHeadingNotification(notification)
             })
         }
+        if let name = bus.applyParagraphRequest {
+            busObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                self?.handleParagraphNotification(notification)
+            })
+        }
         if let name = bus.applyHighlightRequest {
             busObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
                 self?.handleHighlightNotification(notification)
@@ -368,6 +384,11 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
         if let name = bus.applyOrderedListRequest {
             busObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
                 self?.handleOrderedListNotification(notification)
+            })
+        }
+        if let name = bus.applyTaskListRequest {
+            busObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                self?.handleTaskListNotification(notification)
             })
         }
         if let name = bus.applyLinkRequest {

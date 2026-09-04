@@ -1,5 +1,7 @@
 # Changelog
 
+> Modified in the NoFray fork on 2026-09-03; see `FORK_CHANGES.md`.
+
 All notable changes to swift-markdown-engine are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
@@ -8,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `NativeTextViewWrapper.isFocused` provides optional two-way first-responder
+  coordination for embedders without changing AppKit-owned focus by default.
+- `NativeTextViewWrapper.onUnhandledCommand` lets embedders handle Escape,
+  Tab, and Shift-Tab after inline previews and list editing decline them.
+- `MarkdownEditorBus.applyParagraphRequest` and `applyTaskListRequest` add
+  multiline, line-ending-preserving block-formatting commands for embedders.
+- `NativeTextViewWrapper.allowsTaskCheckboxInteractionWhenReadOnly` optionally
+  keeps task checkboxes interactive without enabling ordinary text editing.
 - **Directive seam (parsing)**: opt-in named inline commands with typed
   arguments, for constructs that need a name and parameters rather than
   delimiters. A `MarkdownDirective` declares a name, a form — self-contained

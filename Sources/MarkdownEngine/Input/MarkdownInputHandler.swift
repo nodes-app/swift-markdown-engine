@@ -1,6 +1,7 @@
 //
 //  MarkdownInputHandler.swift
 //  MarkdownEngine
+//  Modified in the NoFray fork on 2026-09-03; see FORK_CHANGES.md.
 //
 //  Created by Luca Chen on 18.02.26.
 //
@@ -20,6 +21,17 @@ enum MarkdownInputHandler {
         }
         return MarkdownLists.handleInsertion(textView: textView, affectedCharRange: affectedCharRange,
                                              replacementString: replacementString, isInsideCodeBlock: isInsideCodeBlock)
+    }
+
+    /// Handles an AppKit Tab command before it becomes a proposed text edit.
+    /// Returns `true` only when list editing consumed the command.
+    static func handleTabCommand(textView: NSTextView, codeTokens: [MarkdownToken]? = nil) -> Bool {
+        guard textView.isEditable else { return false }
+        let location = textView.selectedRange().location
+        let isInsideCodeBlock = codeTokens.map {
+            MarkdownDetection.isInsideCodeBlock(location: location, codeTokens: $0)
+        } ?? MarkdownDetection.isInsideCodeBlock(location: location, in: textView.string)
+        return MarkdownLists.handleTab(textView: textView, isInsideCodeBlock: isInsideCodeBlock)
     }
 
     // MARK: - Block LaTeX Auto-Wrap

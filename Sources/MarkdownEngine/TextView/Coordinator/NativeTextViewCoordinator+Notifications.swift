@@ -1,6 +1,7 @@
 //
 //  NativeTextViewCoordinator+Notifications.swift
 //  MarkdownEngine
+//  Modified in the NoFray fork on 2026-09-03; see FORK_CHANGES.md.
 //
 //  Created by Luca Chen on 16.03.26.
 //
@@ -32,6 +33,10 @@ extension NativeTextViewCoordinator {
         didMarkdownHeading(item)
     }
 
+    @objc func handleParagraphNotification(_ notification: Notification) {
+        didMarkdownParagraph(nil)
+    }
+
     @objc func handleStrikethroughNotification(_ notification: Notification) {
         didMarkdownStrikethrough(nil)
     }
@@ -50,6 +55,10 @@ extension NativeTextViewCoordinator {
 
     @objc func handleOrderedListNotification(_ notification: Notification) {
         didMarkdownOrderedList(nil)
+    }
+
+    @objc func handleTaskListNotification(_ notification: Notification) {
+        didMarkdownTaskList(nil)
     }
 
     @objc func handleLinkNotification(_ notification: Notification) {
