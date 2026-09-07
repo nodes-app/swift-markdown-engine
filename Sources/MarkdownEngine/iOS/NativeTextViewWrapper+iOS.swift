@@ -44,10 +44,13 @@ public struct NativeTextViewWrapper: UIViewRepresentable {
         textView.adjustsFontForContentSizeCategory = true
         textView.textContainer.lineFragmentPadding = 0
         textView.keyboardDismissMode = .interactive
+        let textSelectionTapGestures = textView.gestureRecognizers?.compactMap { $0 as? UITapGestureRecognizer } ?? []
         let tapGesture = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
-        tapGesture.cancelsTouchesInView = false
         tapGesture.delegate = context.coordinator
         textView.addGestureRecognizer(tapGesture)
+        for textSelectionTapGesture in textSelectionTapGestures {
+            textSelectionTapGesture.require(toFail: tapGesture)
+        }
         applyLayout(to: textView)
         context.coordinator.render(text, in: textView, preservingSelection: false)
         return textView
@@ -142,7 +145,12 @@ public struct NativeTextViewWrapper: UIViewRepresentable {
             _ gestureRecognizer: UIGestureRecognizer,
             shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool {
-            true
+            false
+        }
+
+        public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            guard let textView = gestureRecognizer.view as? UITextView else { return false }
+            return taskCheckbox(at: touch.location(in: textView), in: textView) != nil
         }
 
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
