@@ -10,6 +10,7 @@ public struct NativeTextViewWrapper: UIViewRepresentable {
     public var fontSize: CGFloat
     public var documentId: String
     public var isEditable: Bool
+    public var configureTextView: ((UITextView) -> Void)?
 
     public init(
         text: Binding<String>,
@@ -17,7 +18,8 @@ public struct NativeTextViewWrapper: UIViewRepresentable {
         fontName: String = "SF Pro",
         fontSize: CGFloat = 16,
         documentId: String = "default",
-        isEditable: Bool = true
+        isEditable: Bool = true,
+        configureTextView: ((UITextView) -> Void)? = nil
     ) {
         self._text = text
         self.configuration = configuration
@@ -25,6 +27,7 @@ public struct NativeTextViewWrapper: UIViewRepresentable {
         self.fontSize = fontSize
         self.documentId = documentId
         self.isEditable = isEditable
+        self.configureTextView = configureTextView
     }
 
     public func makeCoordinator() -> Coordinator {
@@ -53,6 +56,7 @@ public struct NativeTextViewWrapper: UIViewRepresentable {
         }
         applyLayout(to: textView)
         context.coordinator.render(text, in: textView, preservingSelection: false)
+        configureTextView?(textView)
         return textView
     }
 
