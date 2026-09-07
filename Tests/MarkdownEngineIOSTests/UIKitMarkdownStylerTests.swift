@@ -45,12 +45,42 @@ struct UIKitMarkdownStylerTests {
         #expect((revealedFont?.pointSize ?? 0) >= 16)
     }
 
+    @Test("Task checkbox is rendered without changing its Markdown source")
+    func taskCheckboxRenderingPreservesSource() {
+        let task = "- [x] completed\n"
+        let range = (task as NSString).range(of: "[x]")
+        let styled = makeStyled(task, selection: NSRange(location: (task as NSString).length, length: 0))
+        let checkbox = styled.attribute(.taskCheckbox, at: range.location, effectiveRange: nil) as? Bool
+        let hiddenFont = styled.attribute(.font, at: range.location, effectiveRange: nil) as? UIFont
+
+        #expect(styled.string == task)
+        #expect(checkbox == true)
+        #expect((hiddenFont?.pointSize ?? 1) < 0.1)
+    }
+
+    @Test("Task source is revealed while its syntax is edited")
+    func taskCheckboxSourceRevealsAtCaret() {
+        let task = "- [ ] pending\n"
+        let range = (task as NSString).range(of: "[ ]")
+        let styled = makeStyled(task, selection: NSRange(location: range.location + 1, length: 0))
+        let checkbox = styled.attribute(.taskCheckbox, at: range.location, effectiveRange: nil) as? Bool
+        let revealedFont = styled.attribute(.font, at: range.location, effectiveRange: nil) as? UIFont
+
+        #expect(styled.string == task)
+        #expect(checkbox == nil)
+        #expect((revealedFont?.pointSize ?? 0) >= 16)
+    }
+
     private func makeStyled(selection: NSRange) -> NSAttributedString {
+        makeStyled(source, selection: selection)
+    }
+
+    private func makeStyled(_ markdown: String, selection: NSRange) -> NSAttributedString {
         UIKitMarkdownStyler(
             configuration: .default,
             fontName: "SF Pro",
             fontSize: 16
-        ).attributedString(for: source, selection: selection)
+        ).attributedString(for: markdown, selection: selection)
     }
 }
 #endif

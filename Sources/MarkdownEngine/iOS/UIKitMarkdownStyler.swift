@@ -114,9 +114,48 @@ struct UIKitMarkdownStyler {
                     paragraph.headIndent = fontSize * 1.55
                     paragraph.firstLineHeadIndent = 0
                     result.addAttribute(.paragraphStyle, value: paragraph, range: item.range)
-                    result.addAttribute(.foregroundColor, value: configuration.theme.mutedText, range: item.marker)
                     if let checkbox = item.checkbox {
-                        result.addAttribute(.foregroundColor, value: configuration.theme.mutedText, range: checkbox)
+                        let syntax = NSRange(
+                            location: item.marker.location,
+                            length: NSMaxRange(checkbox) - item.marker.location
+                        )
+                        let isActive = NSIntersectionRange(syntax, expandedSelection(selection)).length > 0
+                        if isActive {
+                            result.addAttribute(.foregroundColor, value: configuration.theme.mutedText, range: syntax)
+                        } else {
+                            result.addAttribute(.foregroundColor, value: UIColor.clear, range: item.marker)
+
+                            let spacer = NSRange(
+                                location: NSMaxRange(item.marker),
+                                length: checkbox.location - NSMaxRange(item.marker)
+                            )
+                            if spacer.length > 0 {
+                                result.addAttribute(.foregroundColor, value: UIColor.clear, range: spacer)
+                            }
+
+                            result.addAttributes([
+                                .taskCheckbox: item.checked,
+                                .taskCheckboxFont: bodyFont,
+                                .taskCheckboxTint: item.checked
+                                    ? configuration.theme.bodyText
+                                    : configuration.theme.mutedText,
+                                .font: UIFont.systemFont(ofSize: 0.01),
+                                .foregroundColor: UIColor.clear
+                            ], range: checkbox)
+
+                            let postGap = NSRange(
+                                location: NSMaxRange(checkbox),
+                                length: item.contentRange.location - NSMaxRange(checkbox)
+                            )
+                            if postGap.length > 0 {
+                                result.addAttributes([
+                                    .font: UIFont.systemFont(ofSize: 0.01),
+                                    .foregroundColor: UIColor.clear
+                                ], range: postGap)
+                            }
+                        }
+                    } else {
+                        result.addAttribute(.foregroundColor, value: configuration.theme.mutedText, range: item.marker)
                     }
                     if item.checked {
                         result.addAttributes([

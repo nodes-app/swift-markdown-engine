@@ -34,6 +34,7 @@ public struct NativeTextViewWrapper: UIViewRepresentable {
     public func makeUIView(context: Context) -> UITextView {
         let textView = UITextView(usingTextLayoutManager: true)
         textView.delegate = context.coordinator
+        textView.textLayoutManager?.delegate = context.coordinator
         textView.backgroundColor = .clear
         textView.isEditable = isEditable
         textView.isSelectable = true
@@ -43,6 +44,10 @@ public struct NativeTextViewWrapper: UIViewRepresentable {
         textView.adjustsFontForContentSizeCategory = true
         textView.textContainer.lineFragmentPadding = 0
         textView.keyboardDismissMode = .interactive
+        let tapGesture = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
+        tapGesture.cancelsTouchesInView = false
+        tapGesture.delegate = context.coordinator
+        textView.addGestureRecognizer(tapGesture)
         applyLayout(to: textView)
         context.coordinator.render(text, in: textView, preservingSelection: false)
         return textView
@@ -78,7 +83,7 @@ public struct NativeTextViewWrapper: UIViewRepresentable {
     }
 
     @MainActor
-    public final class Coordinator: NSObject, UITextViewDelegate {
+    public final class Coordinator: NSObject, UITextViewDelegate, NSTextLayoutManagerDelegate, UIGestureRecognizerDelegate {
         var parent: NativeTextViewWrapper
         var documentId: String
         private var isRendering = false
@@ -123,6 +128,65 @@ public struct NativeTextViewWrapper: UIViewRepresentable {
         public func textViewDidChangeSelection(_ textView: UITextView) {
             guard !isRendering else { return }
             render(textView.text, in: textView, preservingSelection: true)
+        }
+
+        public func textLayoutManager(
+            _ textLayoutManager: NSTextLayoutManager,
+            textLayoutFragmentFor location: any NSTextLocation,
+            in textElement: NSTextElement
+        ) -> NSTextLayoutFragment {
+            UIKitMarkdownTextLayoutFragment(textElement: textElement, range: textElement.elementRange)
+        }
+
+        public func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            true
+        }
+
+        @objc func handleTap(_ gesture: UITapGestureRecognizer) {
+            guard gesture.state == .ended,
+                  parent.isEditable,
+                  let textView = gesture.view as? UITextView,
+                  let checkbox = taskCheckbox(at: gesture.location(in: textView), in: textView) else { return }
+
+            let replacement = checkbox.checked ? "[ ]" : "[x]"
+            let source = NSMutableString(string: textView.text)
+            source.replaceCharacters(in: checkbox.range, with: replacement)
+            let selection = textView.selectedRange.clamped(to: source.length)
+            textView.text = source as String
+            textView.selectedRange = selection
+            parent.text = source as String
+            render(source as String, in: textView, preservingSelection: true)
+        }
+
+        private func taskCheckbox(at point: CGPoint, in textView: UITextView) -> (range: NSRange, checked: Bool)? {
+            let attributedText = textView.attributedText ?? NSAttributedString()
+            let fullRange = NSRange(location: 0, length: attributedText.length)
+            var result: (range: NSRange, checked: Bool)?
+
+            attributedText.enumerateAttribute(.taskCheckbox, in: fullRange) { value, range, stop in
+                guard let checked = value as? Bool,
+                      let font = attributedText.attribute(.taskCheckboxFont, at: range.location, effectiveRange: nil) as? UIFont,
+                      let start = textView.position(from: textView.beginningOfDocument, offset: range.location),
+                      let end = textView.position(from: start, offset: range.length),
+                      let textRange = textView.textRange(from: start, to: end) else { return }
+
+                let anchor = textView.firstRect(for: textRange)
+                let size = ceil(font.lineHeight)
+                let box = CGRect(
+                    x: anchor.minX - size - 2,
+                    y: anchor.midY - size / 2,
+                    width: size,
+                    height: size
+                ).insetBy(dx: -6, dy: -6)
+                if box.contains(point) {
+                    result = (range, checked)
+                    stop.pointee = true
+                }
+            }
+            return result
         }
 
         public func textView(
