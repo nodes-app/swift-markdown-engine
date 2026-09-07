@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  TaskCheckboxGeometry.swift
 //  MarkdownEngine
@@ -33,3 +34,4 @@ enum TaskCheckboxGeometry {
         contentX - size - gap
     }
 }
+#endif

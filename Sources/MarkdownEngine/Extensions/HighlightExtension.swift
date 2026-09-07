@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  HighlightExtension.swift
 //  MarkdownEngine
@@ -44,3 +45,4 @@ public struct HighlightExtension: MarkdownExtension {
         "<mark>\(childrenHTML)</mark>"
     }
 }
+#endif

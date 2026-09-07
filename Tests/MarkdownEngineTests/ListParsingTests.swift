@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  ListParsingTests.swift
 //  MarkdownEngineTests
@@ -99,3 +100,4 @@ struct ListParsingTests {
         #expect(BlockParser.isListItem("1. x"))
     }
 }
+#endif

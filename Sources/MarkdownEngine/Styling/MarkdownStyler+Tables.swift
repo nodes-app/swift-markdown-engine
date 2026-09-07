@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  MarkdownStyler+Tables.swift
 //  MarkdownEngine
@@ -768,3 +769,4 @@ extension MarkdownStyler {
         return hasher.finalize()
     }
 }
+#endif

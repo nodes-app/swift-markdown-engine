@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  TableCellSourceTests.swift
 //  MarkdownEngine
@@ -127,3 +128,4 @@ struct TableCellSourceTests {
         #expect(tv.string == source)
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  InvertedIBeamCursorTests.swift
 //  MarkdownEngineTests
@@ -60,3 +61,4 @@ struct InvertedIBeamCursorTests {
         #expect(first !== different)
     }
 }
+#endif

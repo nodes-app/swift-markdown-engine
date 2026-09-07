@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  OrderedListDisplayNumberingTests.swift
 //  MarkdownEngineTests
@@ -407,3 +408,4 @@ struct OrderedListDisplayNumberingTests {
         #expect(overlays(in: tv).map(\.text) == ["2.", "3.", "4."])
     }
 }
+#endif

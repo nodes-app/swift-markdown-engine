@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  InvertedIBeamCursor.swift
 //  MarkdownEngine
@@ -96,3 +97,4 @@ enum InvertedIBeamCursor {
          UInt8(clamping: Int(color.blueComponent * 255)))
     }
 }
+#endif

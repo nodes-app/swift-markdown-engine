@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  DirectiveCompositionTests.swift
 //  MarkdownEngineTests
@@ -235,3 +236,4 @@ struct DirectiveCompositionTests {
         #expect(result == nil || result?.pointSize == base)
     }
 }
+#endif

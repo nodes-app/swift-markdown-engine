@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  TableCellTests.swift
 //  MarkdownEngineTests
@@ -85,3 +86,4 @@ struct TableCellTests {
         #expect(traits(s, "c").contains(.bold))
     }
 }
+#endif

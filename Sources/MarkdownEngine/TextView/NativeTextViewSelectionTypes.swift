@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  NativeTextViewSelectionTypes.swift
 //  MarkdownEngine
@@ -93,3 +94,4 @@ public struct InlineReplacementRequest: Sendable {
         self.isImageEmbedMode = isImageEmbedMode
     }
 }
+#endif

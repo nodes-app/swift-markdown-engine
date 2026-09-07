@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  BacktickCensusTests.swift
 //  MarkdownEngine
@@ -27,3 +28,4 @@ struct BacktickCensusTests {
         }
     }
 }
+#endif

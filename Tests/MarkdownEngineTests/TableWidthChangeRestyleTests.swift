@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  TableWidthChangeRestyleTests.swift
 //  MarkdownEngine
@@ -46,3 +47,4 @@ struct TableWidthChangeRestyleTests {
         #expect(stampedRange == nsText.paragraphRange(for: tableToken.range))
     }
 }
+#endif

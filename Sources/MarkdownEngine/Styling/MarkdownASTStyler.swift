@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  MarkdownASTStyler.swift
 //  MarkdownEngine
@@ -995,3 +996,4 @@ enum MarkdownASTStyler {
         ]
     }
 }
+#endif

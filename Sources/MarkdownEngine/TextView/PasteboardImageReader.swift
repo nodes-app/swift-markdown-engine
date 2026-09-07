@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  PasteboardImageReader.swift
 //  MarkdownEngine
@@ -92,3 +93,4 @@ public enum PasteboardImageReader {
         return bitmapRep.representation(using: .png, properties: [:])
     }
 }
+#endif

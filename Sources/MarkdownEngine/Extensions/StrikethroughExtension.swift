@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  StrikethroughExtension.swift
 //  MarkdownEngine
@@ -43,3 +44,4 @@ public struct StrikethroughExtension: MarkdownExtension {
         "<del>\(childrenHTML)</del>"
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  TableHiddenSourceGeometryTests.swift
 //  MarkdownEngine
@@ -60,3 +61,4 @@ struct TableHiddenSourceGeometryTests {
         #expect(usage.width <= viewport.width + 0.5)
     }
 }
+#endif

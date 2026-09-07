@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  MarkdownDirective.swift
 //  MarkdownEngine
@@ -304,3 +305,4 @@ public extension MarkdownDirective {
     }
 
 }
+#endif

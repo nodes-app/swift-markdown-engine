@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  PerfTrace.swift
 //  MarkdownEngine
@@ -133,3 +134,4 @@ enum PerfTrace {
         print(String(format: "⏱️ PERF %@ %.2fms %@", label, ms, detail()))
     }
 }
+#endif

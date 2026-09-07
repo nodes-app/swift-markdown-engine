@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  CaretColorTests.swift
 //  MarkdownEngineTests
@@ -115,3 +116,4 @@ struct CaretColorTests {
         #expect(tv.insertionPointColor == NSColor.black)
     }
 }
+#endif

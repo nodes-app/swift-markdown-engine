@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  MarkdownStyler+Images.swift
 //  MarkdownEngine
@@ -194,3 +195,4 @@ extension MarkdownStyler {
         return attrs
     }
 }
+#endif

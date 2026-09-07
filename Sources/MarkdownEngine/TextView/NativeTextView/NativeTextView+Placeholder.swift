@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  NativeTextView+Placeholder.swift
 //  MarkdownEngine
@@ -99,3 +100,4 @@ private extension NSRect {
             && abs(size.height - other.size.height) < 0.5
     }
 }
+#endif

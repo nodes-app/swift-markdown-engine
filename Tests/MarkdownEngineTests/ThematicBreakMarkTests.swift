@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  ThematicBreakMarkTests.swift
 //  MarkdownEngineTests
@@ -302,3 +303,4 @@ struct ThematicBreakMarkTests {
         breakLineBounds(in: tv).height
     }
 }
+#endif

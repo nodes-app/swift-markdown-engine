@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  NativeTextViewContainerTests.swift
 //  MarkdownEngineTests
@@ -155,3 +156,4 @@ struct NativeTextViewContainerTests {
         #expect(stack.textView.frame.origin.x == 0)
     }
 }
+#endif

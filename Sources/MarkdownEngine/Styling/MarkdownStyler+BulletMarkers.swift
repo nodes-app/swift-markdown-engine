@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  MarkdownStyler+BulletMarkers.swift
 //  MarkdownEngine
@@ -44,3 +45,4 @@ extension MarkdownStyler {
         return nil
     }
 }
+#endif

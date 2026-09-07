@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  FindHighlightRestoreTests.swift
 //  MarkdownEngineTests
@@ -136,3 +137,4 @@ struct FindHighlightRestoreTests {
         #expect(background(tv, at: 17) != nil)
     }
 }
+#endif

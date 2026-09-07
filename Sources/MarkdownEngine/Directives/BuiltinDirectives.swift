@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  BuiltinDirectives.swift
 //  MarkdownEngine
@@ -125,3 +126,4 @@ public struct ColorDirective: MarkdownDirective {
         return "<span style=\"color:\(name)\">\(bodyHTML)</span>"
     }
 }
+#endif

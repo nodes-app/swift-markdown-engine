@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  MarkdownStyler+Latex.swift
 //  MarkdownEngine
@@ -158,3 +159,4 @@ extension MarkdownStyler {
         return attrs
     }
 }
+#endif

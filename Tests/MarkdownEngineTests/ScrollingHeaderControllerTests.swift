@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  ScrollingHeaderControllerTests.swift
 //  MarkdownEngineTests
@@ -204,3 +205,4 @@ struct ScrollingHeaderControllerTests {
         #expect(stack.container.subviews.count == 1)   // text view only
     }
 }
+#endif

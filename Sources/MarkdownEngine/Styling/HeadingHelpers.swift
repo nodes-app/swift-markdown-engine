@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  HeadingHelpers.swift
 //  MarkdownEngine
@@ -48,3 +49,4 @@ enum HeadingHelpers {
         return width
     }
 }
+#endif

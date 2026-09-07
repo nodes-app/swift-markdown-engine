@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  PasteStructureGuardTests.swift
 //  MarkdownEngine
@@ -53,3 +54,4 @@ struct PasteStructureGuardTests {
         }
     }
 }
+#endif

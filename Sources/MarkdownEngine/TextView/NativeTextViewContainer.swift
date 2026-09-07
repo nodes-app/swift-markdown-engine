@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  NativeTextViewContainer.swift
 //  MarkdownEngine
@@ -116,3 +117,4 @@ extension NSScrollView {
         (documentView as? NativeTextViewContainer)?.textView
     }
 }
+#endif

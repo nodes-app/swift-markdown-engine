@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  EmbeddedImageCache.swift
 //  MarkdownEngine
@@ -122,3 +123,4 @@ final class EmbeddedImageCache {
         return image
     }
 }
+#endif

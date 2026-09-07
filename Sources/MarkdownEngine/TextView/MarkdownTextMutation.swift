@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  MarkdownTextMutation.swift
 //  MarkdownEngine
@@ -20,3 +21,4 @@ public struct MarkdownTextMutation: Equatable, Sendable {
         self.replacement = replacement
     }
 }
+#endif

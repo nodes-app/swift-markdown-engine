@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  TableImageCacheTests.swift
 //  MarkdownEngine
@@ -123,3 +124,4 @@ struct TableImageCacheTests {
         #expect(redRender.rendered)
     }
 }
+#endif

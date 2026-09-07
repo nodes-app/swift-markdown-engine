@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  CodeBlockButton.swift
 //  MarkdownEngine
@@ -96,3 +97,4 @@ public struct CodeBlockButton: View {
             )
     }
 }
+#endif

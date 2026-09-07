@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  ParseIncrementalEquivalenceTests.swift
 //  MarkdownEngine
@@ -167,3 +168,4 @@ struct ParseIncrementalEquivalenceTests {
         }
     }
 }
+#endif

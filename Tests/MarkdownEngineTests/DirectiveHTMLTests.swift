@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  DirectiveHTMLTests.swift
 //  MarkdownEngineTests
@@ -74,3 +75,4 @@ struct DirectiveHTMLTests {
         #expect(out.contains("font-size:18.0px"))
     }
 }
+#endif

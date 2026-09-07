@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  MarkdownEditorTheme.swift
 //  MarkdownEngine
@@ -115,3 +116,4 @@ public struct MarkdownEditorTheme: Sendable {
     /// `NSTextView`. It's also the default when no theme is supplied.
     public static let `default` = MarkdownEditorTheme()
 }
+#endif

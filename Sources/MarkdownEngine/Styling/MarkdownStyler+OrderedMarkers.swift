@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  MarkdownStyler+OrderedMarkers.swift
 //  MarkdownEngine
@@ -24,3 +25,4 @@ extension MarkdownStyler {
         options: [.anchorsMatchLines]
     )
 }
+#endif

@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  WikiLinkService.swift
 //  MarkdownEngine
@@ -326,3 +327,4 @@ public enum WikiLinkService {
     }
 }
 
+#endif

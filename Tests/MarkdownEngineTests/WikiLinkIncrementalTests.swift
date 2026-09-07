@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  WikiLinkIncrementalTests.swift
 //  MarkdownEngine
@@ -142,3 +143,4 @@ struct WikiLinkIncrementalTests {
         #expect(fastPathTaken > 0, "sweep was vacuous — no position took the fast path")
     }
 }
+#endif

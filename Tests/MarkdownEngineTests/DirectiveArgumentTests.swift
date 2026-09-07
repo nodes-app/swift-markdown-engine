@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  DirectiveArgumentTests.swift
 //  MarkdownEngineTests
@@ -243,3 +244,4 @@ struct DirectiveArgumentTests {
     }
 
 }
+#endif

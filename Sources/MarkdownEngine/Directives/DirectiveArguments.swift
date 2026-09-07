@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  DirectiveArguments.swift
 //  MarkdownEngine
@@ -264,3 +265,4 @@ extension DirectiveArguments {
         }
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  RestyleApplyEquivalenceTests.swift
 //  MarkdownEngineTests
@@ -262,3 +263,4 @@ struct RestyleApplyEquivalenceTests {
         }
     }
 }
+#endif

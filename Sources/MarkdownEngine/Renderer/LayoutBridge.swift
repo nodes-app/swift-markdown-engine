@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  LayoutBridge.swift
 //  MarkdownEngine
@@ -102,3 +103,4 @@ final class LayoutBridge {
         textLayoutManager.textContainer
     }
 }
+#endif
