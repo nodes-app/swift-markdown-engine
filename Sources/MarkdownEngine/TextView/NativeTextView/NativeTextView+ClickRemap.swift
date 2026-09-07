@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  NativeTextView+ClickRemap.swift
 //  MarkdownEngine
@@ -55,3 +56,4 @@ extension NativeTextView {
         return true
     }
 }
+#endif

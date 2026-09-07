@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  MarkdownStyler.swift
 //  MarkdownEngine
@@ -510,3 +511,4 @@ extension MarkdownStyler {
         return lineRange
     }
 }
+#endif

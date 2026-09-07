@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  DirectivePerformanceTests.swift
 //  MarkdownEngineTests
@@ -156,3 +157,4 @@ struct DirectivePerformanceTests {
                 "directives cost \(directiveCost)ms vs \(highlightCost)ms for \(count) spans")
     }
 }
+#endif

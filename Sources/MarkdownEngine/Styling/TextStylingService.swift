@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  TextStylingService.swift
 //  MarkdownEngine
@@ -275,3 +276,4 @@ struct TextStylingService {
         return NSTextRange(location: start, end: end)
     }
 }
+#endif

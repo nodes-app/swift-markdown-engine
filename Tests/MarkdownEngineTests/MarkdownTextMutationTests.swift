@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  MarkdownTextMutationTests.swift
 //  MarkdownEngineTests
@@ -101,3 +102,4 @@ struct MarkdownTextMutationTests {
         #expect(received.isEmpty)
     }
 }
+#endif

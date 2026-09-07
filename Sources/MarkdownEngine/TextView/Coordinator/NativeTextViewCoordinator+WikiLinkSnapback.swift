@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  NativeTextViewCoordinator+WikiLinkSnapback.swift
 //  MarkdownEngine
@@ -62,3 +63,4 @@ extension NativeTextViewCoordinator {
         return newCaret
     }
 }
+#endif

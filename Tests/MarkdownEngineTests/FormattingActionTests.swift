@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  FormattingActionTests.swift
 //  MarkdownEngineTests
@@ -223,3 +224,4 @@ struct FormattingActionTests {
         #expect(tv.string == "text![](img.png)")
     }
 }
+#endif

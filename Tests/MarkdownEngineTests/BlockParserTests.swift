@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  BlockParserTests.swift
 //  MarkdownEngineTests
@@ -103,3 +104,4 @@ struct BlockParserTests {
         assertTiles(text)
     }
 }
+#endif

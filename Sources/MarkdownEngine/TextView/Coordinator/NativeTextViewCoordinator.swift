@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  NativeTextViewCoordinator.swift
 //  MarkdownEngine
@@ -489,3 +490,4 @@ extension NSTextView {
         return boundingRect
     }
 }
+#endif

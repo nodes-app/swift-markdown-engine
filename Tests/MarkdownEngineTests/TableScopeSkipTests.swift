@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  TableScopeSkipTests.swift
 //  MarkdownEngine
@@ -79,3 +80,4 @@ struct TableScopeSkipTests {
         #expect(touching.contains { $0.attributes[.spellingState] as? Int == 0 })
     }
 }
+#endif

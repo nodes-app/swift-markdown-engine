@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  DocumentParseState.swift
 //  MarkdownEngine
@@ -155,3 +156,4 @@ final class DocumentParseState {
         return resolvedTokens
     }
 }
+#endif

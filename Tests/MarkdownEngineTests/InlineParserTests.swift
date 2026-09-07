@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  InlineParserTests.swift
 //  MarkdownEngineTests
@@ -432,3 +433,4 @@ struct InlineParserTests {
         #expect(InlineParser.parse(#"`\*`"#) == [.code(range: r(0, 4), content: r(1, 2))])
     }
 }
+#endif

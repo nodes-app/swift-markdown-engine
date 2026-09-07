@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  ASTPipelineTests.swift
 //  MarkdownEngineTests
@@ -114,3 +115,4 @@ struct ASTPipelineTests {
         #expect(tokens.contains { $0.kind == .italic })
     }
 }
+#endif

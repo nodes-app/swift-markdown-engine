@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  MarkdownTextLayoutFragment.swift
 //  MarkdownEngine
@@ -869,3 +870,4 @@ final class MarkdownLayoutManagerDelegate: NSObject, NSTextLayoutManagerDelegate
         return fragment
     }
 }
+#endif

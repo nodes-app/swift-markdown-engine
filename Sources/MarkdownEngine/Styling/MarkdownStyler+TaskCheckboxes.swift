@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  MarkdownStyler+TaskCheckboxes.swift
 //  MarkdownEngine
@@ -46,3 +47,4 @@ extension MarkdownStyler {
         return nil
     }
 }
+#endif

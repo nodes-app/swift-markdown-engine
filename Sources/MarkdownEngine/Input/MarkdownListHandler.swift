@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  MarkdownListHandler.swift
 //  MarkdownEngine
@@ -325,3 +326,4 @@ struct MarkdownLists {
         return true
     }
 }
+#endif

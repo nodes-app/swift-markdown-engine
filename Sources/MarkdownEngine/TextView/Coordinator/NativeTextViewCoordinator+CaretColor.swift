@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  NativeTextViewCoordinator+CaretColor.swift
 //  MarkdownEngine
@@ -54,3 +55,4 @@ extension NativeTextViewCoordinator {
         return innermost?.color ?? theme.bodyText
     }
 }
+#endif

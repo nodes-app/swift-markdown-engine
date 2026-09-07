@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  MarkdownEditorServices.swift
 //  MarkdownEngine
@@ -337,3 +338,4 @@ public struct MarkdownEditorServices: Sendable {
 
     public static let `default` = MarkdownEditorServices()
 }
+#endif

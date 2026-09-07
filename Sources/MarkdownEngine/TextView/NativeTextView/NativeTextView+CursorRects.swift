@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  NativeTextView+CursorRects.swift
 //  MarkdownEngine
@@ -177,3 +178,4 @@ extension NativeTextView {
         cursor.set()
     }
 }
+#endif

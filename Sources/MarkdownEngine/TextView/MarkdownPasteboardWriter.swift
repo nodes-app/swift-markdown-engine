@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  MarkdownPasteboardWriter.swift
 //  MarkdownEngine
@@ -107,3 +108,4 @@ enum MarkdownPasteboardWriter {
         )
     }
 }
+#endif

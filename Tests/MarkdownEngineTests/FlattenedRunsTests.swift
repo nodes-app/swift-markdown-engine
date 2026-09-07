@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  FlattenedRunsTests.swift
 //  MarkdownEngineTests
@@ -148,3 +149,4 @@ struct FlattenedRunsTests {
         }
     }
 }
+#endif

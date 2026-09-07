@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  MarkdownExtension.swift
 //  MarkdownEngine
@@ -252,3 +253,4 @@ extension MarkdownEditorConfiguration {
         return out
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  HTMLToMarkdownConverterTests.swift
 //  MarkdownEngineTests
@@ -109,3 +110,4 @@ struct HTMLToMarkdownConverterTests {
             == "- **A:** one\n- two")
     }
 }
+#endif

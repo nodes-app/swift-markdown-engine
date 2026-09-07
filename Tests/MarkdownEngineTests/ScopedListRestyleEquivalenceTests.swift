@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  ScopedListRestyleEquivalenceTests.swift
 //  MarkdownEngineTests
@@ -120,3 +121,4 @@ struct ScopedListRestyleEquivalenceTests {
         }
     }
 }
+#endif

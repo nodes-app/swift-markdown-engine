@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  ListHandlerCodeContextTests.swift
 //  MarkdownEngine
@@ -60,3 +61,4 @@ struct ListHandlerCodeContextTests {
         #expect(tv.string == "```\n- hello\n\n```")
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  DirectiveScanner.swift
 //  MarkdownEngine
@@ -254,3 +255,4 @@ enum DirectiveScanner {
         return count % 2 == 1
     }
 }
+#endif

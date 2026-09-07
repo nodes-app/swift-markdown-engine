@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  GoldenCorpusTests.swift
 //  MarkdownEngineTests
@@ -346,3 +347,4 @@ raw ==nicht== markiert
         }
     }
 }
+#endif

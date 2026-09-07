@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  InlineSpanDensityTests.swift
 //  MarkdownEngineTests
@@ -152,3 +153,4 @@ struct InlineSpanDensityTests {
         }
     }
 }
+#endif

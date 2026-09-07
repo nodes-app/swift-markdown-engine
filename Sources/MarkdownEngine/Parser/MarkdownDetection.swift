@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  MarkdownDetection.swift
 //  MarkdownEngine
@@ -168,3 +169,4 @@ enum MarkdownDetection {
     }
 
 }
+#endif

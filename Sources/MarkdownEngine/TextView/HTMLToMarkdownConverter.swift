@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  HTMLToMarkdownConverter.swift
 //  MarkdownEngine
@@ -631,3 +632,4 @@ enum HTMLToMarkdownConverter {
 private extension String {
     var htmlTrimmed: String { trimmingCharacters(in: .whitespacesAndNewlines) }
 }
+#endif

@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  MarkdownHTMLRenderer.swift
 //  MarkdownEngine
@@ -343,3 +344,4 @@ public enum MarkdownHTMLRenderer {
         return out
     }
 }
+#endif

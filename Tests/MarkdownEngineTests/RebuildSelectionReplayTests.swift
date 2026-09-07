@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  RebuildSelectionReplayTests.swift
 //  MarkdownEngineTests
@@ -94,3 +95,4 @@ struct RebuildSelectionReplayTests {
         #expect(tv.isContinuousSpellCheckingEnabled == false)   // handler ran, caret is in code
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  MarkdownASTStylerTests.swift
 //  MarkdownEngineTests
@@ -395,3 +396,4 @@ private func styleKeySnapshot(_ ranges: [StyledRange]) -> String {
 private func fmt(_ r: NSRange) -> String {
     r.location == NSNotFound ? "∅" : "\(r.location)+\(r.length)"
 }
+#endif

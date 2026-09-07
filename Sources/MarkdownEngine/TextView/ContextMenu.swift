@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  ContextMenu.swift
 //  MarkdownEngine
@@ -531,3 +532,4 @@ extension NativeTextViewWrapper.Coordinator {
 // Menu Item Validation (checkmark state) removed together with the built-in menu —
 // engine ships no UI. Expose the isSelection* checks as a query API if embedders
 // need menu state.
+#endif

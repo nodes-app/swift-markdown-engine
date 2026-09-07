@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  MarkdownHTMLRendererTests.swift
 //  MarkdownEngineTests
@@ -95,3 +96,4 @@ struct MarkdownHTMLRendererTests {
             == "<p><a href=\"https://example.com\">https://example.com</a></p>")
     }
 }
+#endif

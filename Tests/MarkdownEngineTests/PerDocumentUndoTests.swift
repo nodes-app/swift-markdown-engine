@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  PerDocumentUndoTests.swift
 //  MarkdownEngineTests
@@ -65,3 +66,4 @@ struct PerDocumentUndoTests {
         #expect(c.invalidateUndoIfContentDiverged(for: "A", incomingText: "x") == false)
     }
 }
+#endif

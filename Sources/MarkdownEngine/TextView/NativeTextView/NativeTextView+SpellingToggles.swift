@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  NativeTextView+SpellingToggles.swift
 //  MarkdownEngine
@@ -29,3 +30,4 @@ extension NativeTextView {
         (delegate as? NativeTextViewCoordinator)?.didToggleSpellCheckingPolicy(textView: self)
     }
 }
+#endif

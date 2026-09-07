@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  PrecomputedBlocksTests.swift
 //  MarkdownEngine
@@ -91,3 +92,4 @@ struct PrecomputedBlocksTests {
         }
     }
 }
+#endif

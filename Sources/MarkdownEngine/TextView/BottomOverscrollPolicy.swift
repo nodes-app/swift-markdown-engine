@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  BottomOverscrollPolicy.swift
 //  MarkdownEngine
@@ -69,3 +70,4 @@ struct BottomOverscrollPolicy {
         return floor((scrollUnlockDistance + desiredSlack) * activationProgress)
     }
 }
+#endif

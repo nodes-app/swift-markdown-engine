@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  TableWrappingTests.swift
 //  MarkdownEngine
@@ -119,3 +120,4 @@ struct TableWrappingTests {
         #expect(first.image.size.width != second.image.size.width)
     }
 }
+#endif

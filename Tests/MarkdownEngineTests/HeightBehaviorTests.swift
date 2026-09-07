@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  HeightBehaviorTests.swift
 //  MarkdownEngineTests
@@ -812,3 +813,4 @@ struct FullRuntimeReconfigurationTests {
         #expect(stack.container.scrollableContentHeight == scrollsTotal)
     }
 }
+#endif

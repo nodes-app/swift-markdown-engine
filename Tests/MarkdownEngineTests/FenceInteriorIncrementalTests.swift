@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  FenceInteriorIncrementalTests.swift
 //  MarkdownEngine
@@ -72,3 +73,4 @@ struct FenceInteriorIncrementalTests {
         }
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  BottomOverscrollPolicyTests.swift
 //  MarkdownEngineTests
@@ -72,3 +73,4 @@ struct BottomOverscrollPolicyTests {
         #expect(slack == 376)
     }
 }
+#endif

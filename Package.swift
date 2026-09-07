@@ -17,7 +17,10 @@ import PackageDescription
 // at link time.
 let package = Package(
     name: "MarkdownEngine",
-    platforms: [.macOS(.v14)],
+    platforms: [
+        .iOS(.v17),
+        .macOS(.v14),
+    ],
     products: [
         .library(name: "MarkdownEngine", targets: ["MarkdownEngine"]),
         .library(name: "MarkdownEngineCodeBlocks", targets: ["MarkdownEngineCodeBlocks"]),
@@ -45,6 +48,10 @@ let package = Package(
         ),
         .testTarget(
             name: "MarkdownEngineTests",
+            dependencies: ["MarkdownEngine"]
+        ),
+        .testTarget(
+            name: "MarkdownEngineIOSTests",
             dependencies: ["MarkdownEngine"]
         )
     ]

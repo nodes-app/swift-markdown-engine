@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  NativeTextView+CaretWorkarounds.swift
 //  MarkdownEngine
@@ -105,3 +106,4 @@ extension NativeTextView {
         isApplyingCaretShift = false
     }
 }
+#endif

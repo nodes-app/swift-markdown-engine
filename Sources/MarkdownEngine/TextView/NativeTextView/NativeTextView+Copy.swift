@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  NativeTextView+Copy.swift
 //  MarkdownEngine
@@ -26,3 +27,4 @@ extension NativeTextView {
                                        directiveSettings: configuration.directiveSettings)
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  MarkdownASTStyler+Directives.swift
 //  MarkdownEngine
@@ -76,3 +77,4 @@ extension MarkdownASTStyler {
         return bodyFont
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  RawSourceModeTests.swift
 //  MarkdownEngineTests
@@ -82,3 +83,4 @@ struct RawSourceModeTests {
         #expect(runs.allSatisfy { $0.font?.pointSize == 16 })
     }
 }
+#endif

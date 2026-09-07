@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  BlockBackgroundFillTests.swift
 //  MarkdownEngineTests
@@ -137,3 +138,4 @@ struct BlockBackgroundFillTests {
         #expect(fills(in: tv).isEmpty)
     }
 }
+#endif

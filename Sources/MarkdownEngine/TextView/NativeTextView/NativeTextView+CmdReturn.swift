@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  NativeTextView+CmdReturn.swift
 //  MarkdownEngine
@@ -22,3 +23,4 @@ extension NativeTextView {
         return super.performKeyEquivalent(with: event)
     }
 }
+#endif

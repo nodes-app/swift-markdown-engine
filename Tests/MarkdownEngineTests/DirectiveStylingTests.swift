@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  DirectiveStylingTests.swift
 //  MarkdownEngineTests
@@ -147,3 +148,4 @@ struct DirectiveStylingTests {
         #expect(keys([paragraph]) == keys(nil))
     }
 }
+#endif

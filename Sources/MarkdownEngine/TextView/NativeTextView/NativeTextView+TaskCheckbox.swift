@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  NativeTextView+TaskCheckbox.swift
 //  MarkdownEngine
@@ -74,3 +75,4 @@ extension NativeTextView {
         return true
     }
 }
+#endif

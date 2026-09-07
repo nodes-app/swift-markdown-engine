@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  ScrollMemoryTests.swift
 //  MarkdownEngineTests
@@ -101,3 +102,4 @@ struct ScrollMemoryTests {
         #expect(coordinator.pendingScrollRestoreDocumentId == nil)
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  BlockquotePasteTests.swift
 //  MarkdownEngineTests
@@ -62,3 +63,4 @@ struct BlockquotePasteTests {
         #expect(paste("a\nb", at: 999, into: "> ") == "a\nb")
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  DirectiveTestFixtures.swift
 //  MarkdownEngineTests
@@ -54,3 +55,4 @@ struct MarkerDirective: MarkdownDirective {
 struct SelfContainedPair: MarkdownDirective {
     var syntax: DirectiveSyntax { DirectiveSyntax(name: "pair", form: .selfContained) }
 }
+#endif

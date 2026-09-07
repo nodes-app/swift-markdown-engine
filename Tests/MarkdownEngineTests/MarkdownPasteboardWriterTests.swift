@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  MarkdownPasteboardWriterTests.swift
 //  MarkdownEngine
@@ -59,3 +60,4 @@ struct MarkdownPasteboardWriterTests {
         #expect(rtfSource.contains("example.com"))
     }
 }
+#endif

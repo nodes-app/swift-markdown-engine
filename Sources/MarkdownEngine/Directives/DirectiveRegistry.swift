@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  DirectiveRegistry.swift
 //  MarkdownEngine
@@ -167,3 +168,4 @@ extension MarkdownEditorConfiguration {
         DirectiveRegistry(directives: directives, settings: directiveSettings)
     }
 }
+#endif

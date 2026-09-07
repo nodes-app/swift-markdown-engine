@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  ContextMenuBindingTests.swift
 //  MarkdownEngineTests
@@ -131,3 +132,4 @@ struct ContextMenuBindingTests {
         #expect(coordinator.lastSyncedText == published)
     }
 }
+#endif

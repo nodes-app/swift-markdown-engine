@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  ContainerExtension.swift
 //  MarkdownEngine
@@ -61,3 +62,4 @@ public struct ContainerExtension: MarkdownExtension {
         "<blockquote>\(childrenHTML)</blockquote>"
     }
 }
+#endif

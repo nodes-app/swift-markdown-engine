@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  BlockExtensionTests.swift
 //  MarkdownEngineTests
@@ -243,3 +244,4 @@ struct BlockExtensionTests {
         #expect(BlockParser.hasBlockDelimiter(buf, 0, buf.count, fences: [Array(":::".utf16)]))
     }
 }
+#endif

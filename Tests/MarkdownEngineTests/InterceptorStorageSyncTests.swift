@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  InterceptorStorageSyncTests.swift
 //  MarkdownEngine
@@ -68,3 +69,4 @@ struct InterceptorStorageSyncTests {
         #expect(coord.lastComputedStorage == "\t- hello")
     }
 }
+#endif

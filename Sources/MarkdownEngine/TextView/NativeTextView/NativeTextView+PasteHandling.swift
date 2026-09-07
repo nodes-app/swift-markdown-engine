@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  NativeTextView+PasteHandling.swift
 //  MarkdownEngine
@@ -204,3 +205,4 @@ extension NativeTextView {
         return count
     }
 }
+#endif

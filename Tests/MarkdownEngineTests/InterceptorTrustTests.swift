@@ -1,3 +1,4 @@
+#if os(macOS)
 //
 //  InterceptorTrustTests.swift
 //  MarkdownEngine
@@ -63,3 +64,4 @@ struct InterceptorTrustTests {
         #expect(coord.debugLastEditWasTrusted == true)
     }
 }
+#endif
