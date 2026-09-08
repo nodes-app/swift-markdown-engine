@@ -189,21 +189,22 @@ extension NativeTextViewCoordinator {
 
         // Reconcile wide-table overlays after layout settles.
         if let nativeTextView = textView as? NativeTextView {
-            DispatchQueue.main.async { [weak nativeTextView] in
-                nativeTextView?.updateWideTableOverlays()
-            }
+            nativeTextView.updateWideTableOverlays()
         }
     }
 
+    @discardableResult
     func restyleTextView(
         _ textView: NSTextView,
         paragraphCandidates: [NSRange],
         tokens: [MarkdownToken]? = nil,
         classified: MarkdownStyler.ClassifiedStyleTokens? = nil,
-        blocks: [Block]? = nil
-    ) {
+        blocks: [Block]? = nil,
+        sourceText: String? = nil,
+        content: TextStylingService.RestyleContent = .all
+    ) -> [NSRange] {
         // Raw mode: no restyling; typing keeps base attrs via the typing shim.
-        guard !configuration.rawSourceMode else { return }
+        guard !configuration.rawSourceMode else { return [] }
         let (baseFont, paragraphStyle) = TextStylingService.makeBaseFontAndStyle(
             fontName: fontName,
             fontSize: fontSize,
@@ -211,7 +212,7 @@ extension NativeTextViewCoordinator {
             configuration: configuration
         )
 
-        TextStylingService.restyle(
+        let wideTableAnchorRanges = TextStylingService.restyle(
             textView: textView,
             layoutBridge: layoutBridge,
             paragraphCandidates: paragraphCandidates,
@@ -229,14 +230,18 @@ extension NativeTextViewCoordinator {
             precomputedTokens: tokens,
             classified: classified,
             precomputedBlocks: blocks,
+            sourceText: sourceText,
+            content: content,
             configuration: configuration
         )
-        // Reconcile wide-table overlays after layout settles.
-        if let nativeTextView = textView as? NativeTextView {
-            DispatchQueue.main.async { [weak nativeTextView] in
-                nativeTextView?.updateWideTableOverlays()
-            }
+        // Width-specific callers already have the exact new wide-table anchor
+        // set and reconcile it after the one full height layout. Ordinary
+        // styling still uses the coalesced storage-discovery path.
+        if case .all = content,
+           let nativeTextView = textView as? NativeTextView {
+            nativeTextView.updateWideTableOverlays()
         }
+        return wideTableAnchorRanges
     }
 
     func parsedDocument(for text: String, edit: ParseEditDescriptor? = nil) -> ParsedDocument {
@@ -301,6 +306,10 @@ extension NativeTextViewCoordinator {
             }
         }
 
+        let nsText = text as NSString
+        let tableParagraphRanges = tableTokens.compactMap {
+            $0.standaloneParagraphRange(in: nsText)
+        }
         parsedDocumentVersion &+= 1
         let parsed = ParsedDocument(
             tokens: tokens,
@@ -311,6 +320,7 @@ extension NativeTextViewCoordinator {
             wikiLinkTokens: wikiLinkTokens,
             imageEmbedTokens: imageEmbedTokens,
             tableTokens: tableTokens,
+            tableParagraphRanges: tableParagraphRanges,
             codeBlockTokensWithIndices: codeBlockTokensWithIndices,
             classified: MarkdownStyler.ClassifiedStyleTokens(
                 inlineLatex: inlineLatexIdx, blockLatex: blockLatexIdx,
@@ -408,6 +418,43 @@ extension NativeTextViewCoordinator {
         )
         restyleTextView(textView, paragraphCandidates: paragraphs, tokens: tokens,
                         classified: parsed.classified, blocks: parsed.blocks)
+    }
+
+    /// Width changes cannot alter non-table Markdown styling. Reuse the
+    /// current parse and its indexed table paragraphs, then run only the table
+    /// renderer so a resize does not traverse the generic AST or unrelated
+    /// image passes.
+    func restyleTablesForWidthChange(in textView: NSTextView) -> [NSRange] {
+        let documentText: String
+        let parsed: ParsedDocument
+        if cachedParseGeneration == parseGeneration,
+           cachedParsedLength == textView.textStorage?.length,
+           let cachedParsedText,
+           let cachedParsedDocument {
+            documentText = cachedParsedText
+            parsed = cachedParsedDocument
+        } else {
+            documentText = textView.string
+            parsed = parsedDocument(for: documentText)
+        }
+        guard !parsed.tableParagraphRanges.isEmpty else { return [] }
+
+        let nsText = documentText as NSString
+        activeTokenIndices = activeTokenIndices(
+            parsed: parsed,
+            selection: textView.selectedRange(),
+            in: nsText,
+            suppressed: !textView.isEditable
+        )
+        return restyleTextView(
+            textView,
+            paragraphCandidates: parsed.tableParagraphRanges,
+            tokens: parsed.tokens,
+            classified: parsed.classified,
+            blocks: parsed.blocks,
+            sourceText: documentText,
+            content: .tables
+        )
     }
 
     func applyInlineReplacement(_ request: InlineReplacementRequest, to textView: NSTextView) {

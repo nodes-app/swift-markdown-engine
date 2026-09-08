@@ -167,16 +167,28 @@ final class WideTableImageView: NSImageView {
 
 extension NativeTextView {
 
-    /// Coalesce overlay updates to one per runloop tick (resize fires bursts); first run is sync to avoid a load flash.
-    func updateWideTableOverlays() {
-        if wideTableOverlays.isEmpty {
-            performWideTableOverlayUpdate()
+    /// Coalesce overlay updates to one per runloop tick (resize fires bursts).
+    /// The first run is synchronous to avoid a load flash.
+    /// Width-change restyles can reconcile immediately so the visible overlay
+    /// never trails the storage attributes by one resize turn.
+    func updateWideTableOverlays(
+        immediately: Bool = false,
+        layoutAlreadySettled: Bool = false,
+        knownWideTableAnchorRanges: [NSRange]? = nil
+    ) {
+        if immediately || wideTableOverlays.isEmpty {
+            pendingWideTableOverlayUpdate = false
+            performWideTableOverlayUpdate(
+                layoutAlreadySettled: layoutAlreadySettled,
+                knownWideTableAnchorRanges: knownWideTableAnchorRanges
+            )
             return
         }
         if pendingWideTableOverlayUpdate { return }
         pendingWideTableOverlayUpdate = true
-        DispatchQueue.main.async { [weak self] in
+        RunLoop.main.perform(inModes: [.default, .eventTracking]) { [weak self] in
             guard let self else { return }
+            guard self.pendingWideTableOverlayUpdate else { return }
             self.pendingWideTableOverlayUpdate = false
             self.performWideTableOverlayUpdate()
         }
@@ -211,12 +223,14 @@ extension NativeTextView {
     }
 
     /// Walk storage; create / position / destroy overlays to match attrs.
-    func performWideTableOverlayUpdate() {
+    func performWideTableOverlayUpdate(
+        layoutAlreadySettled: Bool = false,
+        knownWideTableAnchorRanges: [NSRange]? = nil
+    ) {
         guard let storage = textStorage,
               let bridge = layoutBridge,
               let container = bridge.firstTextContainer,
-              let tlm = textLayoutManager,
-              let tcs = tlm.textContentManager as? NSTextContentStorage else {
+              let tlm = textLayoutManager else {
             removeAllWideTableOverlays()
             return
         }
@@ -229,47 +243,71 @@ extension NativeTextView {
         let host: NSView = breakout ? (superview ?? self) : self
         let viewWidth = host.bounds.width
 
-        var seenSourceIDs: Set<Int> = []
-        let fullRange = NSRange(location: 0, length: storage.length)
-
-        // Cheap presence-check first: skip the full-document layout pass when
-        // the doc has no wide tables. enumerateAttribute stops on first hit —
-        // but a MISS walks every attribute run in the document (scheduled
-        // after each restyle), so stamp it when it gets slow.
-        let presenceT0 = DispatchTime.now().uptimeNanoseconds
-        var hasAnyWideTable = false
-        storage.enumerateAttribute(.scrollableBlockSourceID, in: fullRange, options: []) { value, _, stop in
-            if value is Int { hasAnyWideTable = true; stop.pointee = true }
+        let anchorRanges: [NSRange]
+        if let knownWideTableAnchorRanges {
+            anchorRanges = knownWideTableAnchorRanges
+        } else {
+            // Ordinary edits do not carry table results, so discover anchors
+            // once. Width restyles pass their exact new anchor set and avoid
+            // this full-storage walk entirely.
+            let scanStarted = DispatchTime.now().uptimeNanoseconds
+            var discovered: [NSRange] = []
+            let fullRange = NSRange(location: 0, length: storage.length)
+            storage.enumerateAttribute(
+                .scrollableBlockSourceID,
+                in: fullRange,
+                options: []
+            ) { value, attrRange, _ in
+                if value is Int { discovered.append(attrRange) }
+            }
+            anchorRanges = discovered
+            let scanMs = Double(
+                DispatchTime.now().uptimeNanoseconds - scanStarted
+            ) / 1_000_000
+            if scanMs > 0.3 {
+                PerfTrace.stamp(
+                    "wideTableOverlay.anchorScan",
+                    scanMs,
+                    "wide=\(anchorRanges.isEmpty ? 0 : 1) docLen=\(storage.length)"
+                )
+            }
         }
-        let presenceMs = Double(DispatchTime.now().uptimeNanoseconds - presenceT0) / 1_000_000
-        if presenceMs > 0.3 {
-            PerfTrace.stamp("wideTableOverlay.presenceScan", presenceMs, "wide=\(hasAnyWideTable ? 1 : 0) docLen=\(storage.length)")
-        }
-        guard hasAnyWideTable else {
+        guard !anchorRanges.isEmpty else {
             removeAllWideTableOverlays()
             return
         }
 
+        var seenSourceIDs: Set<Int> = []
+
         // Settle layout before measuring — stale fragments would yield wrong anchor Ys.
         let overlayT0 = DispatchTime.now().uptimeNanoseconds
-        tlm.ensureLayout(for: tlm.documentRange)
+        if !layoutAlreadySettled {
+            tlm.ensureLayout(for: tlm.documentRange)
+        }
         PerfTrace.stamp("wideTableOverlay.ensureLayout(fullDoc)",
                         Double(DispatchTime.now().uptimeNanoseconds - overlayT0) / 1_000_000,
-                        "docLen=\(storage.length)")
+                        "settled=\(layoutAlreadySettled ? 1 : 0) docLen=\(storage.length)")
 
-        storage.enumerateAttribute(.scrollableBlockSourceID, in: fullRange, options: []) { value, attrRange, _ in
-            guard let sourceID = value as? Int,
-                  let image = storage.attribute(.latexImage, at: attrRange.location, effectiveRange: nil) as? NSImage else { return }
+        for attrRange in anchorRanges {
+            guard attrRange.location != NSNotFound,
+                  attrRange.location >= 0,
+                  attrRange.length > 0,
+                  attrRange.length <= storage.length,
+                  attrRange.location <= storage.length - attrRange.length,
+                  let sourceID = storage.attribute(
+                    .scrollableBlockSourceID,
+                    at: attrRange.location,
+                    effectiveRange: nil
+                  ) as? Int,
+                  let image = storage.attribute(
+                    .latexImage,
+                    at: attrRange.location,
+                    effectiveRange: nil
+                  ) as? NSImage else { continue }
             seenSourceIDs.insert(sourceID)
 
-            if let start = tcs.location(tcs.documentRange.location, offsetBy: attrRange.location),
-               let end = tcs.location(start, offsetBy: attrRange.length),
-               let textRange = NSTextRange(location: start, end: end) {
-                tlm.ensureLayout(for: textRange)
-            }
-
             let anchorRect = bridge.boundingRect(forCharacterRange: attrRange, in: container)
-            guard !anchorRect.isEmpty else { return }
+            guard !anchorRect.isEmpty else { continue }
 
             let totalHeight = (storage.attribute(.scrollableBlockTotalHeight, at: attrRange.location, effectiveRange: nil) as? CGFloat) ?? image.size.height
             // In breakout the overlay lives in the container, so add the column's X

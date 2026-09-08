@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `rendersTablesDuringLiveResize` lets embedders defer table reflow until resize ends while preserving synchronous final-width updates.
 - **Directive seam (parsing)**: opt-in named inline commands with typed
   arguments, for constructs that need a name and parameters rather than
   delimiters. A `MarkdownDirective` declares a name, a form — self-contained
@@ -62,6 +63,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   repaints selected glyphs opaque, so a colour-hidden marker came back under the
   highlight and collided with the number drawn over it. The marker's
   caret-crossing restyle signal went with the reveal.
+
+### Fixed
+- Rendered tables now follow every live editor-width change, including
+  fractional widths, and settle at the final width when window resizing ends.
 
 ### Performance
 - Scoped restyles inside a contiguous list parse and style only intersecting

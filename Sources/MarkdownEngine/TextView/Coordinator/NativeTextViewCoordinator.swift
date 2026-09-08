@@ -238,6 +238,9 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
         let wikiLinkTokens: [MarkdownToken]
         let imageEmbedTokens: [MarkdownToken]
         let tableTokens: [MarkdownToken]
+        /// Standalone table paragraphs, computed once with the parse instead
+        /// of rediscovering them from every attributed run on each resize.
+        let tableParagraphRanges: [NSRange]
         /// Code-block tokens with their index into `tokens` (active-token
         /// checks need the original index) — collected in the same single
         /// classification pass instead of a per-call full-token filter.

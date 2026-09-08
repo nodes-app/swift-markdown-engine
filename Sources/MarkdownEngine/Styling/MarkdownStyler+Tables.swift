@@ -141,7 +141,11 @@ extension MarkdownStyler {
         appearance: NSAppearance,
         availableWidth: CGFloat
     ) -> (image: NSImage, rendered: Bool) {
-        let widthKey = Int(availableWidth.rounded())
+        // Rendering consumes the exact point width. Key it losslessly as well:
+        // fractional SwiftUI/split-view widths can differ by more than 0.5 pt
+        // while rounding to the same integer, which would otherwise reuse a
+        // stale image with the wrong wrapping, height, or right inset.
+        let widthKey = Double(availableWidth).bitPattern
         // The extension registry is part of the key: `==x==` in a cell renders
         // highlighted under one config and literal under another — those must
         // never share a cached image.
@@ -249,7 +253,14 @@ extension MarkdownStyler {
             if rendered { renderedCount += 1 }
             let imageBounds = CGRect(x: 0, y: 0, width: image.size.width, height: image.size.height)
             // Wide tables → scrollable mode (NSScrollView overlay); narrow → collapsed.
-            let isWide = image.size.width > containerWidth + 0.5
+            // Geometry is fractional in split-view and SwiftUI layouts. Use
+            // only a floating-point noise allowance here; a real sub-point
+            // overflow still needs horizontal scrolling.
+            let widthEpsilon = max(
+                image.size.width.ulp,
+                containerWidth.ulp
+            ) * 8
+            let isWide = image.size.width - containerWidth > widthEpsilon
             let computedSourceID = stableTableSourceID(
                 for: source,
                 occurrenceIndex: occurrenceIndex
@@ -608,7 +619,7 @@ extension MarkdownStyler {
                 let extra = contentAvailable - sumMin
                 let totalStretch = sumMax - sumMin
                 columnWidths = zip(minWidths, maxWidths).map { mn, mx in
-                    mn + ((mx - mn) / totalStretch * extra).rounded(.down)
+                    mn + (mx - mn) / totalStretch * extra
                 }
             }
         }
@@ -738,6 +749,17 @@ extension MarkdownStyler {
     /// Container width with fallback chain for "styler runs before layout" case.
     static func effectiveContainerWidth(for ctx: StylingContext) -> CGFloat {
         if let container = ctx.layoutBridge?.firstTextContainer {
+            // During SwiftUI-hosted window resizing, NSTextView bounds can be
+            // updated before a width-tracking NSTextContainer publishes its
+            // derived size. The view is the width owner in this mode, so use
+            // its live geometry instead of rerasterizing tables at a stale
+            // container width. Fixed reading columns do not track the view and
+            // continue to use their explicit container width below.
+            if container.widthTracksTextView, let textView = container.textView {
+                let inset = textView.textContainerInset
+                let usable = textView.bounds.width - inset.width * 2
+                if usable.isFinite, usable > 0 { return usable }
+            }
             let raw = container.size.width
             if raw.isFinite, raw > 0, raw < 100_000 { return raw }
             if let textView = container.textView {
