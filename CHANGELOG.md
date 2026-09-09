@@ -63,6 +63,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   highlight and collided with the number drawn over it. The marker's
   caret-crossing restyle signal went with the reveal.
 
+### Fixed
+- Block LaTeX formulas now use display typesetting, so large-operator limits
+  and fractions render correctly.
+
 ### Performance
 - Scoped restyles inside a contiguous list parse and style only intersecting
   items instead of rebuilding the whole list block. Marker, indentation,
