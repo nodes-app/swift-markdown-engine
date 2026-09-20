@@ -72,6 +72,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   caret-crossing restyle signal went with the reveal.
 
 ### Fixed
+- Block LaTeX formulas now use display typesetting, so large-operator limits
+  and fractions render correctly.
 - Rendered tables now follow every live editor-width change, including
   fractional widths, and settle at the final width when window resizing ends.
 

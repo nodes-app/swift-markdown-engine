@@ -31,7 +31,12 @@ extension MarkdownStyler {
             if isActive {
                 appendSecondaryMarkers(for: token, to: &attrs, theme: ctx.configuration.theme)
             } else if !latexContent.isEmpty,
-                      let entry = ctx.services.latex.render(latex: latexContent, fontSize: latexFontSize, theme: ctx.configuration.theme) {
+                      let entry = ctx.services.latex.render(
+                          latex: latexContent,
+                          mode: .display,
+                          fontSize: latexFontSize,
+                          theme: ctx.configuration.theme
+                      ) {
                 _ = appendRenderedStandaloneBlock(
                     for: token,
                     rawContent: rawLatexContent,
@@ -111,7 +116,12 @@ extension MarkdownStyler {
                     renderTheme.latexLightModeText = renderTheme.mutedText
                     renderTheme.latexDarkModeText = renderTheme.mutedText
                 }
-                if let entry = ctx.services.latex.render(latex: latexContent, fontSize: latexFontSize, theme: renderTheme) {
+                if let entry = ctx.services.latex.render(
+                    latex: latexContent,
+                    mode: .inline,
+                    fontSize: latexFontSize,
+                    theme: renderTheme
+                ) {
                     let imageBounds = CGRect(x: 0, y: entry.baselineOffset, width: entry.size.width, height: entry.size.height)
                     let contentLength = token.contentRange.length
 
