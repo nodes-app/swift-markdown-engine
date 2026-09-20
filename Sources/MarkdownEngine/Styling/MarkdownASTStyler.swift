@@ -441,8 +441,25 @@ enum MarkdownASTStyler {
             // LEFT of the content (`boxX = contentX - size - gap`), so a task
             // line gets exactly that much room and not a point more. Without
             // it the box lands at x ≈ -9, off the edge (measured).
+            //
+            // Everything else here mirrors the BASE paragraph style
+            // (`TextStylingService.makeBaseFontAndStyle`) rather than being
+            // left at its defaults. A paragraph style replaces the base one
+            // wholesale, so an unpinned line height let the line fall back to
+            // the font's natural height: the content height flipped 26 ↔ 24
+            // as the line crossed in and out of being a task item, and the
+            // text below jumped by those 2pt on the way.
             let room = max(0, TaskCheckboxGeometry.size(for: ctx.baseFont)
                               + TaskCheckboxGeometry.gap - markerWidth)
+            ps.minimumLineHeight = ctx.baseLineHeight + ctx.config.paragraph.lineHeightExtraSpacing
+            ps.lineSpacing = 0
+            ps.paragraphSpacing = ctx.baseParagraphSpacing
+            ps.paragraphSpacingBefore = 0
+            ps.lineBreakMode = .byWordWrapping
+            ps.tabStops = (1...24).map {
+                NSTextTab(textAlignment: .left, location: CGFloat($0) * ctx.config.lists.indentPerLevel)
+            }
+            ps.defaultTabInterval = 0
             ps.firstLineHeadIndent = room
             ps.headIndent = room + markerWidth
             attrs.append((line, [.paragraphStyle: ps]))

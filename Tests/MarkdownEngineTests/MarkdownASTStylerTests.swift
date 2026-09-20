@@ -45,6 +45,14 @@ struct MarkdownASTStylerTests {
         #expect((para?.firstLineHeadIndent ?? 0) + markerWidth >= boxSize + TaskCheckboxGeometry.gap - 0.5)
         // …and not a point more: helpers off means no list indent.
         #expect((para?.firstLineHeadIndent ?? 0) < config.lists.indentPerLevel)
+        // A paragraph style replaces the base one wholesale, so the line
+        // metrics have to be carried over with it. Left unpinned, the line fell
+        // back to the font's natural height and the document height flipped
+        // 26 ↔ 24 as the line crossed into being a task item — the text below
+        // jumped by those 2pt while the raw syntax was still on screen.
+        let expectedLineHeight = ceil(font.ascender - font.descender + font.leading)
+            + config.paragraph.lineHeightExtraSpacing
+        #expect(para?.minimumLineHeight == expectedLineHeight)
     }
 
     @MainActor
