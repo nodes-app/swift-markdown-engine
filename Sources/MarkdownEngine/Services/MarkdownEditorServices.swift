@@ -130,6 +130,17 @@ public protocol SyntaxHighlighter: Sendable {
     /// to this notification so it can invalidate cached attributes.
     /// Return `nil` if the highlighter never changes after construction.
     var appearanceDidChangeNotification: Notification.Name? { get }
+
+    /// Coarse fingerprint of the highlighter's current identity (theme name,
+    /// mode, whatever selects one output over another). A different value
+    /// triggers services re-adoption so code blocks repaint under the new
+    /// highlighter. Defaults to `0`, so a highlighter that never swaps needs
+    /// no implementation.
+    func fingerprint() -> AnyHashable
+}
+
+public extension SyntaxHighlighter {
+    func fingerprint() -> AnyHashable { 0 }
 }
 
 /// Default highlighter that produces no highlighting and supplies a
