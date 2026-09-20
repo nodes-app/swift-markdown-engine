@@ -251,9 +251,22 @@ enum HTMLToMarkdownConverter {
         if ordered, let start = node.attrs["start"], let seed = Int(start) {
             number = seed - 1
         }
-        for child in node.children where child.name == "li" {
-            number += 1
-            items.append(renderListItem(child, ordered: ordered, number: number, depth: depth))
+        for child in node.children {
+            switch child.name {
+            case "li":
+                number += 1
+                items.append(renderListItem(child, ordered: ordered, number: number, depth: depth))
+            case "ul", "ol":
+                // WebKit indents a bullet by hanging the sublist BESIDE the
+                // <li> instead of inside it — 6 of 6 nestings in a real Apple
+                // Mail paste. Invalid per spec, drawn correctly by every
+                // browser, so only a reader loses it: ignoring a non-<li>
+                // child dropped every item the sublist held (#1098).
+                let sub = renderList(child, ordered: child.name == "ol", depth: depth + 1)
+                if !sub.isEmpty { items.append(sub) }
+            default:
+                continue
+            }
         }
         return items.joined(separator: "\n")
     }

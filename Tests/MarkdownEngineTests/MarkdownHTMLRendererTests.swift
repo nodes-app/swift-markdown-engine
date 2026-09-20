@@ -40,6 +40,13 @@ struct MarkdownHTMLRendererTests {
         #expect(html("1. a\n2. b") == "<ol>\n<li>a</li>\n<li>b</li>\n</ol>")
     }
 
+    @Test("an indented item nests inside its parent <li> instead of flattening")
+    func nestedList() {
+        #expect(html("- a\n\t- b") == "<ul>\n<li>a\n<ul>\n<li>b</li>\n</ul>\n</li>\n</ul>")
+        #expect(html("- a\n\t1. b\n- c")
+                == "<ul>\n<li>a\n<ol>\n<li>b</li>\n</ol>\n</li>\n<li>c</li>\n</ul>")
+    }
+
     @Test("task list keeps GFM checkbox markup (rich flavors strip it)")
     func taskList() {
         #expect(html("- [ ] todo\n- [x] done") == "<ul>\n<li><input type=\"checkbox\" disabled> todo</li>\n<li><input type=\"checkbox\" checked disabled> done</li>\n</ul>")
