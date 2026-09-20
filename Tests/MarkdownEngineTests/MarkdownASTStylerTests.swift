@@ -18,6 +18,36 @@ struct MarkdownASTStylerTests {
     private var fontName: String { NSFont.systemFont(ofSize: 14).fontName }
 
     @MainActor
+    @Test("a task item keeps its box with list helpers off (#1031)")
+    func taskCheckboxSurvivesHelpersOff() {
+        _ = NSApplication.shared
+        var config = MarkdownEditorConfiguration.default
+        config.lists.helpersEnabled = false
+        let attrs = MarkdownASTStyler.styleAttributes(
+            text: "- [ ] todo\n- plain\n",
+            fontName: fontName,
+            fontSize: base,
+            configuration: config
+        )
+        // The attribute IS the checkbox: drawing, hit test and toggle all read
+        // it, so without it the feature does not exist.
+        #expect(attrs.contains { $0.attributes[.taskCheckbox] != nil })
+        // `- ` → `•` is an editing helper by the setting's own promise and
+        // stays off — this fix is about the box, not about re-rendering lists.
+        #expect(!attrs.contains { $0.attributes[.bulletMarker] != nil })
+        let font = NSFont(name: fontName, size: base) ?? .systemFont(ofSize: base)
+        let boxSize = TaskCheckboxGeometry.size(for: font)
+        let markerWidth = ("- " as NSString).size(withAttributes: [.font: font]).width
+        let para = attrs.compactMap { $0.attributes[.paragraphStyle] as? NSParagraphStyle }.first
+        #expect(para != nil)
+        // The box is drawn to the LEFT of the content, so the line owes it
+        // exactly that much room — measured: without it the box sat at x ≈ -9.
+        #expect((para?.firstLineHeadIndent ?? 0) + markerWidth >= boxSize + TaskCheckboxGeometry.gap - 0.5)
+        // …and not a point more: helpers off means no list indent.
+        #expect((para?.firstLineHeadIndent ?? 0) < config.lists.indentPerLevel)
+    }
+
+    @MainActor
     @Test("scoped styling of a continuous list emits only intersecting ranges")
     func scopedContinuousListEmitsOnlyIntersectingRanges() {
         _ = NSApplication.shared
