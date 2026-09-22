@@ -149,6 +149,10 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var wikiVerifyCounter: UInt = 0
 
     var pendingEditedRange: NSRange? = nil
+    /// A link's opaque `.wikiLinkID`, captured when the proposed edit rewrites
+    /// characters that were entirely inside one name run, so `textDidChange` can
+    /// re-apply it to the replacement text. See its use site for why.
+    var pendingWikiLinkIDCarry: (id: String, location: Int)? = nil
     /// Exact pre-edit descriptor paired with `pendingEditedRange`. It is
     /// published only when one accepted proposal produces the change event.
     var pendingTextMutation: MarkdownTextMutation?

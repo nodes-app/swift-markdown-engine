@@ -155,12 +155,7 @@ public enum WikiLinkService {
             let contentRange = NSRange(location: matchRange.location + openMarker, length: contentLength)
             let name = nsDisplay.substring(with: contentRange)
 
-            var linkID: String? = nil
-            if contentRange.length > 0 {
-                if let idAttr = textStorage?.attribute(.wikiLinkID, at: contentRange.location, effectiveRange: nil) as? String {
-                    linkID = idAttr
-                }
-            }
+            var linkID: String? = recoveredLinkID(in: textStorage, contentRange: contentRange)
             if linkID == nil {
                 linkID = existingMetadata[RangeKey(matchRange)]?.id
             }
@@ -187,6 +182,29 @@ public enum WikiLinkService {
         }
 
         return (storage, metadata)
+    }
+
+    /// First `.wikiLinkID` carried anywhere inside a link's name run.
+    ///
+    /// Reading only `contentRange.location` silently dropped the suffix whenever a
+    /// character was inserted at the START of the name (typed text takes the base
+    /// typing attributes, not the run's), or the whole name was selected and
+    /// retyped: the id was still on the surviving characters, but the probe landed
+    /// on the fresh one and the writeback wrote a suffix-less `[[Name]]` — losing
+    /// the id from the document for good. The styler re-applies the attribute
+    /// uniformly over the run on the next restyle, so scanning the run costs one
+    /// attribute lookup in the normal case.
+    private static func recoveredLinkID(in textStorage: NSTextStorage?, contentRange: NSRange) -> String? {
+        guard let textStorage, contentRange.length > 0,
+              NSMaxRange(contentRange) <= textStorage.length else { return nil }
+        var found: String?
+        textStorage.enumerateAttribute(.wikiLinkID, in: contentRange, options: []) { value, _, stop in
+            if let id = value as? String, !id.isEmpty {
+                found = id
+                stop.pointee = true
+            }
+        }
+        return found
     }
 
     /// Incremental counterpart to `makeStorageState`: splice a single contiguous
