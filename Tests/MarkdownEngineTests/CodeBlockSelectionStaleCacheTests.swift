@@ -66,6 +66,44 @@ struct CodeBlockSelectionStaleCacheTests {
         #expect(!codes.contains(where: { $0.contains("alpha") }))
     }
 
+    @Test("a longer replacement document is not given the old document's blocks")
+    func longerReplacementDocument() {
+        // The length guard only catches ranges that no longer FIT. When the
+        // incoming document is LONGER, the previous document's ranges are still
+        // in bounds and nothing stops them — the block is reported against text
+        // that holds no code at all, with a slice of that text as its code.
+        let docA = "```swift\nlet alpha = 1\n```\n"
+        let docB = "This is an ordinary prose document with no code block at all. "
+            + String(repeating: "More filler so it runs comfortably longer than the last one. ", count: 4)
+        let (coordinator, tv) = makeEditor(docA)
+        coordinator.updateCodeBlockSelection(textView: tv, parsed: coordinator.parsedDocument(for: docA))
+
+        coordinator.rebuildTextStorageAndStyle(tv, from: docB)
+        var received: [CodeBlockSelection]?
+        coordinator.onCodeBlockSelectionChange = { received = $0 }
+        coordinator.updateCodeBlockSelection(textView: tv)
+
+        #expect(received?.isEmpty == true)
+    }
+
+    @Test("raw source mode reports no code blocks")
+    func rawSourceModeReportsNothing() {
+        // Raw mode draws no overlays. The cache used to survive the switch into
+        // it, so an embedder arriving from styled mode kept its copy buttons
+        // while one opening straight into raw mode never had them.
+        let doc = "intro\n```swift\nlet alpha = 1\n```\nmore"
+        let (coordinator, tv) = makeEditor(doc)
+        coordinator.updateCodeBlockSelection(textView: tv, parsed: coordinator.parsedDocument(for: doc))
+
+        coordinator.configuration.rawSourceMode = true
+        coordinator.rebuildTextStorageAndStyle(tv, from: doc)
+        var received: [CodeBlockSelection]?
+        coordinator.onCodeBlockSelectionChange = { received = $0 }
+        coordinator.updateCodeBlockSelection(textView: tv)
+
+        #expect(received?.isEmpty == true)
+    }
+
     @Test("a stale range past the end of the text is skipped, not substringed")
     func staleRangeIsSkipped() {
         let (coordinator, tv) = makeEditor("short")

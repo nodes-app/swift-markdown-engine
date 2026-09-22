@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- A programmatic content swap — a document switch, or the SwiftUI `text` binding
+  changing from outside the editor — left the code-block selection pass reading
+  the PREVIOUS document's ranges: only the typing and caret paths refreshed that
+  cache, never the rebuild. The length guard from #151 stops the resulting
+  `NSRangeException`, but only for ranges that no longer fit; an incoming
+  document that is LONGER keeps them in bounds, so a copy button was reported
+  over ordinary prose, carrying a slice of that prose as its code. The rebuild
+  now hands its own parse to the cache.
+
+### Changed
+- Raw source mode reports no code blocks. It draws no overlays either way, but
+  the token cache used to survive the switch into it, so an embedder arriving
+  from styled mode kept its copy buttons while one opening straight into raw
+  mode never had them. Now neither does.
+
 ## [0.13.0] - 2026-09-20
 
 ### Added
