@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- A link or image embed no longer loses its opaque id to an edit that rewrites
+  its name. `makeStorageState` scans the name's `.wikiLinkID` run instead of
+  probing its first character, an edit confined to one name carries the id
+  across, and `copy` puts the storage form on the private pasteboard flavor
+  rather than the buffer's display text.
+
 ## [0.13.0] - 2026-09-20
 
 ### Added
