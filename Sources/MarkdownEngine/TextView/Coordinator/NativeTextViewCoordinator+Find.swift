@@ -39,6 +39,12 @@ extension NativeTextViewCoordinator {
         guard let tv = textView,
               let info = notification.userInfo,
               let query = info["query"] as? String else { return }
+        // Every live coordinator hears this (`object: nil`), and an editor the host
+        // has routed away from can outlive its view for a while — it is not the
+        // document being searched, and its answer would overwrite the real one's.
+        // Measured: 24 coordinators replying to one ⌘F, 22 of them windowless with
+        // an empty buffer, each reporting 0 matches and resetting the host's index.
+        guard tv.window != nil else { return }
         let requestedIndex = info["currentIndex"] as? Int ?? 0
 
         let allRanges = findMatches(of: query, in: tv.string as NSString)
@@ -217,6 +223,7 @@ extension NativeTextViewCoordinator {
             // Only scroll when the match is off-screen; reveal it a little below the top.
             if frame.minY < visibleTop || frame.maxY > visibleBottom {
                 let targetY = frame.minY - insetsTop - cv.bounds.height * 0.2
+                (scrollView as? ClampedScrollView)?.cancelPendingScrollRestore()
                 cv.scroll(to: NSPoint(x: cv.bounds.origin.x, y: targetY))
                 scrollView.reflectScrolledClipView(cv)
                 (scrollView as? ClampedScrollView)?.clampToInsets()

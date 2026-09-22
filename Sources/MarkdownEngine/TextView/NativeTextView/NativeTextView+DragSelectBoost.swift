@@ -92,6 +92,7 @@ extension NativeTextView {
         }
 
         let origin = scrollView.contentView.bounds.origin
+        (scrollView as? ClampedScrollView)?.cancelPendingScrollRestore()
         scrollView.contentView.scroll(to: NSPoint(x: origin.x, y: origin.y + dragPolicy.scrollStepPerTick * direction))
         scrollView.reflectScrolledClipView(scrollView.contentView)
         (scrollView as? ClampedScrollView)?.clampToInsets()

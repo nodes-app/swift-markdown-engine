@@ -20,8 +20,20 @@ import SwiftUI
 public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var documentId: String?
     /// Remembered scroll offset (`bounds.origin.y`) per `documentId` — saved on
-    /// switch-away, restored on switch-back.
+    /// switch-away, restored on switch-back. Dies with the coordinator, so an
+    /// embedder that unmounts the editor supplies the two closures below instead.
     var scrollOffsets: [String: CGFloat] = [:]
+    /// Embedder-owned scroll memory that outlives this coordinator. `persist` is
+    /// also called from `dismantleNSView`; `restore` returning nil opens at top.
+    var onPersistScrollOffset: ((String, CGFloat) -> Void)?
+    var restoreScrollOffset: ((String) -> CGFloat?)?
+    /// documentId whose remembered offset still has to be applied, and how many
+    /// update passes it may keep trying. A remount is not a switch (SwiftUI seeds
+    /// `documentId` in `makeCoordinator`) and its first pass still carries the
+    /// embedder's empty buffer, so the offset can only land on a later pass. The
+    /// budget bounds it: a document that really got shorter must not keep yanking.
+    var pendingScrollRestoreDocumentId: String?
+    var pendingScrollRestoreAttempts = 0
     /// Per-`documentId` undo manager. AppKit reuses a single `NSTextView` across
     /// all open documents, so its built-in (view-wide) undo manager would mix
     /// files together. Keying a manager on the current document gives each file
@@ -66,6 +78,7 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var layoutDelegate: MarkdownLayoutManagerDelegate?
     var onLinkClick: ((String) -> Void)?
     var onCaretRectChange: ((CGRect) -> Void)?
+    var onTextMutation: ((MarkdownTextMutation) -> Void)?
     /// Embedder hook to build the right-click menu (the engine ships none). Gets the
     /// default menu + current selection range, returns the menu to show.
     var onBuildContextMenu: ((NSMenu, NSRange) -> NSMenu)?
@@ -106,9 +119,9 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     /// extension block fence — captured in shouldChangeTextIn so a DELETED
     /// fence still forces the full restyle in textDidChange.
     var pendingExtFenceTouched = false
-    /// Set in shouldChangeTextIn when an edit adds/removes a line break (an
-    /// ordered-list item was inserted/removed → every following number shifts);
-    /// consumed once in textDidChange to restyle the whole ordered run.
+    /// Set in shouldChangeTextIn when an edit changes list-leading syntax or a
+    /// line break, which can shift every following ordered number; consumed
+    /// once in textDidChange to restyle the affected ordered run.
     var pendingListStructureEdit = false
     /// Set when the storage mutated without the census bookkeeping seeing it
     /// (IME composition) — forces the next census back to a full scan.
@@ -136,6 +149,9 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var wikiVerifyCounter: UInt = 0
 
     var pendingEditedRange: NSRange? = nil
+    /// Exact pre-edit descriptor paired with `pendingEditedRange`. It is
+    /// published only when one accepted proposal produces the change event.
+    var pendingTextMutation: MarkdownTextMutation?
     /// Proposed-edit cycles since the last completed textDidChange. Exactly 1
     /// means the hoisted editedRange/lengthDelta describe a single tracked
     /// edit and incremental fast paths may trust them.
@@ -222,6 +238,9 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
         let wikiLinkTokens: [MarkdownToken]
         let imageEmbedTokens: [MarkdownToken]
         let tableTokens: [MarkdownToken]
+        /// Standalone table paragraphs, computed once with the parse instead
+        /// of rediscovering them from every attributed run on each resize.
+        let tableParagraphRanges: [NSRange]
         /// Code-block tokens with their index into `tokens` (active-token
         /// checks need the original index) — collected in the same single
         /// classification pass instead of a per-call full-token filter.
@@ -404,6 +423,13 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     // Find-in-document highlight handlers live in
     // `NativeTextViewCoordinator+Find.swift`.
 
+    /// Four passes: a remount needs two (empty buffer, then the real content) and
+    /// the header's hosting view can still resolve its height after that.
+    func armScrollRestore(for documentId: String) {
+        pendingScrollRestoreDocumentId = documentId
+        pendingScrollRestoreAttempts = 4
+    }
+
     func wikiLinkID(for range: NSRange) -> String? {
         wikiLinkMetadata[WikiLinkService.RangeKey(range)]?.id
     }
@@ -466,4 +492,3 @@ extension NSTextView {
         return boundingRect
     }
 }
-

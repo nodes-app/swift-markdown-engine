@@ -141,7 +141,11 @@ extension MarkdownStyler {
         appearance: NSAppearance,
         availableWidth: CGFloat
     ) -> (image: NSImage, rendered: Bool) {
-        let widthKey = Int(availableWidth.rounded())
+        // Rendering consumes the exact point width. Key it losslessly as well:
+        // fractional SwiftUI/split-view widths can differ by more than 0.5 pt
+        // while rounding to the same integer, which would otherwise reuse a
+        // stale image with the wrong wrapping, height, or right inset.
+        let widthKey = Double(availableWidth).bitPattern
         // The extension registry is part of the key: `==x==` in a cell renders
         // highlighted under one config and literal under another — those must
         // never share a cached image.
@@ -249,7 +253,14 @@ extension MarkdownStyler {
             if rendered { renderedCount += 1 }
             let imageBounds = CGRect(x: 0, y: 0, width: image.size.width, height: image.size.height)
             // Wide tables → scrollable mode (NSScrollView overlay); narrow → collapsed.
-            let isWide = image.size.width > containerWidth + 0.5
+            // Geometry is fractional in split-view and SwiftUI layouts. Use
+            // only a floating-point noise allowance here; a real sub-point
+            // overflow still needs horizontal scrolling.
+            let widthEpsilon = max(
+                image.size.width.ulp,
+                containerWidth.ulp
+            ) * 8
+            let isWide = image.size.width - containerWidth > widthEpsilon
             let computedSourceID = stableTableSourceID(
                 for: source,
                 occurrenceIndex: occurrenceIndex
@@ -270,6 +281,7 @@ extension MarkdownStyler {
                 paragraphSpacing: ctx.baseDefaultLineHeight * 0.5,
                 alignment: .left,
                 mode: mode,
+                restyleOnWidthChange: true,
                 ctx: ctx,
                 attrs: &attrs
             )
@@ -309,13 +321,37 @@ extension MarkdownStyler {
         return ParsedTable(header: paddedHeader, alignments: paddedAlign, rows: rows)
     }
 
+    /// Splits on UNESCAPED `|` only. GFM escapes the delimiter as `\\|`, and
+    /// the escape wins over every inline context (a table row is split before
+    /// inline parsing runs) — so a cell holding `` `a \\| b` `` is one cell, not
+    /// two. Splitting on the raw character silently truncated such a row to the
+    /// header's column count.
     private static func parseTableRow(_ line: String) -> [String] {
-        var s = line.trimmingCharacters(in: .whitespaces)
-        if s.hasPrefix("|") { s.removeFirst() }
-        if s.hasSuffix("|") { s.removeLast() }
-        return s.split(separator: "|", omittingEmptySubsequences: false).map {
-            $0.trimmingCharacters(in: .whitespaces)
+        var s = Substring(line.trimmingCharacters(in: .whitespaces))
+        if s.hasPrefix("|") { s = s.dropFirst() }
+        if s.hasSuffix("|"), !s.dropLast().hasSuffix("\\") { s = s.dropLast() }
+
+        var cells: [String] = []
+        var current = ""
+        var escaped = false
+        for ch in s {
+            if escaped {
+                // Only the delimiter escape is resolved here; every other `\x`
+                // stays intact so inline parsing still owns its own escapes.
+                if ch == "|" { current.append("|") } else { current.append("\\"); current.append(ch) }
+                escaped = false
+            } else if ch == "\\" {
+                escaped = true
+            } else if ch == "|" {
+                cells.append(current.trimmingCharacters(in: .whitespaces))
+                current = ""
+            } else {
+                current.append(ch)
+            }
         }
+        if escaped { current.append("\\") }
+        cells.append(current.trimmingCharacters(in: .whitespaces))
+        return cells
     }
 
     private static func parseTableAlignments(_ line: String) -> [TableAlignment] {
@@ -333,6 +369,16 @@ extension MarkdownStyler {
     }
 
     // MARK: - Inline-formatted cell strings
+
+    /// `<br>` → a real newline. A GFM row IS one source line, so `<br>` is the
+    /// only in-cell line break the format has; without this it drew literally.
+    static func expandCellLineBreaks(_ raw: String) -> String {
+        raw.replacingOccurrences(
+            of: #"<br\s*/?>"#,
+            with: "\n",
+            options: [.regularExpression, .caseInsensitive]
+        )
+    }
 
     /// Raw cell → `NSAttributedString`: inline markdown applied, markers stripped, LaTeX as attachments.
     static func formattedCellString(
@@ -353,6 +399,9 @@ extension MarkdownStyler {
         let out = NSMutableAttributedString()
         var extensionsByID: [String: any MarkdownExtension] = [:]
         for ext in extensions { extensionsByID[ext.id] = ext }
+        // Substituted BEFORE inline parsing so the AST offsets index the same
+        // string that gets drawn.
+        let raw = expandCellLineBreaks(raw)
         appendInlineCell(
             InlineParser.parse(raw, registry: ExtensionRegistry(extensions: extensions)),
             in: raw as NSString, into: out,
@@ -417,15 +466,28 @@ extension MarkdownStyler {
                     recurse(extNode.children, font)
                 }
                 if out.length > start, let ext = extensionsByID[extNode.extensionID] {
-                    out.addAttributes(ext.contentAttributes(theme: theme),
-                                      range: NSRange(location: start, length: out.length - start))
+                    let span = NSRange(location: start, length: out.length - start)
+                    var attributes = ext.contentAttributes(theme: theme)
+                    // A cell rasterizes through NSAttributedString drawing, which
+                    // knows nothing of the line-box fill the layout fragment paints
+                    // — fall back to the glyph-box background so a highlight inside
+                    // a table still has one.
+                    if let fill = attributes.removeValue(forKey: .markdownBlockBackground) {
+                        attributes[.backgroundColor] = fill
+                    }
+                    out.addAttributes(attributes, range: span)
                 }
             case .code(_, let content):
                 out.append(NSAttributedString(string: ns.substring(with: content), attributes: [
                     .font: codeFont, .backgroundColor: codeBackgroundColor, .foregroundColor: theme.bodyText
                 ]))
             case .inlineLatex(let range, let content, _):
-                if let entry = latex.render(latex: ns.substring(with: content), fontSize: pointSize, theme: theme) {
+                if let entry = latex.render(
+                    latex: ns.substring(with: content),
+                    mode: .inline,
+                    fontSize: pointSize,
+                    theme: theme
+                ) {
                     let attachment = NSTextAttachment()
                     attachment.image = entry.image
                     attachment.bounds = CGRect(x: 0, y: entry.baselineOffset,
@@ -519,8 +581,17 @@ extension MarkdownStyler {
         }
         var maxWidths = [CGFloat](repeating: minColumnContentWidth, count: columnCount)
         var minWidths = [CGFloat](repeating: minColumnContentWidth, count: columnCount)
+        // `size()` lays a cell out as ONE line, so a cell broken by `<br>`
+        // would report the sum of its lines as its natural width.
+        func naturalWidth(_ cell: NSAttributedString) -> CGFloat {
+            guard cell.string.contains("\n") else { return ceil(cell.size().width) }
+            return ceil(cell.boundingRect(
+                with: NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin]
+            ).width)
+        }
         func considerCell(_ cell: NSAttributedString, col: Int) {
-            maxWidths[col] = max(maxWidths[col], ceil(cell.size().width))
+            maxWidths[col] = max(maxWidths[col], naturalWidth(cell))
             minWidths[col] = max(minWidths[col], widestUnbreakableSegment(cell))
         }
         for (i, cell) in headerCells.enumerated() where i < columnCount {
@@ -553,7 +624,7 @@ extension MarkdownStyler {
                 let extra = contentAvailable - sumMin
                 let totalStretch = sumMax - sumMin
                 columnWidths = zip(minWidths, maxWidths).map { mn, mx in
-                    mn + ((mx - mn) / totalStretch * extra).rounded(.down)
+                    mn + (mx - mn) / totalStretch * extra
                 }
             }
         }
@@ -683,6 +754,17 @@ extension MarkdownStyler {
     /// Container width with fallback chain for "styler runs before layout" case.
     static func effectiveContainerWidth(for ctx: StylingContext) -> CGFloat {
         if let container = ctx.layoutBridge?.firstTextContainer {
+            // During SwiftUI-hosted window resizing, NSTextView bounds can be
+            // updated before a width-tracking NSTextContainer publishes its
+            // derived size. The view is the width owner in this mode, so use
+            // its live geometry instead of rerasterizing tables at a stale
+            // container width. Fixed reading columns do not track the view and
+            // continue to use their explicit container width below.
+            if container.widthTracksTextView, let textView = container.textView {
+                let inset = textView.textContainerInset
+                let usable = textView.bounds.width - inset.width * 2
+                if usable.isFinite, usable > 0 { return usable }
+            }
             let raw = container.size.width
             if raw.isFinite, raw > 0, raw < 100_000 { return raw }
             if let textView = container.textView {

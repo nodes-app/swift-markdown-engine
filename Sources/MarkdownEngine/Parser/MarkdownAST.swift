@@ -74,27 +74,86 @@ enum DocumentAST {
                       registry: ExtensionRegistry = .empty) -> [BlockNode] {
         let ns = text as NSString
         let blocks = precomputedBlocks ?? BlockParser.parse(text, registry: registry)
+        let normalizedScopes = scopedRanges.map {
+            normalizeScopes($0, documentLength: ns.length)
+        }
         // Scoped mode: skip building BlockNodes for blocks outside the edit.
         // Blocks tile the document in order, so one sweep over sorted candidate
         // ranges replaces scanning every candidate per block (which went
         // quadratic in formula-rich documents with dozens of candidates).
-        let relevant: [Block]
-        if let scopedRanges {
-            let sorted = scopedRanges
-                .filter { $0.location != NSNotFound && $0.length > 0 }
-                .sorted { $0.location < $1.location }
-            var out: [Block] = []
+        let relevant: [(block: Block, scopes: [NSRange]?)]
+        if let normalizedScopes {
+            var out: [(Block, [NSRange]?)] = []
             var ci = 0
             for block in blocks {
-                while ci < sorted.count, NSMaxRange(sorted[ci]) <= block.range.location { ci += 1 }
-                guard ci < sorted.count else { break }
-                if sorted[ci].location < NSMaxRange(block.range) { out.append(block) }
+                while ci < normalizedScopes.count,
+                      NSMaxRange(normalizedScopes[ci]) <= block.range.location {
+                    ci += 1
+                }
+                guard ci < normalizedScopes.count else { break }
+                var intersections: [NSRange] = []
+                var si = ci
+                while si < normalizedScopes.count,
+                      normalizedScopes[si].location < NSMaxRange(block.range) {
+                    intersections.append(normalizedScopes[si])
+                    si += 1
+                }
+                if !intersections.isEmpty {
+                    out.append((block, intersections))
+                }
             }
             relevant = out
         } else {
-            relevant = blocks
+            relevant = blocks.map { ($0, nil) }
         }
-        return relevant.map { node(for: $0, ns: ns, scopedRanges: scopedRanges, registry: registry) }
+        return relevant.map { candidate in
+            node(
+                for: candidate.block,
+                ns: ns,
+                scopedRanges: candidate.scopes,
+                registry: registry
+            )
+        }
+    }
+
+    /// Reject malformed UTF-16 ranges, then merge them once so every scoped
+    /// consumer can use the same monotonic view of the edit region.
+    private static func normalizeScopes(
+        _ ranges: [NSRange],
+        documentLength: Int
+    ) -> [NSRange] {
+        let sorted = ranges.compactMap { range -> NSRange? in
+            guard range.location != NSNotFound,
+                  range.location >= 0,
+                  range.length > 0 else { return nil }
+            let (end, overflowed) = range.location.addingReportingOverflow(
+                range.length
+            )
+            guard !overflowed, end <= documentLength else { return nil }
+            return range
+        }
+        .sorted {
+            $0.location == $1.location
+                ? $0.length < $1.length
+                : $0.location < $1.location
+        }
+
+        var result: [NSRange] = []
+        result.reserveCapacity(sorted.count)
+        for range in sorted {
+            guard let previous = result.last else {
+                result.append(range)
+                continue
+            }
+            let previousEnd = NSMaxRange(previous)
+            guard range.location <= previousEnd else {
+                result.append(range)
+                continue
+            }
+            let end = max(previousEnd, NSMaxRange(range))
+            result[result.count - 1].length = end - previous.location
+        }
+        return result
     }
 
     private static func inScope(_ range: NSRange, _ scopedRanges: [NSRange]?) -> Bool {
@@ -112,7 +171,12 @@ enum DocumentAST {
         case .blockquote:
             return .blockquote(range: block.range, inlines: scoped ? InlineParser.parse(ns, range: block.range, registry: registry) : [])
         case .list:
-            return list(block.range, ns, scoped: scoped, registry: registry)
+            return list(
+                block.range,
+                ns,
+                scopedRanges: scopedRanges,
+                registry: registry
+            )
         case .fencedCode:
             return .codeBlock(range: block.range)
         case .blockLatex:
@@ -187,15 +251,62 @@ enum DocumentAST {
                         inlines: scoped ? InlineParser.parse(ns, range: contentRange, registry: registry) : [])
     }
 
-    /// Split a list block into one `ListItem` per physical line.
-    private static func list(_ range: NSRange, _ ns: NSString, scoped: Bool = true, registry: ExtensionRegistry = .empty) -> BlockNode {
+    /// Split a list block into physical items. Scoped passes derive their lines
+    /// directly from the normalized scopes instead of walking the whole block.
+    private static func list(
+        _ range: NSRange,
+        _ ns: NSString,
+        scopedRanges: [NSRange]? = nil,
+        registry: ExtensionRegistry = .empty
+    ) -> BlockNode {
+        let lineRanges: [NSRange]
+        if let scopedRanges {
+            var selected: [NSRange] = []
+            for scope in scopedRanges {
+                let intersection = NSIntersectionRange(scope, range)
+                guard intersection.length > 0 else { continue }
+                let expanded = NSIntersectionRange(
+                    ns.lineRange(for: intersection),
+                    range
+                )
+                var cursor = expanded.location
+                let end = NSMaxRange(expanded)
+                while cursor < end {
+                    let line = NSIntersectionRange(
+                        ns.lineRange(
+                            for: NSRange(location: cursor, length: 0)
+                        ),
+                        range
+                    )
+                    if line.length > 0, selected.last != line {
+                        selected.append(line)
+                    }
+                    let next = NSMaxRange(line)
+                    guard next > cursor else { break }
+                    cursor = next
+                }
+            }
+            lineRanges = selected
+        } else {
+            var all: [NSRange] = []
+            var cursor = range.location
+            let end = NSMaxRange(range)
+            while cursor < end {
+                let line = ns.lineRange(
+                    for: NSRange(location: cursor, length: 0)
+                )
+                all.append(line)
+                cursor = NSMaxRange(line)
+            }
+            lineRanges = all
+        }
+
         var items: [ListItem] = []
-        var cursor = range.location
-        let end = NSMaxRange(range)
-        while cursor < end {
-            let line = ns.lineRange(for: NSRange(location: cursor, length: 0))
-            items.append(listItem(line, ns, scoped: scoped, registry: registry))
-            cursor = NSMaxRange(line)
+        items.reserveCapacity(lineRanges.count)
+        for line in lineRanges {
+            items.append(
+                listItem(line, ns, scoped: true, registry: registry)
+            )
         }
         return .list(range: range, items: items)
     }

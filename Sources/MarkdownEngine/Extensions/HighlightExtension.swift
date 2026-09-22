@@ -33,8 +33,11 @@ public struct HighlightExtension: MarkdownExtension {
         InlineSyntax(open: "==", close: "==")
     }
 
+    /// `.markdownBlockBackground`, not `.backgroundColor`: the fill covers the
+    /// whole line box, so a highlight that wraps over several lines reads as
+    /// one block instead of a band per line (see the key's own note).
     public func contentAttributes(theme: MarkdownEditorTheme) -> [NSAttributedString.Key: Any] {
-        [.backgroundColor: theme.highlightColor]
+        [.markdownBlockBackground: theme.highlightColor]
     }
 
     public func html(childrenHTML: String) -> String {

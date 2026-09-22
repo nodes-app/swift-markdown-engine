@@ -1,9 +1,10 @@
 # Contributing to MarkdownEngine
 
 Thanks for your interest. **MarkdownEngine is maintained by one person —
-expect 1–2 weeks for review.** Small fixes and documentation tweaks are
-welcome as PRs directly; for non-trivial features please open an issue
-first so we can talk through the design.
+expect 1–2 weeks for review.** A pull request is the normal way in, for
+fixes, documentation and new extensions alike. If a change is large or
+architectural, open it as a draft PR with the design sketched in the
+description — that gets you an answer faster than describing it in prose.
 
 > **New here?** Start with [ARCHITECTURE.md](ARCHITECTURE.md) — a
 > codemap that walks each directory in the order text flows through
@@ -59,16 +60,15 @@ Non-negotiable for the core `MarkdownEngine` target:
   `SyntaxHighlighter`, `LatexRenderer`) instead. The two existing
   bridge products (`MarkdownEngineCodeBlocks` → HighlighterSwift,
   `MarkdownEngineLatex` → SwiftMath) are the deliberate exception so
-  consumers can opt in. New bridges or new core deps need an issue
-  first.
+  consumers can opt in. A new bridge or a new core dependency is a bigger
+  call — make the case in the PR description.
 - **New constructs are extensions, not core grammar.** A construct like
   `==highlight==` (inline) or a `::: … :::` fenced block belongs in
   `Sources/MarkdownEngine/Extensions/` as a `MarkdownExtension` — see
   `HighlightExtension` / `ContainerExtension` as templates — never a new case
   threaded through the parser, styler, and renderer. This keeps the core pure
   markdown and each construct isolated. Image/overlay-rendered constructs
-  (tables, math) are the exception — they still need core work; open an issue
-  first.
+  (tables, math) are the exception — they still need core work.
 - **Public surface stays small.** Favor `internal`; new public symbols
   need a DocC comment.
 

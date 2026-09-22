@@ -60,4 +60,38 @@ struct MarkdownHTMLRendererTests {
         #expect(out.contains("<td>1</td>"))
         #expect(out.contains("<td>2</td>"))
     }
+
+    // The editor's styler makes bare URLs clickable via NSDataDetector, but
+    // rich-paste consumers (Mail, Outlook) take the HTML/RTF flavor verbatim
+    // and run no link detection of their own — so the renderer must emit a
+    // real anchor for everything the editor shows as a link.
+
+    @Test("bare URLs and emails autolink — mid-sentence, query escaping, scheme-less, mailto")
+    func bareURLAutolink() {
+        #expect(html("https://example.com")
+            == "<p><a href=\"https://example.com\">https://example.com</a></p>")
+        #expect(html("see https://example.com/a?b=1&c=2 now")
+            == "<p>see <a href=\"https://example.com/a?b=1&amp;c=2\">https://example.com/a?b=1&amp;c=2</a> now</p>")
+        #expect(html("www.example.com")
+            == "<p><a href=\"http://www.example.com\">www.example.com</a></p>")
+        #expect(html("mail me@example.com")
+            == "<p>mail <a href=\"mailto:me@example.com\">me@example.com</a></p>")
+    }
+
+    @Test("autolink reaches nested inline and re-parsed blockquote content")
+    func autolinkNestedContexts() {
+        #expect(html("**https://example.com**")
+            == "<p><strong><a href=\"https://example.com\">https://example.com</a></strong></p>")
+        #expect(html("> https://example.com")
+            == "<blockquote><a href=\"https://example.com\">https://example.com</a></blockquote>")
+    }
+
+    @Test("no autolink inside code spans or an explicit link's title")
+    func autolinkExclusions() {
+        #expect(html("`https://example.com`")
+            == "<p><code>https://example.com</code></p>")
+        // A URL-shaped title must not nest a second anchor inside the link's own.
+        #expect(html("[https://example.com](https://example.com)")
+            == "<p><a href=\"https://example.com\">https://example.com</a></p>")
+    }
 }

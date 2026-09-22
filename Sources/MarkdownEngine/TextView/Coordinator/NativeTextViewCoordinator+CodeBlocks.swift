@@ -75,10 +75,9 @@ extension NativeTextViewCoordinator {
 
         let selections: [CodeBlockSelection] = cachedCodeBlockTokens.compactMap { originalIndex, token in
             guard !activeTokenIndices.contains(originalIndex) else { return nil }
-            // Last line of defence: cached ranges can briefly outlive the text
-            // they were parsed from (any caller may race a content mutation on
-            // the main queue). A block that no longer fits the current text is
-            // stale by definition — skip it; the next parse re-delivers it.
+            // Cached tokens can be stale for one async hop after a document swap
+            // (shorter new text, queued update still holding the old parse). Skip
+            // out-of-bounds tokens; the next parse refreshes the cache.
             guard NSMaxRange(token.range) <= nsText.length,
                   NSMaxRange(token.contentRange) <= nsText.length else { return nil }
             if let visibleRange, NSIntersectionRange(token.range, visibleRange).length == 0 { return nil }

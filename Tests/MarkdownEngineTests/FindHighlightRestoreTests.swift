@@ -32,7 +32,10 @@ struct FindHighlightRestoreTests {
     private static let text = "plain ==marked== tail"
     private static let blockContent = NSRange(location: 8, length: 6)
 
-    private func makeEditor(_ text: String) -> (NativeTextViewCoordinator, NativeTextView) {
+    /// The window is returned, not just built: find ignores an editor that is in no
+    /// window (a torn-down one must not answer for the visible document), and
+    /// nothing else here would keep the window alive.
+    private func makeEditor(_ text: String) -> (NativeTextViewCoordinator, NativeTextView, NSWindow) {
         _ = NSApplication.shared
         let coordinator = NativeTextViewCoordinator(
             text: .constant(text), fontName: "SF Pro", fontSize: 16,
@@ -47,12 +50,17 @@ struct FindHighlightRestoreTests {
         // fallback, which has no layout manager to route through here.
         let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
         scrollView.documentView = tv
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 600, height: 400),
+            styleMask: [.borderless], backing: .buffered, defer: false
+        )
+        window.contentView = scrollView
         coordinator.textView = tv
         coordinator.rebuildTextStorageAndStyle(tv, from: text)
         coordinator.lastSyncedText = text
         coordinator.lastComputedStorage = text
         coordinator.previousDisplayLength = (text as NSString).length
-        return (coordinator, tv)
+        return (coordinator, tv, window)
     }
 
     private func background(_ tv: NativeTextView, at location: Int) -> NSColor? {
@@ -75,7 +83,8 @@ struct FindHighlightRestoreTests {
 
     @Test("searching the highlighted word and dismissing leaves the block painted")
     func blockReturnsAfterClearingItsOwnMatch() {
-        let (coordinator, tv) = makeEditor(Self.text)
+        let (coordinator, tv, window) = makeEditor(Self.text)
+        defer { window.contentView = nil }
         #expect(background(tv, at: Self.blockContent.location) == NSColor.white)
 
         find("marked", coordinator)
@@ -88,7 +97,8 @@ struct FindHighlightRestoreTests {
 
     @Test("a match somewhere else never touches the block")
     func blockSurvivesAMatchElsewhere() {
-        let (coordinator, tv) = makeEditor(Self.text)
+        let (coordinator, tv, window) = makeEditor(Self.text)
+        defer { window.contentView = nil }
 
         find("tail", coordinator)
         #expect(background(tv, at: Self.blockContent.location) == NSColor.white)
@@ -98,9 +108,26 @@ struct FindHighlightRestoreTests {
         #expect(background(tv, at: 17) == nil)
     }
 
+    /// The query is broadcast to every live coordinator, and an editor the host has
+    /// routed away from can outlive its view. It answers for a document nobody is
+    /// looking at — with an empty buffer, so it reports zero matches and the host
+    /// resets its match index. Measured in the app: 24 coordinators replying to one
+    /// ⌘F, 22 of them windowless, and next/previous stuck bouncing between the first
+    /// two matches.
+    @Test("an editor that is in no window stays out of the search")
+    func windowlessEditorIgnoresTheQuery() {
+        let (coordinator, tv, window) = makeEditor(Self.text)
+        window.contentView = nil
+
+        find("tail", coordinator)
+
+        #expect(background(tv, at: 17) == nil)
+    }
+
     @Test("re-running the query drops the previous highlight instead of stacking")
     func repeatedQueriesLeaveNoResidue() {
-        let (coordinator, tv) = makeEditor(Self.text)
+        let (coordinator, tv, window) = makeEditor(Self.text)
+        defer { window.contentView = nil }
 
         find("marked", coordinator)
         find("tail", coordinator)

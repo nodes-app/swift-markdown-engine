@@ -59,6 +59,38 @@ enum MarkdownInputHandler {
                                    replacementString: replacementString, tokens: resolvedTokens)
     }
 
+    /// Return inside a table row inserts `<br>` instead of splitting the row.
+    ///
+    /// A GFM row is ONE source line, so a bare newline tears the table in half.
+    /// `<br>` is the format's only in-cell line break, and the renderer draws
+    /// it as one. Covers ⇧↵ too: AppKit sends the same `insertNewline:` for
+    /// both, so both arrive here as a `"\n"` replacement.
+    ///
+    /// Deliberately NOT handled at the token's outer edges — Return at the very
+    /// start or end of the table stays a normal newline, which is the only way
+    /// out of a table that reaches the end of the document.
+    static func handleTableCellNewline(
+        textView: NSTextView,
+        affectedCharRange: NSRange,
+        replacementString: String?,
+        tableTokens: [MarkdownToken]
+    ) -> Bool {
+        guard replacementString == "\n" else { return false }
+        let start = affectedCharRange.location
+        let end = NSMaxRange(affectedCharRange)
+        guard tableTokens.contains(where: { start > $0.range.location && end < NSMaxRange($0.range) })
+        else { return false }
+
+        let insertion = "<br>"
+        insertTextProgrammatically(
+            textView,
+            text: insertion,
+            at: affectedCharRange,
+            cursorAfter: start + (insertion as NSString).length
+        )
+        return true
+    }
+
     /// Ensures image embeds (![[...]]) stay on their own line by automatically inserting newlines.
     static func handleImageEmbedAutoWrap(
         textView: NSTextView,

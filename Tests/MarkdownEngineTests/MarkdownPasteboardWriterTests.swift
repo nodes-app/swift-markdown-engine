@@ -9,6 +9,7 @@
 //  substitutes visible stand-ins for what RTF cannot represent.
 //
 
+import AppKit
 import Foundation
 import Testing
 @testable import MarkdownEngine
@@ -39,5 +40,22 @@ struct MarkdownPasteboardWriterTests {
         let rule = String(repeating: "─", count: 40)
         #expect(MarkdownPasteboardWriter.rtfFallbackBody("<p>a</p>\n<hr>\n<p>b</p>")
             == "<p>a</p>\n<p>\(rule)</p>\n<p>b</p>")
+    }
+
+    @Test("bare URL reaches the rich flavors as a real link (Mail/Outlook run no detection of their own)")
+    @MainActor
+    func bareURLRichFlavorsCarryAnchor() throws {
+        let pb = NSPasteboard(name: NSPasteboard.Name("MarkdownPasteboardWriterTests.bareURL"))
+        MarkdownPasteboardWriter.write(markdown: "https://example.com", to: pb)
+
+        let html = try #require(pb.string(forType: .html))
+        #expect(html.contains("<a href=\"https://example.com\">https://example.com</a>"))
+
+        // The RTF flavor is derived from that HTML; the anchor must come out
+        // the other side as an RTF hyperlink field, not styled plain text.
+        let rtf = try #require(pb.data(forType: .rtf))
+        let rtfSource = try #require(String(data: rtf, encoding: .isoLatin1))
+        #expect(rtfSource.contains("HYPERLINK"))
+        #expect(rtfSource.contains("example.com"))
     }
 }

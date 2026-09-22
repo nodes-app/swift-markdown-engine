@@ -11,6 +11,11 @@ import AppKit
 import Foundation
 
 struct TextStylingService {
+    enum RestyleContent {
+        case all
+        case tables
+    }
+
     static func makeBaseTypingAttributes(
         font: NSFont,
         paragraphStyle: NSParagraphStyle,
@@ -45,6 +50,7 @@ struct TextStylingService {
         return (baseFont, paragraph)
     }
 
+    @discardableResult
     static func restyle(
         textView: NSTextView,
         layoutBridge: LayoutBridge?,
@@ -58,8 +64,10 @@ struct TextStylingService {
         precomputedTokens: [MarkdownToken]? = nil,
         classified: MarkdownStyler.ClassifiedStyleTokens? = nil,
         precomputedBlocks: [Block]? = nil,
+        sourceText: String? = nil,
+        content: RestyleContent = .all,
         configuration: MarkdownEditorConfiguration = .default
-    ) {
+    ) -> [NSRange] {
         let paragraphs = normalize(paragraphCandidates)
 
         textView.typingAttributes = makeBaseTypingAttributes(
@@ -70,25 +78,52 @@ struct TextStylingService {
 
         guard !paragraphs.isEmpty else {
             textView.setNeedsDisplay(textView.visibleRect)
-            return
+            return []
         }
 
         let styleT0 = DispatchTime.now().uptimeNanoseconds
-        let styledRanges = MarkdownStyler.styleAttributes(
-            text: textView.string,
-            fontName: baseFont.fontName,
-            fontSize: baseFont.pointSize,
-            layoutBridge: layoutBridge,
-            caretLocation: caretLocation,
-            selection: selection,
-            activeTokenIndices: activeTokenIndices,
-            wikiLinkIDProvider: wikiLinkIDProvider,
-            precomputedTokens: precomputedTokens,
-            classified: classified,
-            precomputedBlocks: precomputedBlocks,
-            scopedRanges: paragraphs,
-            configuration: configuration
-        )
+        let text = sourceText ?? textView.string
+        let styledRanges: [StyledRange]
+        switch content {
+        case .all:
+            styledRanges = MarkdownStyler.styleAttributes(
+                text: text,
+                fontName: baseFont.fontName,
+                fontSize: baseFont.pointSize,
+                layoutBridge: layoutBridge,
+                caretLocation: caretLocation,
+                selection: selection,
+                activeTokenIndices: activeTokenIndices,
+                wikiLinkIDProvider: wikiLinkIDProvider,
+                precomputedTokens: precomputedTokens,
+                classified: classified,
+                precomputedBlocks: precomputedBlocks,
+                scopedRanges: paragraphs,
+                configuration: configuration
+            )
+        case .tables:
+            styledRanges = MarkdownStyler.styleTableAttributes(
+                text: text,
+                fontName: baseFont.fontName,
+                fontSize: baseFont.pointSize,
+                layoutBridge: layoutBridge,
+                activeTokenIndices: activeTokenIndices,
+                wikiLinkIDProvider: wikiLinkIDProvider,
+                precomputedTokens: precomputedTokens,
+                classified: classified,
+                scopedRanges: paragraphs,
+                configuration: configuration
+            )
+        }
+        let wideTableAnchorRanges: [NSRange]
+        switch content {
+        case .all:
+            wideTableAnchorRanges = []
+        case .tables:
+            wideTableAnchorRanges = styledRanges.compactMap { range, attrs in
+                attrs[.scrollableBlockSourceID] is Int ? range : nil
+            }
+        }
         let styleMs = Double(DispatchTime.now().uptimeNanoseconds - styleT0) / 1_000_000
 
         let spellT0 = DispatchTime.now().uptimeNanoseconds
@@ -125,6 +160,7 @@ struct TextStylingService {
         (textView as? NativeTextView)?.ensureVisibleLayout()
         let evlMs = Double(DispatchTime.now().uptimeNanoseconds - evlT0) / 1_000_000
         PerfTrace.note { "  restyle split: styleAttrs=\(String(format: "%.2f", styleMs))ms spell=\(String(format: "%.2f", spellMs))ms attrApply(paras=\(paragraphs.count))=\(String(format: "%.2f", attrMs))ms ensureVisLayout=\(String(format: "%.2f", evlMs))ms" }
+        return wideTableAnchorRanges
     }
 
     /// Lays the base attributes down per paragraph and paints the styled ranges over

@@ -149,6 +149,64 @@ struct InlineParserTests {
         ])
     }
 
+    @Test("markdown link permits inline code inside its label")
+    func linkContainsInlineCode() {
+        #expect(InlineParser.parse("[`App`](/tmp/App.swift:56)") == [
+            .link(
+                range: r(0, 26),
+                textRange: r(1, 5),
+                url: r(8, 17),
+                markers: [r(0, 1), r(6, 1), r(7, 1), r(25, 1)],
+                children: [.code(range: r(1, 5), content: r(2, 3))]
+            ),
+        ])
+    }
+
+    @Test("markdown link permits multiple inline code spans in its label")
+    func linkContainsMultipleInlineCodeSpans() {
+        #expect(InlineParser.parse("[`a` and `b`](u)") == [
+            .link(
+                range: r(0, 16),
+                textRange: r(1, 11),
+                url: r(14, 1),
+                markers: [r(0, 1), r(12, 1), r(13, 1), r(15, 1)],
+                children: [
+                    .code(range: r(1, 3), content: r(2, 1)),
+                    .text(r(4, 5)),
+                    .code(range: r(9, 3), content: r(10, 1)),
+                ]
+            ),
+        ])
+    }
+
+    @Test("claimed span crossing a link-label boundary rejects the link")
+    func codeCrossingLinkLabelBoundaryRejectsLink() {
+        #expect(InlineParser.parse("[a `b](u)`") == [
+            .text(r(0, 3)),
+            .code(range: r(3, 7), content: r(4, 5)),
+        ])
+    }
+
+    @Test("markdown link permits escaped punctuation inside its label")
+    func linkContainsEscapedPunctuation() {
+        #expect(InlineParser.parse(#"[\*](u)"#) == [
+            .link(
+                range: r(0, 7),
+                textRange: r(1, 2),
+                url: r(5, 1),
+                markers: [r(0, 1), r(3, 1), r(4, 1), r(6, 1)],
+                children: [.escape(range: r(1, 2), character: r(2, 1), marker: r(1, 1))]
+            ),
+        ])
+    }
+
+    @Test("markdown-looking text inside code remains inert")
+    func codeContainingLinkStaysOpaque() {
+        #expect(InlineParser.parse("`[a](b)`") == [
+            .code(range: r(0, 8), content: r(1, 6)),
+        ])
+    }
+
     @Test("link URL keeps balanced parentheses (bug 4)")
     func linkWithBalancedParens() {
         #expect(InlineParser.parse("[a](b(c))") == [

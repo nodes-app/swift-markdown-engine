@@ -83,6 +83,10 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     /// Fires whenever the caret rect inside an active wiki-link changes,
     /// so embedders can position a follow-the-caret UI.
     public var onCaretRectChange: ((CGRect) -> Void)?
+    /// Reports one completed native edit in UTF-16 display-text coordinates.
+    /// Multi-step smart-input transformations and ambiguous composition
+    /// batches are omitted so embedders can treat every callback as exact.
+    public var onTextMutation: ((MarkdownTextMutation) -> Void)?
     /// Build the editor's right-click menu (the engine ships no menu). Receives the default
     /// NSMenu + the current selection range; return the menu to display (or unchanged).
     public var onBuildContextMenu: ((NSMenu, NSRange) -> NSMenu)?
@@ -123,6 +127,15 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     /// documentIds whose scroll offset to keep; others are forgotten. `nil` keeps all.
     public var retainedScrollDocumentIds: Set<String>?
 
+    /// Scroll memory that outlives the editor. The engine's own offsets live on the
+    /// coordinator, so an embedder that unmounts the editor entirely — routing to a
+    /// different screen and back — loses them; these hand the offsets somewhere that
+    /// survives. `persist` is called on switch-away AND on teardown, `restore` when a
+    /// document becomes current (nil opens at the top). Both are asked at call time,
+    /// so the embedder's own retention rules can see changes made on the way out.
+    public var onPersistScrollOffset: ((String, CGFloat) -> Void)?
+    public var restoreScrollOffset: ((String) -> CGFloat?)?
+
     /// Embedder-supplied predicate that suppresses the I-beam cursor in edit mode.
     /// Called on mouse-move with the event location in window coordinates.
     /// Return `true` to show the arrow cursor instead of the I-beam.
@@ -140,6 +153,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         onPasteImage: ((NSPasteboard) -> String?)? = nil,
         onLinkClick: ((String) -> Void)? = nil,
         onCaretRectChange: ((CGRect) -> Void)? = nil,
+        onTextMutation: ((MarkdownTextMutation) -> Void)? = nil,
         onBuildContextMenu: ((NSMenu, NSRange) -> NSMenu)? = nil,
         onInlineSelectionChange: ((InlineSelectionState?) -> Void)? = nil,
         onInlinePreviewKey: ((InlinePreviewKey) -> Bool)? = nil,
@@ -150,6 +164,8 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         headerCollapsedHeight: CGFloat = 0,
         headerExpanded: Bool = true,
         retainedScrollDocumentIds: Set<String>? = nil,
+        onPersistScrollOffset: ((String, CGFloat) -> Void)? = nil,
+        restoreScrollOffset: ((String) -> CGFloat?)? = nil,
         isCursorExcluded: ((CGPoint) -> Bool)? = nil
     ) {
         self._text = text
@@ -163,6 +179,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         self.onPasteImage = onPasteImage
         self.onLinkClick = onLinkClick
         self.onCaretRectChange = onCaretRectChange
+        self.onTextMutation = onTextMutation
         self.onBuildContextMenu = onBuildContextMenu
         self.onInlineSelectionChange = onInlineSelectionChange
         self.onInlinePreviewKey = onInlinePreviewKey
@@ -173,6 +190,8 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         self.headerCollapsedHeight = headerCollapsedHeight
         self.headerExpanded = headerExpanded
         self.retainedScrollDocumentIds = retainedScrollDocumentIds
+        self.onPersistScrollOffset = onPersistScrollOffset
+        self.restoreScrollOffset = restoreScrollOffset
         self.isCursorExcluded = isCursorExcluded
     }
 
@@ -310,6 +329,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.textView = textView
         context.coordinator.wikiLinkMetadata = initialState.metadata
         context.coordinator.onCaretRectChange = onCaretRectChange
+        context.coordinator.onTextMutation = onTextMutation
         context.coordinator.onBuildContextMenu = onBuildContextMenu
         context.coordinator.onInlineSelectionChange = onInlineSelectionChange
         context.coordinator.onInlinePreviewKey = onInlinePreviewKey
@@ -381,6 +401,11 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         reconcileHeader(textView: textView, context: context)
 
         let isNodeSwitch = context.coordinator.documentId != documentId
+
+        // Refreshed here, not with the other callbacks at the bottom — teardown has
+        // to reach the CURRENT closures even when the pass below returns early.
+        context.coordinator.onPersistScrollOffset = onPersistScrollOffset
+        context.coordinator.restoreScrollOffset = restoreScrollOffset
 
         // Drop remembered offsets for documents no longer retained (always keep
         // the current one). Only rebuilds the dict when something must go.
@@ -477,14 +502,22 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         // and no rebuild is needed for it to take effect.
         textView.configuration.lists = configuration.lists
         context.coordinator.configuration.lists = configuration.lists
-        // Sync registered extensions (inline spans + fenced blocks). A change alters the GRAMMAR
-        // (tokens differ under the new registry), so the coordinator's parsed
+        // Sync registered extensions (inline spans + fenced blocks) and directives. A change alters
+        // the GRAMMAR (tokens differ under the new registry), so the coordinator's parsed
         // cache must drop before the restyle — the parse-layer memos invalidate
         // themselves via the registry fingerprint.
+        //
+        // The fingerprint covers BOTH seams, so a directive-only change lands in this branch too —
+        // which means the directive list has to be copied here as well, or the restyle it triggers
+        // runs against the old one.
         let newExtensionFingerprint = configuration.extensionRegistry.fingerprint
         if newExtensionFingerprint != context.coordinator.configuration.extensionRegistry.fingerprint {
             context.coordinator.configuration.extensions = configuration.extensions
             textView.configuration.extensions = configuration.extensions
+            context.coordinator.configuration.directives = configuration.directives
+            textView.configuration.directives = configuration.directives
+            context.coordinator.configuration.directiveSettings = configuration.directiveSettings
+            textView.configuration.directiveSettings = configuration.directiveSettings
             context.coordinator.cachedParsedDocument = nil
             let fullRange = NSRange(location: 0, length: (textView.string as NSString).length)
             if fullRange.length > 0 {
@@ -554,9 +587,14 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         if isNodeSwitch {
             // Save the outgoing document's scroll position — unless it just left
             // the retained set, in which case let it reset to top next time.
-            if let outgoingId = context.coordinator.documentId,
-               retainedScrollDocumentIds?.contains(outgoingId) ?? true {
-                context.coordinator.scrollOffsets[outgoingId] = nsView.contentView.bounds.origin.y
+            if let outgoingId = context.coordinator.documentId {
+                let offsetY = nsView.contentView.bounds.origin.y
+                if retainedScrollDocumentIds?.contains(outgoingId) ?? true {
+                    context.coordinator.scrollOffsets[outgoingId] = offsetY
+                }
+                // The embedder's store applies its own retention — it is asked live,
+                // so it can see what the snapshot above was taken too early to know.
+                onPersistScrollOffset?(outgoingId, offsetY)
             }
             // Snapshot the outgoing document's content (storage form) so a later
             // switch-back can detect a file rewritten while it was backgrounded.
@@ -571,6 +609,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             // across a file switch.
             textView.breakUndoCoalescing()
             context.coordinator.documentId = documentId
+            context.coordinator.armScrollRestore(for: documentId)
             // Drop the incoming document's undo stack if its text changed while
             // switched away — its recorded ranges are now stale.
             context.coordinator.invalidateUndoIfContentDiverged(for: documentId, incomingText: text)
@@ -611,11 +650,45 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         textView.recalcOverscroll(for: nsView)
         (nsView as? ClampedScrollView)?.clampToInsets()
         // Height is measured now, so restore the saved offset; clampToInsets keeps
-        // it in range if the document got shorter.
-        if isNodeSwitch, let savedY = context.coordinator.scrollOffsets[documentId] {
-            nsView.contentView.scroll(to: NSPoint(x: nsView.contentView.bounds.origin.x, y: savedY))
-            nsView.reflectScrolledClipView(nsView.contentView)
-            (nsView as? ClampedScrollView)?.clampToInsets()
+        // it in range if the document got shorter. Latched rather than gated on
+        // `isNodeSwitch`, because a remount is not a switch and its first pass still
+        // carries the embedder's empty buffer — the clamp would pull it back to top.
+        if context.coordinator.pendingScrollRestoreDocumentId == documentId {
+            context.coordinator.pendingScrollRestoreAttempts -= 1
+            let saved = restoreScrollOffset?(documentId) ?? context.coordinator.scrollOffsets[documentId]
+            if let savedY = saved {
+                nsView.contentView.scroll(to: NSPoint(x: nsView.contentView.bounds.origin.x, y: savedY))
+                nsView.reflectScrolledClipView(nsView.contentView)
+                (nsView as? ClampedScrollView)?.clampToInsets()
+                // A zero-height viewport cannot contradict any offset: with no range to
+                // clamp against the scroll is taken verbatim, so this is true for EVERY
+                // value — it says the offset was set, not that it survived. Believing it
+                // retires the latch before the geometry exists; the first real layout
+                // then clamps the reader back to the top and nothing is left to correct
+                // it. Measured on a remount after routing away: saved=201 actual=201
+                // landed=true viewportH=0.
+                let measured = nsView.contentView.bounds.height > 0
+                let landed = measured && abs(nsView.contentView.bounds.origin.y - savedY) < 1
+                // Also give up once the real content has had its chance, landed or
+                // not: an armed latch outliving the document's arrival lets a much
+                // later unrelated pass — ⌘+/⌘−, the raw-source toggle, a buffer
+                // reload — scroll the reader away from wherever they went.
+                // The "content has arrived" give-up needs the same proof: a non-empty
+                // buffer laid out into nothing has not had its chance either.
+                if !measured {
+                    // No geometry on this tick: hand it to the scroll view, which applies
+                    // it from its own layout. Retiring the latch here is safe because the
+                    // offset is no longer waiting on another update pass — and those stop
+                    // coming (measured: two passes, both viewportH=0, then nothing, with
+                    // the latch left armed forever and teardown refusing to save).
+                    (nsView as? ClampedScrollView)?.armScrollRestore(to: savedY)
+                    context.coordinator.pendingScrollRestoreDocumentId = nil
+                } else if landed || !text.isEmpty || context.coordinator.pendingScrollRestoreAttempts <= 0 {
+                    context.coordinator.pendingScrollRestoreDocumentId = nil
+                }
+            } else {
+                context.coordinator.pendingScrollRestoreDocumentId = nil
+            }
         }
         // Document rebuilds bypass textDidChange — re-derive emptiness here.
         textView.refreshPlaceholderVisibility()
@@ -624,6 +697,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         }
 
         context.coordinator.onCaretRectChange = onCaretRectChange
+        context.coordinator.onTextMutation = onTextMutation
         context.coordinator.onBuildContextMenu = onBuildContextMenu
         context.coordinator.onInlineSelectionChange = onInlineSelectionChange
         context.coordinator.onInlinePreviewKey = onInlinePreviewKey
@@ -641,6 +715,12 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             onInlineSelectionChange: onInlineSelectionChange
         )
         coordinator.documentId = documentId
+        coordinator.onPersistScrollOffset = onPersistScrollOffset
+        coordinator.onTextMutation = onTextMutation
+        coordinator.restoreScrollOffset = restoreScrollOffset
+        // Seeding documentId above means the first update pass is not a switch, so
+        // arm the restore here or a remount would always open at the top.
+        coordinator.armScrollRestore(for: documentId)
         coordinator.configuration = configuration
         coordinator.lastImageFingerprint = configuration.services.images.fingerprint()
         coordinator.lastWikiFingerprint = configuration.services.wikiLinks.fingerprint()
@@ -651,6 +731,18 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         coordinator.userPrefersAutomaticSpellingCorrection = configuration.spellChecking.automaticSpellingCorrection
         coordinator.onSpellCheckingPolicyChanged = onSpellCheckingPolicyChanged
         return coordinator
+    }
+
+    /// The editor can go away without a document switch — an embedder routing to a
+    /// different screen — and that is the only moment left to record where the
+    /// reader was; the coordinator's own offsets die with it.
+    public static func dismantleNSView(_ nsView: NSScrollView, coordinator: Coordinator) {
+        // A restore still pending means the reader was never put back where they
+        // were — recording the current offset would overwrite the good one with
+        // the mid-load position.
+        guard let documentId = coordinator.documentId,
+              coordinator.pendingScrollRestoreDocumentId == nil else { return }
+        coordinator.onPersistScrollOffset?(documentId, nsView.contentView.bounds.origin.y)
     }
 }
 // MARK: - Scrolling header view
@@ -680,6 +772,13 @@ private extension NativeTextViewWrapper {
         }
         let controller = coord.headerController ?? ScrollingHeaderController()
         coord.headerController = controller
+        // A document switch re-lays the header out at the new document's height a few
+        // milliseconds later. That is not a disclosure and must not be revealed — see
+        // `snapNextHeightChange`. Read before `updateNSView` advances the coordinator's
+        // `documentId`, so this is the switch's own pass.
+        if coord.documentId != documentId {
+            controller.snapNextHeightChange()
+        }
         controller.reconcile(
             header: header,
             collapsedHeight: headerCollapsedHeight,
