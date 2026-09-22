@@ -21,8 +21,12 @@ enum MarkdownPasteboardWriter {
     /// byte-exact instead of being re-derived from the lossy HTML flavor.
     static let markdownType = NSPasteboard.PasteboardType("dev.markdownengine.raw-markdown")
 
+    /// `markdown` is what every public flavor carries — the buffer's own text, with
+    /// no side-channel in it. `rawMarkdown` is the storage form of the same selection
+    /// (link/embed suffixes restored); it goes only to the private flavor, and
+    /// defaults to `markdown` for callers that have nothing extra to carry.
     @MainActor
-    static func write(markdown: String, to pasteboard: NSPasteboard,
+    static func write(markdown: String, rawMarkdown: String? = nil, to pasteboard: NSPasteboard,
                       extensions: [any MarkdownExtension] = [],
                       directives: [any MarkdownDirective] = [],
                       directiveSettings: DirectiveRegistrySettings = .default) {
@@ -33,7 +37,7 @@ enum MarkdownPasteboardWriter {
 
         // Also keep the exact raw markdown under our private flavor so our own
         // paste path can round-trip it losslessly.
-        pasteboard.setString(markdown, forType: Self.markdownType)
+        pasteboard.setString(rawMarkdown ?? markdown, forType: Self.markdownType)
 
         // Render the selection to clean HTML.
         let htmlBody = MarkdownHTMLRenderer.html(from: markdown, extensions: extensions,

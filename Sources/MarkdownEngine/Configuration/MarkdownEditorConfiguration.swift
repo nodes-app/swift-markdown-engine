@@ -500,19 +500,36 @@ public struct ImageEmbedStyle: Sendable {
     public var paragraphSpacing: CGFloat
     /// Gap between the source line and the rendered image (visibleSource mode).
     public var imageGap: CGFloat
+    /// Keep an embed's `|id` suffix in the editor's own text instead of hiding it
+    /// on the `.wikiLinkID` side-channel.
+    ///
+    /// The side-channel is an attribute, and an attribute only survives while the
+    /// text around it still parses as an embed. Break the syntax for one keystroke —
+    /// delete a bracket, retype the name, copy the line somewhere the attributes do
+    /// not travel — and the id is gone with nothing left to rebuild it from. For a
+    /// wiki link that costs a link; for an image embed it costs the picture, and the
+    /// stored bytes are left with nothing naming them.
+    ///
+    /// Turn this on and the source line reads `![[Name|id]]` — longer, but the id is
+    /// in the document the embedder saves, visible, selectable, and impossible to
+    /// lose to an editing accident. Off (the default) keeps the short `![[Name]]`.
+    /// Node links `[[Name]]` are unaffected either way.
+    public var keepsIDInSource: Bool
 
     public init(
         minimumWidth: CGFloat = 50,
         fallbackMaxWidth: CGFloat = 650,
         unreasonableMaxWidth: CGFloat = 1_000_000,
         paragraphSpacing: CGFloat = 8,
-        imageGap: CGFloat = 8
+        imageGap: CGFloat = 8,
+        keepsIDInSource: Bool = false
     ) {
         self.minimumWidth = minimumWidth
         self.fallbackMaxWidth = fallbackMaxWidth
         self.unreasonableMaxWidth = unreasonableMaxWidth
         self.paragraphSpacing = paragraphSpacing
         self.imageGap = imageGap
+        self.keepsIDInSource = keepsIDInSource
     }
 
     public static let `default` = ImageEmbedStyle()

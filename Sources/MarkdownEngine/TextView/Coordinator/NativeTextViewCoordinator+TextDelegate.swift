@@ -142,6 +142,16 @@ extension NativeTextViewCoordinator {
         // paragraph scoping below share it.
         let editedRange = pendingEditedRange ?? tv.textStorage?.editedRange ?? safeSelRange
         pendingEditedRange = nil
+        // Re-attach the id the edit just overwrote (see `wikiLinkIDToCarry`). The
+        // styler spreads it back over the full name on the next restyle; this only
+        // has to make it findable before the writeback below reads the run.
+        if let carried = pendingWikiLinkIDCarry {
+            pendingWikiLinkIDCarry = nil
+            let carryRange = NSRange(location: carried.location, length: editedRange.length)
+            if carryRange.length > 0, NSMaxRange(carryRange) <= fullLength {
+                tv.textStorage?.addAttribute(.wikiLinkID, value: carried.id, range: carryRange)
+            }
+        }
         // Exactly one proposed edit since the last completed cycle means the
         // descriptor describes THIS transition; anything else (interceptor
         // substitutions, IME commits, WT batches) distrusts the fast paths.
@@ -175,7 +185,8 @@ extension NativeTextViewCoordinator {
                 ) ?? WikiLinkService.makeStorageState(
                     from: docString,
                     existingMetadata: wikiLinkMetadata,
-                    textStorage: tv.textStorage
+                    textStorage: tv.textStorage,
+                    keepsImageIDsInSource: configuration.imageEmbed.keepsIDInSource
                 )
             }
             self.wikiLinkMetadata = storageState.metadata
@@ -189,7 +200,8 @@ extension NativeTextViewCoordinator {
                 let reference = WikiLinkService.makeStorageState(
                     from: docString,
                     existingMetadata: wikiLinkMetadata,
-                    textStorage: tv.textStorage
+                    textStorage: tv.textStorage,
+                    keepsImageIDsInSource: configuration.imageEmbed.keepsIDInSource
                 )
                 assert(reference.storage == storageState.storage,
                        "wiki incremental splice diverged from full rebuild")
@@ -816,6 +828,38 @@ extension NativeTextViewCoordinator {
         return count
     }
 
+    /// The `.wikiLinkID` that a proposed edit would otherwise erase, when the edit is
+    /// provably confined to ONE link's name.
+    ///
+    /// Clicking a rendered image embed selects its whole name, so the next keystroke
+    /// replaces every character the attribute sits on and the writeback finds no id
+    /// left to write — the link's target is gone from the document for good. The two
+    /// guards keep this from resurrecting a stale id: the run must cover the replaced
+    /// text (a selection reaching past the name fails), and the replacement must carry
+    /// no link grammar, so an edit cannot both destroy one link and create another.
+    /// `![[` / `]]` markers never carry the attribute, so replacing a whole embed —
+    /// or typing a fresh one over it — is not eligible.
+    private func wikiLinkIDToCarry(
+        over affectedCharRange: NSRange, replacement: String?, in textView: NSTextView
+    ) -> (id: String, location: Int)? {
+        guard !configuration.rawSourceMode,
+              affectedCharRange.length > 0,
+              let replacement, !replacement.isEmpty,
+              !replacement.utf16.contains(where: { $0 == 0x5B || $0 == 0x5D || $0 == 0x0A || $0 == 0x0D }),
+              let storage = textView.textStorage,
+              NSMaxRange(affectedCharRange) <= storage.length else { return nil }
+        var runRange = NSRange(location: NSNotFound, length: 0)
+        guard let id = storage.attribute(
+                .wikiLinkID, at: affectedCharRange.location,
+                longestEffectiveRange: &runRange,
+                in: NSRange(location: 0, length: storage.length)
+              ) as? String,
+              !id.isEmpty,
+              NSIntersectionRange(runRange, affectedCharRange).length == affectedCharRange.length
+        else { return nil }
+        return (id, affectedCharRange.location)
+    }
+
     public func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool {
         // ONE bridge of the pre-edit text — every `textView.string` read is an
         // O(doc) copy of the mutable backing store; this function used to take
@@ -848,6 +892,9 @@ extension NativeTextViewCoordinator {
         // would otherwise leave the suppressed edit's descriptor behind, and the
         // wiki splice in textDidChange would corrupt the storage form from it.
         pendingEditedRange = NSRange(location: affectedCharRange.location, length: replacementString?.utf16.count ?? 0)
+        pendingWikiLinkIDCarry = wikiLinkIDToCarry(
+            over: affectedCharRange, replacement: replacementString, in: textView
+        )
         // A nil replacement means AppKit is changing ATTRIBUTES over that range,
         // not text (data detection linkifying a phone number, Format > Font).
         // Coercing it to "" would publish "this range was deleted" to a listener
