@@ -37,7 +37,9 @@ extension NativeTextViewCoordinator {
             displayText = text
             wikiLinkMetadata = [:]
         } else {
-            let displayState = WikiLinkService.makeDisplayState(from: text) { services.wikiLinks.name(forID: $0) }
+            let displayState = WikiLinkService.makeDisplayState(
+                from: text, keepsImageIDsInSource: configuration.imageEmbed.keepsIDInSource
+            ) { services.wikiLinks.name(forID: $0) }
             displayText = displayState.display
             wikiLinkMetadata = displayState.metadata
         }
@@ -469,7 +471,12 @@ extension NativeTextViewCoordinator {
 
         // Image embeds and node links share one path: insert DISPLAY form `![[Name]]` / `[[Name]]`
         // with the opaque suffix on the `.wikiLinkID` side-channel (displayFragmentAndID handles `!`).
-        let replacementInfo = WikiLinkService.displayFragmentAndID(from: request.storageFragment)
+        // With `keepsIDInSource` an image embed's display form IS its storage form, so the
+        // fragment goes in verbatim and there is no suffix to park anywhere.
+        let replacementInfo = WikiLinkService.displayFragmentAndID(
+            from: request.storageFragment,
+            keepsImageIDsInSource: configuration.imageEmbed.keepsIDInSource
+        )
         let replacementDisplay = replacementInfo.display
         let linkID = replacementInfo.id
 

@@ -47,7 +47,8 @@ extension NativeTextView {
               display.contains("[[") else { return display }
         let slice = NSTextStorage(attributedString: storage.attributedSubstring(from: sel))
         return WikiLinkService.makeStorageState(
-            from: display, existingMetadata: [:], textStorage: slice
+            from: display, existingMetadata: [:], textStorage: slice,
+            keepsImageIDsInSource: configuration.imageEmbed.keepsIDInSource
         ).storage
     }
 }

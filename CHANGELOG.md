@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `ImageEmbedStyle.keepsIDInSource` keeps an image embed's `|id` suffix in the
+  editor's own text (`![[Name|id]]`) instead of the `.wikiLinkID` side-channel,
+  for embedders whose ids point at bytes nothing else can name. Off by default;
+  node links are unaffected.
+
 ### Fixed
 - A link or image embed no longer loses its opaque id to an edit that rewrites
   its name. `makeStorageState` scans the name's `.wikiLinkID` run instead of

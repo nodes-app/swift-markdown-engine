@@ -61,8 +61,13 @@ public enum WikiLinkService {
     /// DISPLAY text by the target's current name looked up via the opaque suffix's uuid
     /// (the suffix itself — uuid for links, uuid|width for images — is preserved unchanged
     /// in the metadata). Unknown/empty/unsafe live names fall back to the stored label.
+    ///
+    /// With `keepsImageIDsInSource`, an IMAGE embed is copied through untouched — its
+    /// suffix stays in the display text and is recorded as no id at all, so nothing
+    /// downstream tries to hide or re-append it (see `ImageEmbedStyle.keepsIDInSource`).
     public static func makeDisplayState(
         from storageText: String,
+        keepsImageIDsInSource: Bool = false,
         nameForID: ((String) -> String?)? = nil
     ) -> (display: String, metadata: [RangeKey: LinkMetadata]) {
         let nsStorage = storageText as NSString
@@ -106,12 +111,22 @@ public enum WikiLinkService {
                 }
             }
 
-            let displayFragment = isImage ? "![[\(displayName)]]" : "[[\(displayName)]]"
+            // Image embed that keeps its id in the source: display IS storage. Recorded
+            // with no id, so the styler adds no `.wikiLinkID` and the writeback has
+            // nothing to re-append — the suffix simply round-trips as part of the text.
+            let keepsID = isImage && keepsImageIDsInSource
+            let displayFragment: String
+            if keepsID {
+                displayFragment = nsStorage.substring(with: match.range)
+            } else {
+                displayFragment = isImage ? "![[\(displayName)]]" : "[[\(displayName)]]"
+            }
             let displayRange = NSRange(location: displayLength, length: displayFragment.utf16.count)
             result.append(displayFragment)
             displayLength += displayFragment.utf16.count
 
-            metadata[RangeKey(displayRange)] = LinkMetadata(id: linkID, storageRange: match.range)
+            metadata[RangeKey(displayRange)] = LinkMetadata(id: keepsID ? nil : linkID,
+                                                            storageRange: match.range)
             cursor = match.range.location + match.range.length
         }
 
@@ -124,10 +139,16 @@ public enum WikiLinkService {
     }
 
     /// Convert display `[[Name]]` back to storage `[[Name|<id>]]`, preferring the `.wikiLinkID` attribute.
+    ///
+    /// With `keepsImageIDsInSource`, an IMAGE embed's display text already IS its storage
+    /// form, so it is copied through and no id is attached — a suffix left over on the
+    /// attribute (from text written before the option was turned on, or pasted in with
+    /// its attributes) would otherwise be appended a second time.
     public static func makeStorageState(
         from displayText: String,
         existingMetadata: [RangeKey: LinkMetadata],
-        textStorage: NSTextStorage?
+        textStorage: NSTextStorage?,
+        keepsImageIDsInSource: Bool = false
     ) -> (storage: String, metadata: [RangeKey: LinkMetadata]) {
         let nsDisplay = displayText as NSString
         // No `[[` anywhere → storage == display; skip the O(document) rebuild.
@@ -155,8 +176,11 @@ public enum WikiLinkService {
             let contentRange = NSRange(location: matchRange.location + openMarker, length: contentLength)
             let name = nsDisplay.substring(with: contentRange)
 
-            var linkID: String? = recoveredLinkID(in: textStorage, contentRange: contentRange)
-            if linkID == nil {
+            let keepsID = isImage && keepsImageIDsInSource
+            var linkID: String? = keepsID
+                ? nil
+                : recoveredLinkID(in: textStorage, contentRange: contentRange)
+            if linkID == nil, !keepsID {
                 linkID = existingMetadata[RangeKey(matchRange)]?.id
             }
 
@@ -329,8 +353,12 @@ public enum WikiLinkService {
     }
 
     /// Split a storage fragment `[[Name|<id>]]` into its display form and the opaque id.
-    public static func displayFragmentAndID(from storageFragment: String) -> (display: String, id: String?) {
-        let displayState = makeDisplayState(from: storageFragment)
+    public static func displayFragmentAndID(
+        from storageFragment: String, keepsImageIDsInSource: Bool = false
+    ) -> (display: String, id: String?) {
+        let displayState = makeDisplayState(
+            from: storageFragment, keepsImageIDsInSource: keepsImageIDsInSource
+        )
         return (displayState.display, displayState.metadata.values.first?.id)
     }
 
