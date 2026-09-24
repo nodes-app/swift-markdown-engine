@@ -40,12 +40,32 @@ struct DirectiveCompletionTests {
 
     // MARK: - Name completion
 
-    @Test("a bare marker offers every directive")
-    func bareMarkerOffersAll() {
-        let candidates = titles("@|")
+    @Test("a bare marker offers nothing")
+    func bareMarkerOffersNothing() {
+        // A context here would capture Enter as "confirm" in ordinary prose
+        // any time a marker precedes it (`Ping @` then a plain newline) —
+        // wait for at least one typed character.
+        #expect(context("@|") == nil)
+    }
+
+    @Test("one typed character offers every matching directive")
+    func oneCharacterOffersAll() {
+        let candidates = titles("@f|")
         #expect(candidates.contains("font"))
-        #expect(candidates.contains("glyph"))
-        #expect(candidates.contains("region"))
+    }
+
+    @Test("an exact match to a directive with no required arguments closes the picker")
+    func exactFinishedMatchOffersNothing() {
+        // `marker` is self-contained with no parameters — fully typing its
+        // name is a finished call, not something still being completed.
+        #expect(context("@marker|") == nil)
+    }
+
+    @Test("an exact match to a directive that still needs arguments stays open")
+    func exactUnfinishedMatchStaysOpen() {
+        // `glyph` requires a positional argument, so the name alone isn't a
+        // finished call yet.
+        #expect(context("@glyph|") != nil)
     }
 
     @Test("a partial name filters")
@@ -128,6 +148,26 @@ struct DirectiveCompletionTests {
         // "gr" only — not the label, not the preceding argument.
         #expect(found?.replacementRange == NSRange(location: 25, length: 2))
         #expect(found?.prefix == "gr")
+    }
+
+    @Test("a name replacement covers text after the caret too")
+    func nameReplacementCoversTail() {
+        // Caret mid-identifier in an existing name: a pick must replace the
+        // WHOLE name, or the characters after the caret ("nt") survive past
+        // the inserted snippet.
+        let found = context("@fo|nt")
+        #expect(found?.replacementRange == NSRange(location: 0, length: 5))
+        #expect(found?.prefix == "fo")
+    }
+
+    @Test("a value replacement covers text after the caret too")
+    func valueReplacementCoversTail() {
+        // Caret mid-value inside an existing call: a pick must replace the
+        // whole argument value, or the trailing characters ("r") survive
+        // past the inserted candidate.
+        let found = context("@glyph(sta|r)")
+        #expect(found?.replacementRange == NSRange(location: 7, length: 4))
+        #expect(found?.prefix == "sta")
     }
 
     @Test("a closed keyword set completes from the schema alone")

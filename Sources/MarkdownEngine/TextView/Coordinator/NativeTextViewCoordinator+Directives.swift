@@ -23,9 +23,15 @@ extension NativeTextViewCoordinator {
     /// Called from `textViewDidChangeSelection`.
     ///
     /// `codeTokens` gate the whole thing: typing `@icon(` inside a code span
-    /// or fenced block must not pop a picker.
-    func updateDirectiveCompletion(_ textView: NSTextView, text: NSString, codeTokens: [MarkdownToken], isTyping: Bool) {
-        guard !configuration.rawSourceMode,
+    /// or fenced block must not pop a picker. `suppressed` is true when a
+    /// wiki-link or image-embed context already claims this caret this
+    /// pass — that context wins, so two pickers never go live at once.
+    func updateDirectiveCompletion(
+        _ textView: NSTextView, text: NSString, codeTokens: [MarkdownToken], isTyping: Bool,
+        suppressed: Bool = false
+    ) {
+        guard !suppressed,
+              !configuration.rawSourceMode,
               !configuration.directives.isEmpty,
               textView.isEditable,
               !isWritingToolsActive,

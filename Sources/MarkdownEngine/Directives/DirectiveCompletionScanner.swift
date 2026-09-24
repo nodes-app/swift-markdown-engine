@@ -75,7 +75,12 @@ public struct DirectiveCompletionItem: Sendable, Equatable {
             subtitle: completion.subtitle,
             detail: nil,
             insertion: snippet.replacingOccurrences(of: "|", with: ""),
-            caretOffset: caret.map { snippet.distance(from: snippet.startIndex, to: $0) },
+            // In UTF-16 units, not Characters: `caretOffset` is added onto an
+            // NSRange location (`applyDirectiveCompletion`), which counts
+            // UTF-16 code units. A Character count lands the caret wrong —
+            // possibly mid-surrogate — for a snippet carrying any character
+            // outside the BMP before the `|` marker.
+            caretOffset: caret.map { snippet.utf16.distance(from: snippet.utf16.startIndex, to: $0) },
             symbolName: completion.symbolName
         )
     }
@@ -194,15 +199,43 @@ enum DirectiveCompletionScanner {
         let nameRange = NSRange(location: markerIndex + 1, length: cursor - (markerIndex + 1))
         let name = ns.substring(with: nameRange)
 
-        // Still inside the name: complete the directive name itself.
+        // Still inside the name: complete the directive name itself. The name
+        // run above only looked at characters BEFORE the caret, so a pick
+        // made with the caret in the middle of an existing name (`@fo|nt`)
+        // would otherwise replace only the typed prefix and leave the rest
+        // of the identifier dangling after the inserted snippet. Extend the
+        // replacement to the end of the name token too.
         if cursor == caret {
-            let candidates = nameCandidates(prefix: name, marker: marker, directives: directives, settings: settings)
+            // A bare marker (`Ping @|`) offers no context: every registered
+            // directive would otherwise match, which captures Enter for
+            // "confirm" in ordinary prose whenever a marker precedes it —
+            // the boundary rule keeps an email address safe, but a marker
+            // after a plain space is not. Wait for at least one typed
+            // character before showing anything.
+            guard !name.isEmpty else { return nil }
+
+            var nameEnd = caret
+            while nameEnd < ns.length, isNameChar(ns.character(at: nameEnd)) { nameEnd += 1 }
+
+            // An exact, finished match — the typed name matches a directive
+            // that needs nothing more (no required parameters) — is a
+            // completed call, not something still being typed. Keeping the
+            // context open here captures Enter as "confirm" instead of a
+            // newline break for a self-contained call like `@pagebreak`.
+            if nameEnd == caret,
+               let entry = table[name],
+               let matched = directives.first(where: { $0.id == entry.id }),
+               matched.syntax.parameters.allSatisfy({ !$0.isRequired }) {
+                return nil
+            }
+
+            let candidates = nameCandidates(prefix: name, table: table, directives: directives)
             guard !candidates.isEmpty else { return nil }
             return DirectiveCompletionContext(
                 kind: .name,
                 marker: Character(UnicodeScalar(marker) ?? "@"),
                 prefix: name,
-                replacementRange: NSRange(location: markerIndex, length: caret - markerIndex),
+                replacementRange: NSRange(location: markerIndex, length: nameEnd - markerIndex),
                 directiveID: nil,
                 candidates: candidates
             )
@@ -301,6 +334,10 @@ enum DirectiveCompletionScanner {
             valueStart += 1
         }
         let prefix = ns.substring(with: NSRange(location: valueStart, length: caret - valueStart))
+        // The value may continue past the caret (`@glyph(sta|r)`); a pick
+        // there must replace the whole token or it leaves the tail dangling
+        // behind the inserted candidate. Find where the value actually ends.
+        let valueEnd = max(caret, valueTokenEnd(in: ns, from: valueStart))
 
         // Resolve which parameter this is.
         let schema = directive.syntax.parameters
@@ -320,28 +357,62 @@ enum DirectiveCompletionScanner {
             kind: .argument(label: label, index: argumentIndex),
             marker: Character(UnicodeScalar(marker) ?? "@"),
             prefix: prefix,
-            replacementRange: NSRange(location: valueStart, length: caret - valueStart),
+            replacementRange: NSRange(location: valueStart, length: valueEnd - valueStart),
             directiveID: directive.id,
             candidates: candidates
         )
+    }
+
+    /// Scan forward from `start` to find the end of the current argument
+    /// value — the first unescaped, unquoted `,` or `)` at depth 0, a line
+    /// break, or the end of the string. Mirrors the quote/depth tracking the
+    /// backward scan in `argumentContext` already does, just forward.
+    private static func valueTokenEnd(in ns: NSString, from start: Int) -> Int {
+        var index = start
+        var depth = 0
+        var inQuote = false
+        while index < ns.length {
+            let c = ns.character(at: index)
+            if c == 0x0A || c == 0x0D { return index }
+            if c == quote, !isEscaped(index, ns) {
+                inQuote.toggle()
+                index += 1
+                continue
+            }
+            if !inQuote, !isEscaped(index, ns) {
+                if c == lparen { depth += 1 }
+                if c == rparen {
+                    if depth == 0 { return index }
+                    depth -= 1
+                }
+                if c == comma, depth == 0 { return index }
+            }
+            index += 1
+        }
+        return ns.length
     }
 
     // MARK: Name candidates
 
     /// Registry-filtered directive names. The engine owns this ranking, so a
     /// newly registered directive shows up with no embedder change.
+    ///
+    /// Candidates come from `table` — the registry's winning entries for
+    /// this marker — not the raw configured `directives` list. The registry
+    /// drops a directive with an empty name and resolves a duplicate name by
+    /// "first registration wins"; sourcing candidates from the unfiltered
+    /// list could offer a name the parser will never actually recognize.
     private static func nameCandidates(
         prefix: String,
-        marker: unichar,
-        directives: [any MarkdownDirective],
-        settings: DirectiveRegistrySettings
+        table: [String: DirectiveRegistry.Entry],
+        directives: [any MarkdownDirective]
     ) -> [DirectiveCompletionItem] {
         let needle = prefix.lowercased()
-        let defaultMarker = settings.defaultMarker
-        return directives
+        let registered = table.values.compactMap { entry in
+            directives.first { $0.id == entry.id }
+        }
+        return registered
             .filter { directive in
-                let own = directive.syntax.marker ?? defaultMarker
-                guard Array(String(own).utf16).first == marker else { return false }
                 guard !needle.isEmpty else { return true }
                 if directive.syntax.name.lowercased().hasPrefix(needle) { return true }
                 return directive.completion.keywords.contains { $0.lowercased().hasPrefix(needle) }
