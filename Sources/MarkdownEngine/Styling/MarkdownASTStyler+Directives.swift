@@ -166,7 +166,7 @@ extension MarkdownASTStyler {
             attrs.append((restRange, [
                 .foregroundColor: NSColor.clear,
                 .font: markerFont,
-                .kern: -HeadingHelpers.textWidth(restText, font: markerFont),
+                .kern: -MarkdownStyler.hiddenRunKern(restText, font: markerFont),
             ]))
         }
     }

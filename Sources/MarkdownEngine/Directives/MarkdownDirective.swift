@@ -261,6 +261,14 @@ public enum DirectivePresentation {
     /// storage, so the source characters survive for selection and undo.
     case text(String)
     /// A pre-rendered image; `baselineOffset` matches the LaTeX convention.
+    ///
+    /// Drawn at its own `image.size` — unlike `.symbol`/`.text`, which are
+    /// always fit to `DirectiveContext.inheritedFont`, this case is not
+    /// resized to the surrounding line. An image taller than the inherited
+    /// font's line will overdraw neighbouring lines. Sizing it (typically
+    /// to `inheritedFont.ascender - inheritedFont.descender`, or larger by
+    /// deliberate choice, e.g. a thumbnail) is the directive's
+    /// responsibility.
     case image(NSImage, baselineOffset: CGFloat)
 }
 
