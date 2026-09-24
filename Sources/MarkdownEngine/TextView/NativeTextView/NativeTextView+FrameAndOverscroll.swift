@@ -234,17 +234,22 @@ extension NativeTextView {
     func centerReadingColumn(forClipWidth clipWidth: CGFloat) {
         guard configuration.readingWidth != nil,
               let container = superview as? NativeTextViewContainer else { return }
-        if abs(container.frame.size.width - clipWidth) > 0.5 {
+        if container.frame.size.width != clipWidth {
             var f = container.frame
             f.size.width = max(clipWidth, 0)
             container.frame = f
         }
         let originX = floor(max(0, (clipWidth - readingColumnWidth) / 2))
         let delta = originX - frame.origin.x
-        if abs(delta) > 0.5 {
+        if delta != 0 {
             setFrameOrigin(NSPoint(x: originX, y: frame.origin.y))
-            repositionWideTableOverlaysForWidthChange(insetDelta: delta)
         }
+        // The breakout host keeps changing width after a narrow viewport has
+        // pinned the reading column to x = 0. Resize overlays on every host
+        // width change, even when the column itself no longer moves.
+        repositionWideTableOverlaysForWidthChange(insetDelta: delta)
+        (enclosingScrollView as? ClampedScrollView)?
+            .acknowledgePostLiveResizeWidthUpdate()
     }
 
     override func setFrameSize(_ newSize: NSSize) {
@@ -259,7 +264,10 @@ extension NativeTextView {
             return
         }
 
-        let widthChanged = abs(newSize.width - frame.size.width) > 0.5
+        // Fractional split-view and SwiftUI layouts are real render inputs.
+        // Dropping sub-point changes leaves both the text container and a
+        // width-adaptive table at the previous width.
+        let widthChanged = newSize.width != frame.size.width
         if widthChanged {
             pendingFullLayoutMeasure = true   // re-wrap → re-measure height against a full layout
             isApplyingManagedFrameSize = true
@@ -267,36 +275,81 @@ extension NativeTextView {
             isApplyingManagedFrameSize = false
         }
 
-        recalcOverscroll(for: scrollView, targetWidth: newSize.width, debugTag: "setFrameSize")
-
-        // Width change → only rendered table paragraphs need restyling. Their image
-        // width can change, and an initially narrow table can become scrollable.
         if widthChanged {
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
-                if self.configuration.readingWidth == nil {
-                    self.restyleTableParagraphsForWidthChange()
-                }
-                self.updateWideTableOverlays()
+            if defersTableWidthChangeUpdate {
+                pendingTableWidthChangeUpdate = true
+            } else if let clampedScrollView = scrollView as? ClampedScrollView,
+               clampedScrollView.requiresSynchronousTableWidthUpdate {
+                // A physical AppKit resize may remain inside its nested event
+                // tracking loop until mouse-up. Deferred blocks are therefore
+                // not a reliable paint boundary: finish the width-dependent
+                // table transaction before this resize frame returns.
+                pendingTableWidthChangeUpdate = true
+                flushPendingTableWidthChangeUpdate()
+                clampedScrollView.acknowledgePostLiveResizeWidthUpdate()
+            } else {
+                // Outside live resize, collapse same-turn programmatic writes
+                // into one transaction that reads the latest width.
+                scheduleTableWidthChangeUpdate()
+            }
+        } else {
+            recalcOverscroll(
+                for: scrollView,
+                targetWidth: newSize.width,
+                debugTag: "setFrameSize"
+            )
+        }
+    }
+
+    /// Schedules against both modes AppKit uses while resizing so table
+    /// rendering runs at the next run-loop opportunity without a fixed delay.
+    /// Width writes in the same turn collapse into one restyle that reads the
+    /// latest container width.
+    private func scheduleTableWidthChangeUpdate() {
+        guard !pendingTableWidthChangeUpdate else { return }
+        pendingTableWidthChangeUpdate = true
+        RunLoop.main.perform(inModes: [.default, .eventTracking]) {
+            [weak self] in
+            MainActor.assumeIsolated {
+                self?.flushPendingTableWidthChangeUpdate()
             }
         }
     }
 
-    /// Restyle only table paragraphs via stamped anchor ranges; avoids re-tokenizing the doc.
-    private func restyleTableParagraphsForWidthChange() {
-        guard let storage = textStorage,
-              let coord = delegate as? NativeTextViewCoordinator else { return }
-        var ranges: [NSRange] = []
-        var seen: Set<String> = []
-        let fullRange = NSRange(location: 0, length: storage.length)
-        storage.enumerateAttribute(.scrollableBlockFullRange, in: fullRange, options: []) { value, _, _ in
-            guard let v = value as? NSValue else { return }
-            let r = v.rangeValue
-            let key = "\(r.location):\(r.length)"
-            if seen.insert(key).inserted { ranges.append(r) }
+    private var defersTableWidthChangeUpdate: Bool {
+        !configuration.rendersTablesDuringLiveResize
+            && (enclosingScrollView as? ClampedScrollView)?.isLiveResizeActive == true
+    }
+
+    /// Applies the latest width immediately. The scroll view calls this when a
+    /// live resize ends so mouse-up cannot leave a scheduled final-width tail.
+    func flushPendingTableWidthChangeUpdate() {
+        guard pendingTableWidthChangeUpdate, !defersTableWidthChangeUpdate else { return }
+        pendingTableWidthChangeUpdate = false
+        performTableWidthChangeUpdate()
+    }
+
+    private func performTableWidthChangeUpdate() {
+        var layoutAlreadySettled = false
+        var wideTableAnchorRanges: [NSRange]?
+        if configuration.readingWidth == nil {
+            wideTableAnchorRanges = (delegate as? NativeTextViewCoordinator)?
+                .restyleTablesForWidthChange(in: self)
+            if let scrollView = enclosingScrollView {
+                pendingFullLayoutMeasure = true
+                recalcOverscroll(
+                    for: scrollView,
+                    targetWidth: frame.width,
+                    debugTag: "tableWidthChange"
+                )
+                layoutAlreadySettled = true
+            }
         }
-        guard !ranges.isEmpty else { return }
-        coord.restyleParagraphs(ranges, in: self)
+        updateWideTableOverlays(
+            immediately: true,
+            layoutAlreadySettled: layoutAlreadySettled,
+            knownWideTableAnchorRanges: wideTableAnchorRanges
+        )
     }
 
     override func scrollRangeToVisible(_ range: NSRange) {

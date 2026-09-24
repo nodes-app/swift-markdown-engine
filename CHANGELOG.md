@@ -7,7 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- A programmatic content swap — a document switch, or the SwiftUI `text` binding
+  changing from outside the editor — left the code-block selection pass reading
+  the PREVIOUS document's ranges: only the typing and caret paths refreshed that
+  cache, never the rebuild. The length guard from #151 stops the resulting
+  `NSRangeException`, but only for ranges that no longer fit; an incoming
+  document that is LONGER keeps them in bounds, so a copy button was reported
+  over ordinary prose, carrying a slice of that prose as its code. The rebuild
+  now hands its own parse to the cache.
+
+### Changed
+- Raw source mode reports no code blocks. It draws no overlays either way, but
+  the token cache used to survive the switch into it, so an embedder arriving
+  from styled mode kept its copy buttons while one opening straight into raw
+  mode never had them. Now neither does.
+
+## [0.13.0] - 2026-09-20
+
 ### Added
+- `rendersTablesDuringLiveResize` lets embedders defer table reflow until resize ends while preserving synchronous final-width updates.
 - **Directive seam (parsing)**: opt-in named inline commands with typed
   arguments, for constructs that need a name and parameters rather than
   delimiters. A `MarkdownDirective` declares a name, a form — self-contained
@@ -62,6 +81,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   curated data or document policy is an app concern, not an engine primitive.
 
 ### Changed
+- The span-density regression tests assert on counted work instead of elapsed
+  time, so they run on CI again. `InlineParser.parse` can report an
+  `InlineParseCost` — claimed-range probes and containment tests — which is a
+  pure function of the input and therefore reads the same on a laptop and on a
+  contended runner. Linear measures 6.0x for 6x the spans; the pre-rewrite
+  pairwise containment measures 33.9x. The wall-clock assertions stay for
+  absolute numbers, still opt-in via `MDE_PERF=1`.
 - An ordered list's painted number no longer reverts to the source digit under
   the caret or a selection. The number is positional, so in a run written
   `1./1./1.` a click inside a marker — or a select-all — flipped every number
@@ -70,6 +96,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   repaints selected glyphs opaque, so a colour-hidden marker came back under the
   highlight and collided with the number drawn over it. The marker's
   caret-crossing restyle signal went with the reveal.
+
+### Fixed
+- Block LaTeX formulas now use display typesetting, so large-operator limits
+  and fractions render correctly.
+- Rendered tables now follow every live editor-width change, including
+  fractional widths, and settle at the final width when window resizing ends.
 
 ### Performance
 - Scoped restyles inside a contiguous list parse and style only intersecting

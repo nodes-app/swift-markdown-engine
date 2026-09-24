@@ -25,6 +25,8 @@ final class NativeTextView: NSTextView {
     var pendingFullLayoutMeasure = false
     /// Coalesces wide-table overlay updates to once per runloop (resize fires many per frame).
     var pendingWideTableOverlayUpdate = false
+    /// Coalesces table restyles to the latest width once per run-loop turn.
+    var pendingTableWidthChangeUpdate = false
     var suppressAutoRevealOnce: Bool = false
     // Set by clickedOnLink during a mouseDown: did the delegate fire (so
     // mouseDown can re-dispatch a click AppKit dropped), and did it navigate
