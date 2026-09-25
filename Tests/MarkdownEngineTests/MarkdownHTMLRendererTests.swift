@@ -47,6 +47,13 @@ struct MarkdownHTMLRendererTests {
                 == "<ul>\n<li>a\n<ol>\n<li>b</li>\n</ol>\n</li>\n<li>c</li>\n</ul>")
     }
 
+    @Test("a list that opens deeper than it continues keeps every item")
+    func listOpeningOnASubItem() {
+        #expect(html("  - b\n- c") == "<ul>\n<li>b</li>\n</ul>\n<ul>\n<li>c</li>\n</ul>")
+        #expect(html("  - b\n    - b2\n- c\n  - d")
+                == "<ul>\n<li>b\n<ul>\n<li>b2</li>\n</ul>\n</li>\n</ul>\n<ul>\n<li>c\n<ul>\n<li>d</li>\n</ul>\n</li>\n</ul>")
+    }
+
     @Test("task list keeps GFM checkbox markup (rich flavors strip it)")
     func taskList() {
         #expect(html("- [ ] todo\n- [x] done") == "<ul>\n<li><input type=\"checkbox\" disabled> todo</li>\n<li><input type=\"checkbox\" checked disabled> done</li>\n</ul>")

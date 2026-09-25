@@ -153,7 +153,9 @@ public enum MarkdownHTMLRenderer {
     /// indented deeper.
     private static func renderList(items: [ListItem], ns: NSString, env: Env) -> String {
         var index = 0
-        return renderListLevel(items, &index, indent: items.first?.indent ?? 0, ns: ns, env: env)
+        // The shallowest item is the outer level: starting at the FIRST item's
+        // indent dropped every shallower item after it (a copy opening on a sub-item).
+        return renderListLevel(items, &index, indent: items.map(\.indent).min() ?? 0, ns: ns, env: env)
     }
 
     /// One nesting level, consuming items until one is shallower than `indent`.
