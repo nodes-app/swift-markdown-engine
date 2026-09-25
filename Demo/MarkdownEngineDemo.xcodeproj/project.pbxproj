@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		1A2B3C0000000000000004BB /* MarkdownEngineDemoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C0000000000000004AA /* MarkdownEngineDemoApp.swift */; };
 		1A2B3C0000000000000005BB /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C0000000000000005AA /* ContentView.swift */; };
+		1A2B3C0000000000000010BB /* DemoDirectives.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C0000000000000010AA /* DemoDirectives.swift */; };
 		1A2B3C0000000000000006BB /* MDE.icon in Resources */ = {isa = PBXBuildFile; fileRef = 1A2B3C0000000000000006AA /* MDE.icon */; };
 		1A2B3C0000000000000007CC /* MarkdownEngine in Frameworks */ = {isa = PBXBuildFile; productRef = 1A2B3C0000000000000007BB /* MarkdownEngine */; };
 		1A2B3C0000000000000008BB /* MarkdownEngineCodeBlocks in Frameworks */ = {isa = PBXBuildFile; productRef = 1A2B3C0000000000000008AA /* MarkdownEngineCodeBlocks */; };
@@ -19,6 +20,7 @@
 		1A2B3C0000000000000003DD /* MarkdownEngineDemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MarkdownEngineDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1A2B3C0000000000000004AA /* MarkdownEngineDemoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownEngineDemoApp.swift; sourceTree = "<group>"; };
 		1A2B3C0000000000000005AA /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		1A2B3C0000000000000010AA /* DemoDirectives.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoDirectives.swift; sourceTree = "<group>"; };
 		1A2B3C0000000000000006AA /* MDE.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = MDE.icon; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -57,6 +59,7 @@
 			children = (
 				1A2B3C0000000000000004AA /* MarkdownEngineDemoApp.swift */,
 				1A2B3C0000000000000005AA /* ContentView.swift */,
+				1A2B3C0000000000000010AA /* DemoDirectives.swift */,
 				1A2B3C0000000000000006AA /* MDE.icon */,
 			);
 			path = MarkdownEngineDemo;
@@ -141,6 +144,7 @@
 			files = (
 				1A2B3C0000000000000004BB /* MarkdownEngineDemoApp.swift in Sources */,
 				1A2B3C0000000000000005BB /* ContentView.swift in Sources */,
+				1A2B3C0000000000000010BB /* DemoDirectives.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

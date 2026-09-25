@@ -84,6 +84,14 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var onBuildContextMenu: ((NSMenu, NSRange) -> NSMenu)?
     var onInlineSelectionChange: ((InlineSelectionState?) -> Void)?
     var onInlinePreviewKey: ((InlinePreviewKey) -> Bool)?
+    /// Directive autocomplete: published whenever the caret's completion
+    /// context changes, `nil` to dismiss. Detection and commit live in
+    /// `NativeTextViewCoordinator+Directives.swift`.
+    var onDirectiveCompletion: ((DirectiveCompletionContext?) -> Void)?
+    /// True while a completion context is published — the signal
+    /// `doCommandBy` uses to route ↑/↓/↵/Esc to the embedder's picker.
+    var isDirectiveCompletionActive: Bool = false
+    var lastAppliedDirectiveCompletionID: UUID?
     var onCodeBlockSelectionChange: (([CodeBlockSelection]) -> Void)?
     var didInitialFormatting: Bool = false
     /// One-shot guard so `updateCodeBlockSelection` only forces a full-document layout once per document.
