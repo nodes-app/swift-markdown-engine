@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Directive glyph presentation**: a self-contained call (`@marker`,
+  `@glyph(star.fill)`) collapses its source behind an SF Symbol, replacement
+  text, or an image supplied by the directive's `presentation`, and reveals the
+  real characters again under the caret. The source is never removed from the
+  storage — it collapses to zero width the same way inline LaTeX does — so
+  selection, find, copy, and undo still see it. `Demo/` gains `@icon`, `@flag`,
+  `@emoji`, and `@pagebreak` as embedder-side directives — anything carrying
+  curated data or document policy is an app concern, not an engine primitive.
+
 ### Fixed
 - A programmatic content swap — a document switch, or the SwiftUI `text` binding
   changing from outside the editor — left the code-block selection pass reading

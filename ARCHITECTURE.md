@@ -7,7 +7,7 @@ Sources/
 ├── MarkdownEngine/                          # core target — zero deps
 │   ├── Configuration/                       # MarkdownEditorConfiguration + MarkdownEditorTheme
 │   ├── Extensions/                          # the extension seam: MarkdownExtension + bundled opt-ins
-│   ├── Directives/                          # the directive seam: @font(size: 18){…} — parsing + registry
+│   ├── Directives/                          # the directive seam: @font(size: 18){…} — parsing, styling, glyphs
 │   ├── Services/                            # 4 protocols, no-op defaults, WikiLinkService
 │   ├── Parser/                              # two-phase AST: BlockParser → InlineParser → DocumentAST (+ token projection)
 │   ├── Styling/                             # MarkdownASTStyler (AST walk) + MarkdownStyler facade for NSImage passes
@@ -97,11 +97,18 @@ NAME and TYPED ARGUMENTS rather than delimiters — `@pagebreak`,
 the marker defaults to `@` and is configurable per registry and per directive.
 
 Two forms, both **tree-shaped** — a directive's effect never escapes its own
-node: **self-contained** (`@pagebreak`, a leaf) and **container**
-(`@font(size: 18){text}`, whose body is re-parsed as markdown). There is
-deliberately no "applies to everything after me" form: that would make styling
-depend on document position rather than tree position, breaking both the
-styler's compose-on-descent model and the block-scoped incremental restyle.
+node: **self-contained** (`@pagebreak`, a leaf that draws a glyph in place of
+its collapsed source) and **container** (`@font(size: 18){text}`, whose body is
+re-parsed as markdown). There is deliberately no "applies to everything after
+me" form: that would make styling depend on document position rather than tree
+position, breaking both the styler's compose-on-descent model and the
+block-scoped incremental restyle.
+
+The glyph rides the same mechanism inline LaTeX uses: the characters stay in
+the text, the first one carries the image and enough kern to occupy its width,
+the rest collapse to zero width. A glyph that can't be produced (an unknown SF
+Symbol, or `.literal`) leaves the source visible rather than collapsing it to a
+gap the user can't see or fix.
 
 Container styling lives in `MarkdownASTStyler+Directives.swift`: it resolves the
 directive, coerces its arguments against the declared schema, and returns the

@@ -172,6 +172,19 @@ struct ContentView: View {
         // configurable via `config.directiveSettings`.
         config.directives = seamsEnabled ? [FontDirective(), ColorDirective()] : []
 
+        // The second opt-in seam: named inline commands with typed arguments,
+        // for constructs that need a name and parameters rather than
+        // delimiters. The marker defaults to `@` and is configurable via
+        // `config.directiveSettings`.
+        // Only `Font` and `Color` come from the engine — both are pure
+        // presentation. `Icon`, `Flag`, `Emoji`, and `PageBreak` live in this
+        // demo's own `DemoDirectives.swift`, because curated data and print
+        // semantics are app concerns, not engine primitives.
+        config.directives = [
+            FontDirective(), ColorDirective(),
+            IconDirective(), FlagDirective(), EmojiDirective(), PageBreakDirective(),
+        ]
+
         // Toolbar-driven modes.
         config.rawSourceMode = showRawSource
         config.readingWidth = useReadingColumn ? 620 : nil
@@ -300,15 +313,25 @@ ordinary characters — the core grammar has never heard of them.
 /// with whatever it encloses, in both directions. That is why directives are
 /// scoped to a body instead of running "from here on": the effect lives in the
 /// tree, not in the document position.
+
+/// Directive seam demo: `@font(…){…}` and `@color(…){…}` are supplied by the
+/// opt-in `FontDirective` and `ColorDirective` registered above.
+///
+/// The point of the section is COMPOSITION — a directive contributes a font
+/// transform to the styler's walk, so it stacks with whatever encloses it and
+/// with whatever it encloses, in both directions. That is why directives are
+/// scoped to a body instead of running "from here on": the effect lives in the
+/// tree, not in the document position.
 private let directiveSection = """
-## Directives — named, with typed arguments
+## Directives
 
-`config.directives = [FontDirective(), ColorDirective()]`
+The other opt-in seam: named inline commands with typed arguments, for \
+constructs that need a name and parameters rather than delimiters. \
+Unregistered, `@anything` stays literal text — and a bare `@` in prose or an \
+address like jason@example.com never opens one.
 
-A pair of delimiters can't carry a name and parameters, so this is the second \
-seam rather than more of the first. Sizes can be absolute — \
-@font(size: 24){twenty-four point} — or relative to the surrounding text: \
-@font(size: 0.75em){three-quarter em} and @font(size: 150%){one-and-a-half}.
+Sizes can be absolute — @font(size: 24){twenty-four point} — or relative to the \
+surrounding text: @font(size: 0.75em){three-quarter em} and @font(size: 150%){one-and-a-half}.
 
 Composition is the whole idea. Inside a directive, markup keeps the \
 directive's size: @font(size: 20){**bold**, *italic*, and ***both***}. Outside, \
@@ -319,12 +342,16 @@ the directive keeps its context — the same call in a heading stays bold:
 Colours work the same way, and directives nest: @color(red){red text}, \
 @color(blue){blue text}, and @font(size: 22){@color(purple){big and purple}}.
 
-Put the caret inside any directive to reveal its source; move away and the \
-syntax collapses back to just the styled text — exactly like every other marker.
+The other form is self-contained: no body, and it draws a glyph in place of \
+its own source. @icon(star.fill, color: yellow) marks a favourite, \
+@icon(checkmark.circle.fill, color: green) a finished item, \
+@icon(exclamationmark.triangle.fill, color: orange) a warning — sized to \
+whatever text surrounds them, so @font(size: 26){they grow too: @icon(bolt.fill, color: blue)}.
 
-Registered names ONLY, which is what makes the `@` marker safe over an existing \
-corpus: @notregistered(x){y} is literal text right now, and an address like \
-jason@wildthink.com never opens a directive at all.
+Put the caret inside any directive to reveal its source; move away and the \
+syntax collapses back to just the styled text or the glyph — exactly like \
+every other marker. The characters are never deleted, so selection, find, \
+copy, and undo all still see them.
 """
 
 /// Table layout demo: the first table's cells WRAP to the available width
@@ -453,3 +480,4 @@ private let markdownFooter = """
 ---
 
 """
+

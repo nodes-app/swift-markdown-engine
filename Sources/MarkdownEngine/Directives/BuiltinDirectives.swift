@@ -2,17 +2,17 @@
 //  BuiltinDirectives.swift
 //  MarkdownEngine
 //
-//  Three directives that between them exercise every part of the seam, and
-//  double as the "is a new command easy to write?" test. Not registered by
-//  default — the core engine parses pure markdown; embedders opt in the way
-//  they do for extensions:
+//  The two reference directives, mirroring how `HighlightExtension` /
+//  `StrikethroughExtension` ship: not registered by default, opted into the
+//  same way, and present mainly as templates for writing your own.
 //
 //      configuration.directives = [FontDirective(), ColorDirective()]
 //
-//  `style` and `presentation` are declared here but not yet consulted by the
-//  styler (Phase 2 / Phase 3). In Phase 1 a container directive's syntax
-//  shrinks and its body renders as ordinary markdown; a self-contained call
-//  renders as literal text.
+//  Both are PURE PRESENTATION — a font transform and a colour. Both are
+//  containers, so neither draws a glyph; directives that carry curated data
+//  (icons, flags, emoji) or encode document policy (page breaks) are app
+//  concerns, not engine primitives, so they belong to the embedder. `Demo/`
+//  shows what those look like.
 //
 
 import AppKit

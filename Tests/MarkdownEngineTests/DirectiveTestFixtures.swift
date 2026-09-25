@@ -4,14 +4,20 @@
 //
 //  Directives used across the directive suites.
 //
-//  Deliberately test-local: this change adds the seam, not any directive, so
-//  the parser tests declare the shapes they need rather than leaning on a
-//  bundled implementation. That keeps them testing the SEAM — a schema is a
-//  schema whether it came from the engine or from an embedder.
+//  Deliberately test-local: the engine ships only `FontDirective` and
+//  `ColorDirective` as reference implementations — anything carrying curated
+//  data or app policy (icons, flags, print semantics) belongs to the embedder.
+//  So the shapes those would have exercised are declared here instead, which
+//  also keeps the suites hermetic: they test the SEAM, not the bundled
+//  directives. A schema is a schema whether it came from the engine or from an
+//  embedder.
 //
 
+import AppKit
 import Foundation
 @testable import MarkdownEngine
+
+// MARK: - Parsing and argument shapes
 
 /// Container form with a mixed labelled schema — the shape the parser has to
 /// carry through argument coercion.
@@ -43,14 +49,79 @@ struct TintDirective: MarkdownDirective {
     }
 }
 
-/// Self-contained form, no arguments.
-struct MarkerDirective: MarkdownDirective {
-    var syntax: DirectiveSyntax { DirectiveSyntax(name: "marker", form: .selfContained) }
-    func html(arguments: DirectiveArguments, bodyHTML: String) -> String { "<hr class=\"marker\" />" }
-}
-
 /// Self-contained with two POSITIONAL parameters — the shape that exercises
 /// defaults on positionals, which labelled-only filling used to skip.
 struct SelfContainedPair: MarkdownDirective {
     var syntax: DirectiveSyntax { DirectiveSyntax(name: "pair", form: .selfContained) }
 }
+
+// MARK: - Presentation and completion shapes
+
+/// Self-contained, no arguments, draws a fixed symbol. The minimal glyph case.
+struct MarkerDirective: MarkdownDirective {
+    var syntax: DirectiveSyntax { DirectiveSyntax(name: "marker", form: .selfContained) }
+
+    func presentation(arguments: DirectiveArguments, context: DirectiveContext) -> DirectivePresentation {
+        context.isActive ? .literal : .symbol(name: "arrow.down.to.line", tint: context.theme.mutedText)
+    }
+
+    func html(arguments: DirectiveArguments, bodyHTML: String) -> String { "<hr class=\"marker\" />" }
+}
+
+/// Self-contained, symbol chosen by a positional argument, with a static
+/// value-completion list. Stands in for an icon-style directive.
+struct GlyphDirective: MarkdownDirective {
+    static let symbols = ["star.fill", "star", "bolt.fill", "checkmark.circle.fill", "flame.fill"]
+
+    var syntax: DirectiveSyntax {
+        DirectiveSyntax(
+            name: "glyph",
+            form: .selfContained,
+            parameters: [
+                .init(label: nil, kind: .keyword([]), isRequired: true, documentation: "SF Symbol name."),
+                .init(label: "color", kind: .keyword(["red", "green", "blue"]), documentation: "Tint."),
+            ]
+        )
+    }
+
+    func presentation(arguments: DirectiveArguments, context: DirectiveContext) -> DirectivePresentation {
+        guard !context.isActive, let name = arguments.positional.first?.asString else { return .literal }
+        let tint: NSColor? = switch arguments.string("color") {
+        case "red": .systemRed
+        case "green": .systemGreen
+        case "blue": .systemBlue
+        default: nil
+        }
+        return .symbol(name: name, tint: tint)
+    }
+
+}
+
+/// Self-contained, renders replacement TEXT chosen by argument, with dynamic
+/// value completions that match on two fields. Stands in for a flag/emoji
+/// style directive — the case whose domain is too large to declare.
+struct RegionDirective: MarkdownDirective {
+    static let table: [(code: String, name: String, glyph: String)] = [
+        ("JP", "Japan", "🇯🇵"), ("US", "United States", "🇺🇸"),
+        ("DE", "Germany", "🇩🇪"), ("BR", "Brazil", "🇧🇷"),
+    ]
+
+    var syntax: DirectiveSyntax {
+        DirectiveSyntax(
+            name: "region",
+            form: .selfContained,
+            parameters: [.init(label: nil, kind: .keyword([]), isRequired: true,
+                               documentation: "Region code.")]
+        )
+    }
+
+    func presentation(arguments: DirectiveArguments, context: DirectiveContext) -> DirectivePresentation {
+        guard !context.isActive,
+              let code = arguments.positional.first?.asString,
+              let entry = Self.table.first(where: { $0.code.caseInsensitiveCompare(code) == .orderedSame })
+        else { return .literal }
+        return .text(entry.glyph)
+    }
+
+}
+

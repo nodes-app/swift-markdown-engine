@@ -318,10 +318,12 @@ and the same call inside a heading keeps the heading's weight. There is no
 "applies to everything after me" form — a directive's effect is scoped to its
 own node, which is what keeps per-keystroke restyling block-local.
 
-Self-contained calls parse and claim their span, so nothing inside them is
-autolinked or emphasized — but they currently render as their literal source,
-and no self-contained directive ships yet. The glyph presentation that would
-draw one as a rule or a badge arrives with a later phase.
+A self-contained call draws a GLYPH in place of its own source, sized to the
+surrounding text: an SF Symbol, replacement text, or an image, chosen by the
+directive's `presentation`. The source is never removed — it collapses to zero
+width, the same mechanism inline LaTeX uses — so selection, find, copy, and
+undo still see the real characters, and the caret entering the call reveals
+them.
 
 The marker defaults to `@` and is configurable per registry
 (`config.directiveSettings`) and per directive, and several markers can be
@@ -342,13 +344,17 @@ leaves the whole construct literal rather than producing a directive around it:
 ```
 
 Constructs claimed in the same pass or later (`$…$`, links, emphasis, nesting)
-work inside a body. And the engine ships the seam, not a picker: there is no
-completion UI for directive names or argument values.
+work inside a body.
+
+The engine ships the seam, not a picker: there is no completion UI for
+directive names or argument values.
 
 Conform to `MarkdownDirective` to add your own; a typical one is about 30
 lines, including its argument schema and HTML. `FontDirective` and
 `ColorDirective` are reference implementations meant to be read — they are not
-registered unless you register them.
+registered unless you register them. Directives carrying curated data or
+document policy belong to your app; `Demo/` has `@icon`, `@flag`, `@emoji`,
+and `@pagebreak` as worked examples, 30–60 lines each.
 
 ## Demo
 
