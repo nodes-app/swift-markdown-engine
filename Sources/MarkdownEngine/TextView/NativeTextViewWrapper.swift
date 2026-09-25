@@ -80,6 +80,13 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     /// resolved opaque identifier (or the display name when no resolver
     /// was supplied).
     public var onLinkClick: ((String) -> Void)?
+    /// Fires when the user clicks a Markdown URL link (`[label](href)`), so
+    /// an embedder can route the click through its own model instead of
+    /// AppKit's default `NSWorkspace.open`. The URL is what the styler wrote
+    /// to `.link` (see ``LinkStyle/bareHrefs`` for how bare hrefs are shaped);
+    /// the range is the label's span in display text. Return `true` to
+    /// consume; `false` or `nil` falls back to AppKit.
+    public var onURLLinkClick: ((URL, NSRange) -> Bool)?
     /// Fires whenever the caret rect inside an active wiki-link changes,
     /// so embedders can position a follow-the-caret UI.
     public var onCaretRectChange: ((CGRect) -> Void)?
@@ -152,6 +159,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         isEditable: Bool = true,
         onPasteImage: ((NSPasteboard) -> String?)? = nil,
         onLinkClick: ((String) -> Void)? = nil,
+        onURLLinkClick: ((URL, NSRange) -> Bool)? = nil,
         onCaretRectChange: ((CGRect) -> Void)? = nil,
         onTextMutation: ((MarkdownTextMutation) -> Void)? = nil,
         onBuildContextMenu: ((NSMenu, NSRange) -> NSMenu)? = nil,
@@ -178,6 +186,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         self.isEditable = isEditable
         self.onPasteImage = onPasteImage
         self.onLinkClick = onLinkClick
+        self.onURLLinkClick = onURLLinkClick
         self.onCaretRectChange = onCaretRectChange
         self.onTextMutation = onTextMutation
         self.onBuildContextMenu = onBuildContextMenu
@@ -702,6 +711,9 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.onInlineSelectionChange = onInlineSelectionChange
         context.coordinator.onInlinePreviewKey = onInlinePreviewKey
         context.coordinator.onCodeBlockSelectionChange = onCodeBlockSelectionChange
+        // Refresh alongside the other callbacks so an embedder can swap the
+        // URL-click handler between updates without remounting the editor.
+        context.coordinator.onURLLinkClick = onURLLinkClick
         context.coordinator.didInitialFormatting = true
     }
 
@@ -712,6 +724,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             fontSize: fontSize,
             isWikiLinkActive: $isWikiLinkActive,
             onLinkClick: onLinkClick,
+            onURLLinkClick: onURLLinkClick,
             onInlineSelectionChange: onInlineSelectionChange
         )
         coordinator.documentId = documentId

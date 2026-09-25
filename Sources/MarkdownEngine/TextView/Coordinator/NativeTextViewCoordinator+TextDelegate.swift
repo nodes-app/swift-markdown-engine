@@ -998,10 +998,23 @@ extension NativeTextViewCoordinator {
             }
         }
         guard let target = WikiLinkService.resolveIdentifier(link: link, textView: textView, at: charIndex) else {
-            // Web link (URL-valued): returning false lets AppKit open the URL
-            // (the mouseDown fallback mirrors that). Opening a link is navigation
-            // too — flag it so mouseDown restores the pre-click caret.
+            // Web link (URL-valued): offer it to the embedder first, then fall
+            // through to AppKit's default `NSWorkspace.open` when the embedder
+            // doesn't consume the click. The hook receives the same URL the
+            // styler wrote to the label's `.link` attribute and the label's
+            // range in the current display text, so it can route the click
+            // against its own document model without introspecting the view.
+            // Opening a link is navigation either way — flag it so mouseDown
+            // restores the pre-click caret.
             (textView as? NativeTextView)?.linkClickDidNavigate = true
+            if let onURLLinkClick, let url = link as? URL, let storage = textView.textStorage {
+                var linkRange = NSRange(location: NSNotFound, length: 0)
+                _ = storage.attribute(
+                    .link, at: charIndex, longestEffectiveRange: &linkRange,
+                    in: NSRange(location: 0, length: storage.length)
+                )
+                if onURLLinkClick(url, linkRange) { return true }
+            }
             return false
         }
         // Direkt deaktivieren, bevor der Navigation-Callback läuft.
