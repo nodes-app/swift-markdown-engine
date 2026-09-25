@@ -556,6 +556,24 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
                 context.coordinator.restyleParagraphs([fullRange], in: textView)
             }
         }
+        // Reconcile the pure-style fields (theme, paragraph, link, markers,
+        // codeBlock, inlineCode, taskCheckbox, headings, imageEmbed, blockLatex,
+        // inlineLatex, blockquote, thematicBreak, cursorFollowsSpanInk) so an
+        // embedder that swaps configurations at runtime — a light/dark palette
+        // toggle, a heading-metric change, a link-ink update — actually repaints.
+        // Without this the coordinator's `configuration` is stuck at whatever
+        // `makeCoordinator` captured, and the styler reads `theme.bodyText` etc.
+        // from that stale snapshot on every rebuild. The grammar/services fields
+        // above have their own fingerprint-gated paths; here we handle everything
+        // else that only affects how already-parsed content is drawn.
+        //
+        // Flipping `didInitialFormatting` off skips the early-return guard below,
+        // so the full rebuild path runs and applies the new attributes to storage.
+        if context.coordinator.configuration.styleSignature != configuration.styleSignature {
+            context.coordinator.configuration.adoptStyleFields(from: configuration)
+            textView.configuration.adoptStyleFields(from: configuration)
+            context.coordinator.didInitialFormatting = false
+        }
         textView.isEditable = isEditable
         textView.isSelectable = true
         // Keep the caret ink the selection handler resolved (an extension span
