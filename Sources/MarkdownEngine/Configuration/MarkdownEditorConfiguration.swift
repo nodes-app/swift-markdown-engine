@@ -173,15 +173,21 @@ public struct SpellCheckingPolicy: Sendable {
     public var grammarChecking: Bool
     /// Mirrors `NSTextView.isAutomaticSpellingCorrectionEnabled`.
     public var automaticSpellingCorrection: Bool
+    /// Mirrors `NSTextView.isAutomaticQuoteSubstitutionEnabled` (smart quotes).
+    /// Markdown/LaTeX source usually wants straight `'` and `"`, so embedders
+    /// editing plain source can turn this off.
+    public var automaticQuoteSubstitution: Bool
 
     public init(
         continuousSpellChecking: Bool = true,
         grammarChecking: Bool = true,
-        automaticSpellingCorrection: Bool = true
+        automaticSpellingCorrection: Bool = true,
+        automaticQuoteSubstitution: Bool = true
     ) {
         self.continuousSpellChecking = continuousSpellChecking
         self.grammarChecking = grammarChecking
         self.automaticSpellingCorrection = automaticSpellingCorrection
+        self.automaticQuoteSubstitution = automaticQuoteSubstitution
     }
 
     public static let `default` = SpellCheckingPolicy()
