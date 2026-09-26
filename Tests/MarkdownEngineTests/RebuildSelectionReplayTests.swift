@@ -76,7 +76,8 @@ struct RebuildSelectionReplayTests {
         #expect(coord.cachedSpellingDisabled == expectedDisabled)   // the replay ran
         #expect(tv.isContinuousSpellCheckingEnabled
                 == (expectedDisabled ? false : coord.userPrefersContinuousSpellChecking))
-        #expect(tv.isAutomaticQuoteSubstitutionEnabled == !expectedDisabled)
+        #expect(tv.isAutomaticQuoteSubstitutionEnabled
+                == (expectedDisabled ? false : coord.userPrefersAutomaticQuoteSubstitution))
     }
 
     // The guard is scoped to the rebuild only — a genuine caret move afterwards must
