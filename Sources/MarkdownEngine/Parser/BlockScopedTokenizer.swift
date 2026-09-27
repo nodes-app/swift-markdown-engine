@@ -204,7 +204,8 @@ private extension MarkdownToken {
             kind: kind,
             range: move(range),
             contentRange: move(contentRange),
-            markerRanges: markerRanges.map(move)
+            markerRanges: markerRanges.map(move),
+            destinationRange: destinationRange.map(move)
         )
     }
 }

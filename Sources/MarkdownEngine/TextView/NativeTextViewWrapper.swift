@@ -76,9 +76,14 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     /// to the system's default plain-text paste.
     public var onPasteImage: ((NSPasteboard) -> String?)?
 
-    /// Fires when the user clicks a `[[Name]]` link. The argument is the
-    /// resolved opaque identifier (or the display name when no resolver
-    /// was supplied).
+    /// Gives the host first chance to handle an inline link, wiki link, or
+    /// automatically detected URL. Return `true` to consume the activation;
+    /// `false` preserves the existing wiki-link or AppKit routing.
+    public var onLinkActivation: ((MarkdownLinkActivation) -> Bool)?
+    /// Default wiki-link route when ``onLinkActivation`` is absent or returns
+    /// `false`. Receives the resolved identifier, or the display name when no
+    /// identifier is available. Inline Markdown links and autolinks continue
+    /// through AppKit when the activation callback declines them.
     public var onLinkClick: ((String) -> Void)?
     /// Fires whenever the caret rect inside an active wiki-link changes,
     /// so embedders can position a follow-the-caret UI.
@@ -151,6 +156,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         documentId: String = "default",
         isEditable: Bool = true,
         onPasteImage: ((NSPasteboard) -> String?)? = nil,
+        onLinkActivation: ((MarkdownLinkActivation) -> Bool)? = nil,
         onLinkClick: ((String) -> Void)? = nil,
         onCaretRectChange: ((CGRect) -> Void)? = nil,
         onTextMutation: ((MarkdownTextMutation) -> Void)? = nil,
@@ -177,6 +183,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         self.documentId = documentId
         self.isEditable = isEditable
         self.onPasteImage = onPasteImage
+        self.onLinkActivation = onLinkActivation
         self.onLinkClick = onLinkClick
         self.onCaretRectChange = onCaretRectChange
         self.onTextMutation = onTextMutation
@@ -398,6 +405,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         guard let textView = nsView.nativeTextView else {
             return
         }
+        context.coordinator.onLinkActivation = onLinkActivation
         reconcileHeader(textView: textView, context: context)
 
         let isNodeSwitch = context.coordinator.documentId != documentId
@@ -711,6 +719,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             fontName: fontName,
             fontSize: fontSize,
             isWikiLinkActive: $isWikiLinkActive,
+            onLinkActivation: onLinkActivation,
             onLinkClick: onLinkClick,
             onInlineSelectionChange: onInlineSelectionChange
         )

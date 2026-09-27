@@ -50,13 +50,8 @@ extension NativeTextView {
             let linkAttr = onCaret ? ts.attribute(.link, at: caret, effectiveRange: nil)
                 : (caret > 0 ? ts.attribute(.link, at: caret - 1, effectiveRange: nil) : nil)
             let linkIdx = onCaret ? caret : caret - 1
-            if let linkAttr, let dlg = delegate as? NativeTextViewCoordinator,
-               !dlg.textView(self, clickedOnLink: linkAttr, at: linkIdx) {
-                // Web link: the delegate declines; open the URL as AppKit would.
-                if let url = (linkAttr as? URL) ?? (linkAttr as? String).flatMap(URL.init(string:)),
-                   url.scheme != nil {
-                    NSWorkspace.shared.open(url)
-                }
+            if let linkAttr {
+                _ = dispatchDroppedLinkClickFallback(linkAttr, at: linkIdx)
             }
         }
 
@@ -69,6 +64,24 @@ extension NativeTextView {
             let len = min(preClickSelection.length, max(0, docLen - loc))
             setSelectedRange(NSRange(location: loc, length: len))
         }
+    }
+
+    /// Replays a link click AppKit dropped, using the same host-first delegate
+    /// route before mirroring AppKit's URL opening behavior.
+    @discardableResult
+    func dispatchDroppedLinkClickFallback(
+        _ linkAttribute: Any,
+        at charIndex: Int,
+        openURL: (URL) -> Void = { url in _ = NSWorkspace.shared.open(url) }
+    ) -> Bool {
+        guard let coordinator = delegate as? NativeTextViewCoordinator else { return false }
+        let handled = coordinator.textView(self, clickedOnLink: linkAttribute, at: charIndex)
+        guard !handled else { return true }
+        if let url = (linkAttribute as? URL) ?? (linkAttribute as? String).flatMap(URL.init(string:)),
+           url.scheme != nil {
+            openURL(url)
+        }
+        return false
     }
 
     func performDragBoostTick() {

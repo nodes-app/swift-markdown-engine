@@ -91,6 +91,18 @@ struct ExtensionInlineNode: Equatable {
 
 enum InlineParser {
 
+    /// Extract the destination from a parsed inline-link URL span, removing
+    /// optional angle brackets and the title that follows an unbracketed URL.
+    /// This preserves the source spelling and deliberately performs no
+    /// classification, decoding, normalization, or URL construction.
+    static func markdownLinkDestination(from raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("<"), let closingBracket = trimmed.firstIndex(of: ">") {
+            return String(trimmed[trimmed.index(after: trimmed.startIndex)..<closingBracket])
+        }
+        return String(trimmed.prefix { !$0.isWhitespace })
+    }
+
     private static let backtick: unichar = 0x60
     private static let asterisk: unichar = 0x2A
     private static let underscore: unichar = 0x5F
