@@ -33,6 +33,8 @@ struct LinkActivationTests {
     }
 
     private let linkCases = [
+        LinkCase(source: "[x](my file.md)", linkText: "x", kind: .inlineLink, destination: "my file.md"),
+        LinkCase(source: "[x](../Foo Bar/)", linkText: "x", kind: .inlineLink, destination: "../Foo Bar/"),
         LinkCase(
             source: "[Task](../Tasks/Jaron%20vraagt%20na.md)",
             linkText: "Task",
@@ -178,6 +180,29 @@ struct LinkActivationTests {
         let expectedRange = (source as NSString).range(of: "[Task](Map/Notitie.md#Kop)")
         #expect(received.first?.sourceRange == expectedRange)
         #expect(received.first?.destination == "Map/Notitie.md#Kop")
+    }
+
+    @Test
+    func autolinkInLaterParagraphKeepsItsRawSourceRange() throws {
+        _ = NSApplication.shared
+        let destination = "https://example.com/later"
+        let source = "😀 [[Prior|opaque-id]] https://other.example/first\n\nLater: \(destination)\n\nAfter"
+        var received: [MarkdownLinkActivation] = []
+        let fixture = try makeFixture(
+            source: source,
+            linkText: destination,
+            isEditable: false,
+            onLinkActivation: { received.append($0); return true },
+            onLinkClick: nil
+        )
+
+        #expect(fixture.coordinator.textView(
+            fixture.textView, clickedOnLink: fixture.linkValue, at: fixture.clickIndex
+        ))
+        #expect(received.count == 1)
+        #expect(received.first?.kind == .autolink)
+        #expect(received.first?.destination == destination)
+        #expect(received.first?.sourceRange == (source as NSString).range(of: destination))
     }
 
     @Test

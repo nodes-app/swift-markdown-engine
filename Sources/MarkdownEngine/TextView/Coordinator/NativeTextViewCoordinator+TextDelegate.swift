@@ -75,9 +75,9 @@ extension NativeTextViewCoordinator {
         }
 
         guard let detector = Self.linkActivationDetector else { return nil }
-        let fullRange = NSRange(location: 0, length: displayNSString.length)
         let clickRange = NSRange(location: displayLocation, length: 1)
-        guard let match = detector.matches(in: displayText, options: [], range: fullRange)
+        let paragraphRange = displayNSString.paragraphRange(for: clickRange)
+        guard let match = detector.matches(in: displayText, options: [], range: paragraphRange)
             .first(where: { NSIntersectionRange($0.range, clickRange).length > 0 }),
               let sourceMatchRange = sourceRange(forDisplayRange: match.range) else { return nil }
         let sourceNSString = (lastComputedStorage.isEmpty ? text : lastComputedStorage) as NSString
