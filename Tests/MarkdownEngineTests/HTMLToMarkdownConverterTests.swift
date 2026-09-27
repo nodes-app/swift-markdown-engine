@@ -43,6 +43,25 @@ struct HTMLToMarkdownConverterTests {
         #expect(md(html) == "- Parent\n\t- Child")
     }
 
+    @Test("a sublist placed NEXT TO its <li> (WebKit) indents instead of vanishing")
+    func siblingNestedList() {
+        // Apple Mail/Notes indent a bullet by appending the sublist as a
+        // SIBLING of the <li>. Invalid per spec, rendered right by every
+        // browser — measured on a real Mail paste: 6 of 6 nestings this shape.
+        #expect(md("<ul><li>A</li><ul><li>B</li><li>C</li></ul></ul>") == "- A\n\t- B\n\t- C")
+        #expect(md("<ul><li>A</li><ul><li>B</li><ul><li>C</li></ul></ul></ul>") == "- A\n\t- B\n\t\t- C")
+        #expect(md("<ul><li>A</li><ol><li>B</li></ol></ul>") == "- A\n\t1. B")
+        // The sibling sublist must not consume the parent's numbering.
+        #expect(md("<ol><li>A</li><ul><li>B</li></ul><li>C</li></ol>") == "1. A\n\t- B\n2. C")
+    }
+
+    @Test("a nested list survives the copy → paste round trip")
+    func nestedRoundTrip() {
+        let markdown = "- A\n\t- B\n\t\t- C\n- D"
+        let html = MarkdownHTMLRenderer.html(from: markdown)
+        #expect(HTMLToMarkdownConverter.markdown(fromHTML: html) == markdown)
+    }
+
     @Test("checkbox li becomes GFM task item")
     func taskList() {
         let html = "<ul>"

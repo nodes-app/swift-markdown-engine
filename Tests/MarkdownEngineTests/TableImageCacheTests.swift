@@ -67,6 +67,41 @@ struct TableImageCacheTests {
         #expect(first.image === second.image)
     }
 
+    @Test func fractionalWidthsDoNotShareAStaleImage() throws {
+        let source = "| fractional | width |\n|---|---|\n| a wrapping value | b |"
+        let parsed = try #require(MarkdownStyler.parseTableSource(source))
+        let ctx = makeContext(for: source)
+        let aqua = try #require(NSAppearance(named: .aqua))
+
+        let first = MarkdownStyler.tableImage(
+            for: source,
+            parsed: parsed,
+            ctx: ctx,
+            appearance: aqua,
+            availableWidth: 659.51
+        )
+        let second = MarkdownStyler.tableImage(
+            for: source,
+            parsed: parsed,
+            ctx: ctx,
+            appearance: aqua,
+            availableWidth: 660.49
+        )
+        let repeatedFirst = MarkdownStyler.tableImage(
+            for: source,
+            parsed: parsed,
+            ctx: ctx,
+            appearance: aqua,
+            availableWidth: 659.51
+        )
+
+        #expect(first.rendered)
+        #expect(second.rendered)
+        #expect(first.image !== second.image)
+        #expect(!repeatedFirst.rendered)
+        #expect(repeatedFirst.image === first.image)
+    }
+
     @Test func appearanceChangeRendersFresh() throws {
         let source = "| gamma | delta |\n|---|---|\n| 3 | 4 |"
         let parsed = try #require(MarkdownStyler.parseTableSource(source))
