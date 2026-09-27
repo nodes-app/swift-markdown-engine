@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `NativeTextViewWrapper.onUnhandledCommand` lets embedders handle Escape,
+  Tab, and Shift-Tab after inline previews and list editing decline them.
+
 ### Fixed
 - A programmatic content swap — a document switch, or the SwiftUI `text` binding
   changing from outside the editor — left the code-block selection pass reading

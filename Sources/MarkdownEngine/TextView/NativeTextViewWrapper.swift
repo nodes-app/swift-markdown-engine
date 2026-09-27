@@ -96,6 +96,10 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     /// Fires on ↑/↓/Enter/Esc while an inline `[[…]]` preview is open, so the
     /// embedder can drive its autocomplete list. Return `true` to consume the key.
     public var onInlinePreviewKey: ((InlinePreviewKey) -> Bool)?
+    /// Receives Escape, Tab, or Shift-Tab only after the engine declines the
+    /// command. Return `true` when the host consumed it; `false` preserves the
+    /// normal AppKit fallback. Inline previews and list editing take priority.
+    public var onUnhandledCommand: ((MarkdownEditorCommand) -> Bool)?
     /// Fires when the set of visible code blocks changes, so embedders can
     /// overlay copy buttons (see ``CodeBlockButton``).
     public var onCodeBlockSelectionChange: (([CodeBlockSelection]) -> Void)?
@@ -157,6 +161,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         onBuildContextMenu: ((NSMenu, NSRange) -> NSMenu)? = nil,
         onInlineSelectionChange: ((InlineSelectionState?) -> Void)? = nil,
         onInlinePreviewKey: ((InlinePreviewKey) -> Bool)? = nil,
+        onUnhandledCommand: ((MarkdownEditorCommand) -> Bool)? = nil,
         onCodeBlockSelectionChange: (([CodeBlockSelection]) -> Void)? = nil,
         onSpellCheckingPolicyChanged: ((SpellCheckingPolicy) -> Void)? = nil,
         placeholder: NSAttributedString? = nil,
@@ -183,6 +188,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         self.onBuildContextMenu = onBuildContextMenu
         self.onInlineSelectionChange = onInlineSelectionChange
         self.onInlinePreviewKey = onInlinePreviewKey
+        self.onUnhandledCommand = onUnhandledCommand
         self.onCodeBlockSelectionChange = onCodeBlockSelectionChange
         self.onSpellCheckingPolicyChanged = onSpellCheckingPolicyChanged
         self.placeholder = placeholder
@@ -333,6 +339,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.onBuildContextMenu = onBuildContextMenu
         context.coordinator.onInlineSelectionChange = onInlineSelectionChange
         context.coordinator.onInlinePreviewKey = onInlinePreviewKey
+        context.coordinator.onUnhandledCommand = onUnhandledCommand
         context.coordinator.onCodeBlockSelectionChange = onCodeBlockSelectionChange
 
         textView.recalcOverscroll(for: scrollView)
@@ -701,6 +708,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.onBuildContextMenu = onBuildContextMenu
         context.coordinator.onInlineSelectionChange = onInlineSelectionChange
         context.coordinator.onInlinePreviewKey = onInlinePreviewKey
+        context.coordinator.onUnhandledCommand = onUnhandledCommand
         context.coordinator.onCodeBlockSelectionChange = onCodeBlockSelectionChange
         context.coordinator.didInitialFormatting = true
     }
