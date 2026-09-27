@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `NativeTextViewWrapper.allowsTaskCheckboxInteractionWhenReadOnly` optionally
+  keeps task checkboxes interactive without enabling ordinary text editing.
+
 ### Fixed
 - A programmatic content swap — a document switch, or the SwiftUI `text` binding
   changing from outside the editor — left the code-block selection pass reading

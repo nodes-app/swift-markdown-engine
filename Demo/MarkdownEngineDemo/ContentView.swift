@@ -46,6 +46,7 @@ struct ContentView: View {
             configuration: configuration,
             fontSize: fontSize,
             isEditable: !isReadOnly,
+            allowsTaskCheckboxInteractionWhenReadOnly: true,
             placeholder: NSAttributedString(
                 string: "Empty document — start typing, markdown styles live…",
                 attributes: [
@@ -66,7 +67,7 @@ struct ContentView: View {
                 Toggle(isOn: $isReadOnly) {
                     Label("Read-only", systemImage: isReadOnly ? "lock" : "lock.open")
                 }
-                .help("Read-only: the styled document stays scrollable and selectable, editing is off")
+                .help("Read-only: text editing is off, while task checkboxes remain interactive")
 
                 Toggle(isOn: $showRawSource) {
                     Label("Raw source", systemImage: "chevron.left.forwardslash.chevron.right")

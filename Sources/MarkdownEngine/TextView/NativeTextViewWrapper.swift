@@ -71,6 +71,9 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     public var documentId: String
     /// When `false` the editor renders read-only with no caret.
     public var isEditable: Bool
+    /// Allows task checkboxes to remain interactive while ordinary text editing
+    /// is disabled. Defaults to `false`, preserving fully read-only behavior.
+    public var allowsTaskCheckboxInteractionWhenReadOnly: Bool
     /// Optional paste hook. Return a Markdown image-embed string (e.g.
     /// `"![[my-image]]"`) to insert at the caret, or `nil` to fall through
     /// to the system's default plain-text paste.
@@ -150,6 +153,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         fontSize: CGFloat = 16,
         documentId: String = "default",
         isEditable: Bool = true,
+        allowsTaskCheckboxInteractionWhenReadOnly: Bool = false,
         onPasteImage: ((NSPasteboard) -> String?)? = nil,
         onLinkClick: ((String) -> Void)? = nil,
         onCaretRectChange: ((CGRect) -> Void)? = nil,
@@ -176,6 +180,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         self.fontSize = fontSize
         self.documentId = documentId
         self.isEditable = isEditable
+        self.allowsTaskCheckboxInteractionWhenReadOnly = allowsTaskCheckboxInteractionWhenReadOnly
         self.onPasteImage = onPasteImage
         self.onLinkClick = onLinkClick
         self.onCaretRectChange = onCaretRectChange
@@ -264,6 +269,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.configuration = configuration
         textView.insertionPointColor = configuration.theme.bodyText
         textView.isEditable = isEditable
+        textView.allowsTaskCheckboxInteractionWhenReadOnly = allowsTaskCheckboxInteractionWhenReadOnly
         textView.isSelectable = true
         textView.isRichText = true
         let initialState = WikiLinkService.makeDisplayState(from: text) { configuration.services.wikiLinks.name(forID: $0) }
@@ -557,6 +563,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             }
         }
         textView.isEditable = isEditable
+        textView.allowsTaskCheckboxInteractionWhenReadOnly = allowsTaskCheckboxInteractionWhenReadOnly
         textView.isSelectable = true
         // Keep the caret ink the selection handler resolved (an extension span
         // can invert it); a plain bodyText reset here stomps it on every pass.
