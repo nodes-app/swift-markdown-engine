@@ -13,6 +13,39 @@ final class ClampedScrollView: NSScrollView {
     /// own height to SwiftUI and the enclosing scroll view owns paging.
     var fitsContent: Bool = false
 
+    /// AppKit can process a physical window resize inside a nested tracking
+    /// loop without servicing deferred run-loop blocks. Keep explicit state so
+    /// width-dependent rendering can finish before each frame-size callback
+    /// returns instead of waiting for mouse-up.
+    private(set) var isLiveResizeActive = false
+    private var isAwaitingPostLiveResizeWidthUpdate = false
+
+    /// SwiftUI can deliver the final document-view width after AppKit's
+    /// `viewDidEndLiveResize`. Keep the synchronous path armed until that
+    /// concrete width update arrives; already-settled geometry never arms it.
+    var requiresSynchronousTableWidthUpdate: Bool {
+        isLiveResizeActive || isAwaitingPostLiveResizeWidthUpdate
+    }
+
+    func acknowledgePostLiveResizeWidthUpdate() {
+        guard !isLiveResizeActive, isAwaitingPostLiveResizeWidthUpdate else {
+            return
+        }
+        isAwaitingPostLiveResizeWidthUpdate = false
+    }
+
+    private var hasUnpropagatedLiveResizeWidth: Bool {
+        guard let container = documentView as? NativeTextViewContainer,
+              let textView = container.textView else {
+            return false
+        }
+        let viewportWidth = contentView.bounds.width
+        guard viewportWidth.isFinite, viewportWidth >= 0 else { return false }
+        if container.bounds.width != viewportWidth { return true }
+        return textView.configuration.readingWidth == nil
+            && textView.frame.width != container.bounds.width
+    }
+
     /// Saved at the start of every live-resize (including spurious one-click resizes triggered by edge-cursor clicks) so the position is restored when the resize ends. Without this, NSScrollView's default top-anchor-during-resize would jolt a bottom-anchored user back up by hundreds of points on a single edge click.
     private var scrollYBeforeLiveResize: CGFloat?
 
@@ -90,12 +123,20 @@ final class ClampedScrollView: NSScrollView {
 
     override func viewWillStartLiveResize() {
         super.viewWillStartLiveResize()
+        isLiveResizeActive = true
+        isAwaitingPostLiveResizeWidthUpdate = false
         guard !fitsContent else { return }
         scrollYBeforeLiveResize = contentView.bounds.origin.y
     }
 
     override func viewDidEndLiveResize() {
         super.viewDidEndLiveResize()
+        isLiveResizeActive = false
+        nativeTextView?.flushPendingTableWidthChangeUpdate()
+        // A lagging SwiftUI document view is observable as a width mismatch.
+        // Keep synchronous table rendering armed until that concrete geometry
+        // propagation is consumed; never guess its delivery time with a timer.
+        isAwaitingPostLiveResizeWidthUpdate = hasUnpropagatedLiveResizeWidth
         guard !fitsContent else { return }
         if let y = scrollYBeforeLiveResize {
             contentView.scroll(to: NSPoint(x: contentView.bounds.origin.x, y: y))
