@@ -26,6 +26,7 @@ struct ContentView: View {
     @State private var isReadOnly = false
     @State private var showRawSource = false
     @State private var useReadingColumn = false
+    @State private var editorIsFocused = false
 
     /// Registers/unregisters BOTH opt-in seams at once. The document is written
     /// so that flipping this off is the whole explanation of what is core
@@ -46,6 +47,7 @@ struct ContentView: View {
             configuration: configuration,
             fontSize: fontSize,
             isEditable: !isReadOnly,
+            isFocused: $editorIsFocused,
             placeholder: NSAttributedString(
                 string: "Empty document — start typing, markdown styles live…",
                 attributes: [
@@ -63,6 +65,12 @@ struct ContentView: View {
         .id(useReadingColumn)
         .toolbar {
             ToolbarItemGroup {
+                Button {
+                    editorIsFocused = true
+                } label: {
+                    Label("Focus editor", systemImage: "text.cursor")
+                }
+
                 Toggle(isOn: $isReadOnly) {
                     Label("Read-only", systemImage: isReadOnly ? "lock" : "lock.open")
                 }

@@ -46,6 +46,7 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var undoContentSnapshots: [String: String] = [:]
     @Binding var text: String
     @Binding var isWikiLinkActive: Bool
+    var isFocused: Binding<Bool>?
     var fontName: String
     var fontSize: CGFloat
     var configuration: MarkdownEditorConfiguration = .default {
@@ -174,6 +175,14 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     /// resetting to `theme.bodyText`, which would stomp it on any SwiftUI pass;
     /// nil = no span, use the theme.
     var resolvedCaretColor: NSColor?
+
+    /// Mirrors an actual AppKit first-responder transition into the optional
+    /// host binding. Equality guards keep host-driven reconciliation from
+    /// feeding the same value back into SwiftUI.
+    func reportFocusChange(_ focused: Bool) {
+        guard let isFocused, isFocused.wrappedValue != focused else { return }
+        isFocused.wrappedValue = focused
+    }
 
     var cachedCodeBlockTokens: [(index: Int, token: MarkdownToken)] = []
     /// Dedupe key of the last emitted code-block selections — identical

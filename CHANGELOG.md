@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `NativeTextViewWrapper.isFocused` provides optional two-way first-responder
+  coordination for embedders without changing AppKit-owned focus by default.
+
 ### Fixed
 - A programmatic content swap — a document switch, or the SwiftUI `text` binding
   changing from outside the editor — left the code-block selection pass reading
