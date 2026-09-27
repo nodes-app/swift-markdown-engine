@@ -15,7 +15,7 @@ import MarkdownEngine
 ///
 /// Renders both block (`$$ … $$`) and inline (`$ … $`) LaTeX strings into
 /// `NSImage`s using the Latin Modern math font. Results are cached per
-/// (latex, font size, appearance, theme color fingerprint) so repeated
+/// (latex, mode, font size, appearance, theme color fingerprint) so repeated
 /// renders are free.
 ///
 /// Light/dark appearance is taken from the host editor's window
@@ -27,6 +27,7 @@ import MarkdownEngine
 public final class SwiftMathBridge: LatexRenderer, @unchecked Sendable {
     private struct CacheKey: Hashable {
         let latex: String
+        let mode: LatexRenderMode
         let fontSize: CGFloat
         let isDarkMode: Bool
         let lightColorRGB: UInt32
@@ -93,6 +94,16 @@ public final class SwiftMathBridge: LatexRenderer, @unchecked Sendable {
         fontSize: CGFloat,
         theme: MarkdownEditorTheme
     ) -> LatexRenderResult? {
+        // Preserve the historical mode-less behavior.
+        render(latex: latex, mode: .inline, fontSize: fontSize, theme: theme)
+    }
+
+    public func render(
+        latex: String,
+        mode: LatexRenderMode,
+        fontSize: CGFloat,
+        theme: MarkdownEditorTheme
+    ) -> LatexRenderResult? {
         let normalizedLatex = latex.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedLatex.isEmpty else { return nil }
 
@@ -101,6 +112,7 @@ public final class SwiftMathBridge: LatexRenderer, @unchecked Sendable {
         let textColor = isDarkMode ? theme.latexDarkModeText : theme.latexLightModeText
         let key = CacheKey(
             latex: normalizedLatex,
+            mode: mode,
             fontSize: fontSize,
             isDarkMode: isDarkMode,
             lightColorRGB: Self.colorFingerprint(theme.latexLightModeText),
@@ -127,7 +139,12 @@ public final class SwiftMathBridge: LatexRenderer, @unchecked Sendable {
                                      baselineOffset: entry.baselineOffset)
         }
 
-        guard let entry = renderLatex(normalizedLatex, fontSize: fontSize, textColor: textColor) else {
+        guard let entry = renderLatex(
+            normalizedLatex,
+            mode: mode,
+            fontSize: fontSize,
+            textColor: textColor
+        ) else {
             return nil
         }
 
@@ -147,7 +164,8 @@ public final class SwiftMathBridge: LatexRenderer, @unchecked Sendable {
 
     /// Stable filename for a cache key: SHA-256 of the fingerprinting fields, hex.
     private func diskFilename(for key: CacheKey) -> String {
-        let composite = "\(key.latex)|\(key.fontSize)|\(key.isDarkMode)|\(key.lightColorRGB)|\(key.darkColorRGB)"
+        let mode = key.mode == .display ? "display" : "inline"
+        let composite = "\(key.latex)|\(mode)|\(key.fontSize)|\(key.isDarkMode)|\(key.lightColorRGB)|\(key.darkColorRGB)"
         let digest = SHA256.hash(data: Data(composite.utf8))
         return digest.map { String(format: "%02x", $0) }.joined() + ".mathcache"
     }
@@ -198,7 +216,12 @@ public final class SwiftMathBridge: LatexRenderer, @unchecked Sendable {
         return (r << 16) | (g << 8) | b
     }
 
-    private func renderLatex(_ latex: String, fontSize: CGFloat, textColor: NSColor) -> CacheEntry? {
+    private func renderLatex(
+        _ latex: String,
+        mode: LatexRenderMode,
+        fontSize: CGFloat,
+        textColor: NSColor
+    ) -> CacheEntry? {
         // Reused instance (see `reusableLabel`); every property is set below so no
         // stale state carries between formulas.
         let mathLabel = reusableLabel
@@ -206,7 +229,7 @@ public final class SwiftMathBridge: LatexRenderer, @unchecked Sendable {
         mathLabel.fontSize = fontSize
         mathLabel.textColor = textColor
         mathLabel.textAlignment = .left
-        mathLabel.labelMode = .text
+        mathLabel.labelMode = mode == .display ? .display : .text
 
         // Latin Modern Math gives the cleanest LaTeX glyphs at typical sizes.
         if let mathFont = MTFontManager().font(withName: "latinmodern-math", size: fontSize) {
