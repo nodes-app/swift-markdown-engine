@@ -123,6 +123,44 @@ public enum WikiLinkService {
         return (result, metadata)
     }
 
+    /// Maps a selection from the editor's projected display string back to
+    /// its storage-form Markdown offsets. Boundaries inside a renamed or
+    /// shortened wiki-link label are ambiguous and return `nil`; boundaries
+    /// outside a link, or exactly around the full link, remain exact.
+    static func storageRange(
+        forDisplayRange displayRange: NSRange,
+        metadata: [RangeKey: LinkMetadata]
+    ) -> NSRange? {
+        guard displayRange.location != NSNotFound,
+              displayRange.location >= 0,
+              displayRange.length >= 0 else { return nil }
+        let links = metadata.map { (display: NSRange(location: $0.key.location, length: $0.key.length), storage: $0.value.storageRange) }
+            .sorted { $0.display.location < $1.display.location }
+        guard let start = storageBoundary(for: displayRange.location, links: links),
+              let end = storageBoundary(for: NSMaxRange(displayRange), links: links),
+              end >= start else { return nil }
+        return NSRange(location: start, length: end - start)
+    }
+
+    private static func storageBoundary(
+        for location: Int,
+        links: [(display: NSRange, storage: NSRange)]
+    ) -> Int? {
+        var delta = 0
+        for link in links {
+            let displayEnd = NSMaxRange(link.display)
+            if location == link.display.location { return link.storage.location }
+            if location == displayEnd { return NSMaxRange(link.storage) }
+            if location > link.display.location && location < displayEnd { return nil }
+            if displayEnd < location {
+                delta += link.storage.length - link.display.length
+            } else if link.display.location >= location {
+                break
+            }
+        }
+        return location + delta
+    }
+
     /// Convert display `[[Name]]` back to storage `[[Name|<id>]]`, preferring the `.wikiLinkID` attribute.
     public static func makeStorageState(
         from displayText: String,

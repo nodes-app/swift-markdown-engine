@@ -22,6 +22,112 @@ extension NativeTextViewCoordinator {
         pattern: #"^[ \t]*(?:(?:\d+[.)])|[-•*+])(?:[ \t]+\[[ xX]\])?[ \t]+"#
     )
 
+    private static let linkActivationDetector = try? NSDataDetector(
+        types: NSTextCheckingResult.CheckingType.link.rawValue
+    )
+
+    private func linkActivation(at displayLocation: Int, in textView: NSTextView) -> MarkdownLinkActivation? {
+        let displayText = textView.string
+        let displayNSString = displayText as NSString
+        guard displayLocation >= 0, displayLocation < displayNSString.length else { return nil }
+
+        let parsed = parsedDocument(for: displayText)
+        if let token = parsed.tokens
+            .filter({
+                ($0.kind == .link || $0.kind == .wikiLink)
+                    && NSLocationInRange(displayLocation, $0.range)
+            })
+            .min(by: { $0.range.length < $1.range.length }),
+           let tokenRange = sourceRange(forDisplayRange: token.range),
+           token.destinationRange != nil {
+            let sourceNSString = (lastComputedStorage.isEmpty ? text : lastComputedStorage) as NSString
+            guard NSMaxRange(tokenRange) <= sourceNSString.length else { return nil }
+
+            if token.kind == .wikiLink,
+               let metadata = wikiLinkMetadata.first(where: {
+                   displayLocation >= $0.key.location
+                       && displayLocation < $0.key.location + $0.key.length
+               })?.value {
+                let destination = metadata.id
+                    ?? sourceDestination(for: token, tokenRange: metadata.storageRange, source: sourceNSString)
+                guard let destination else { return nil }
+                return makeLinkActivation(
+                    kind: .wikiLink,
+                    destination: destination,
+                    sourceRange: metadata.storageRange,
+                    textView: textView
+                )
+            }
+
+            guard let displayDestinationRange = token.destinationRange,
+                  let sourceDestinationRange = sourceRange(forDisplayRange: displayDestinationRange),
+                  NSMaxRange(sourceDestinationRange) <= sourceNSString.length else { return nil }
+            let rawDestination = sourceNSString.substring(with: sourceDestinationRange)
+            let destination = token.kind == .link
+                ? InlineParser.markdownLinkDestination(from: rawDestination)
+                : rawDestination
+            return makeLinkActivation(
+                kind: token.kind == .link ? .inlineLink : .wikiLink,
+                destination: destination,
+                sourceRange: tokenRange,
+                textView: textView
+            )
+        }
+
+        guard let detector = Self.linkActivationDetector else { return nil }
+        let clickRange = NSRange(location: displayLocation, length: 1)
+        let paragraphRange = displayNSString.paragraphRange(for: clickRange)
+        guard let match = detector.matches(in: displayText, options: [], range: paragraphRange)
+            .first(where: { NSIntersectionRange($0.range, clickRange).length > 0 }),
+              let sourceMatchRange = sourceRange(forDisplayRange: match.range) else { return nil }
+        let sourceNSString = (lastComputedStorage.isEmpty ? text : lastComputedStorage) as NSString
+        guard NSMaxRange(sourceMatchRange) <= sourceNSString.length else { return nil }
+        return makeLinkActivation(
+            kind: .autolink,
+            destination: sourceNSString.substring(with: sourceMatchRange),
+            sourceRange: sourceMatchRange,
+            textView: textView
+        )
+    }
+
+    private func sourceDestination(
+        for token: MarkdownToken,
+        tokenRange: NSRange,
+        source: NSString
+    ) -> String? {
+        guard NSMaxRange(tokenRange) <= source.length else { return nil }
+        if let displayDestinationRange = token.destinationRange,
+           let mappedRange = sourceRange(forDisplayRange: displayDestinationRange),
+           NSMaxRange(mappedRange) <= source.length {
+            return source.substring(with: mappedRange)
+        }
+        let tokenSource = source.substring(with: tokenRange) as NSString
+        guard let parsedToken = InlineASTAdapter.tokens(from: InlineParser.parse(tokenSource as String))
+            .first(where: { $0.kind == .wikiLink }),
+              let destinationRange = parsedToken.destinationRange,
+              NSMaxRange(destinationRange) <= tokenSource.length else { return nil }
+        return tokenSource.substring(with: destinationRange)
+    }
+
+    private func makeLinkActivation(
+        kind: MarkdownLinkActivation.Kind,
+        destination: String,
+        sourceRange: NSRange,
+        textView: NSTextView
+    ) -> MarkdownLinkActivation {
+        MarkdownLinkActivation(
+            kind: kind,
+            destination: destination,
+            sourceRange: sourceRange,
+            modifierFlags: NSApp.currentEvent?.modifierFlags.intersection(.deviceIndependentFlagsMask) ?? [],
+            isEditable: textView.isEditable
+        )
+    }
+
+    private func sourceRange(forDisplayRange range: NSRange) -> NSRange? {
+        WikiLinkService.storageRange(forDisplayRange: range, metadata: wikiLinkMetadata)
+    }
+
     /// Supplies a per-document `UndoManager` to the text view.
     ///
     /// AppKit reuses one `NSTextView` across every open document, so the built-in
@@ -996,6 +1102,25 @@ extension NativeTextViewCoordinator {
                     return true
                 }
             }
+        }
+        let activation: MarkdownLinkActivation?
+        if onLinkActivation != nil || link is String {
+            activation = linkActivation(at: charIndex, in: textView)
+        } else {
+            activation = nil
+        }
+        if let activation, onLinkActivation?(activation) == true {
+            (textView as? NativeTextView)?.linkClickDidNavigate = true
+            isWikiLinkActive = false
+            return true
+        }
+        if activation?.kind == .inlineLink || activation?.kind == .autolink {
+            // Preserve the existing URL/AppKit route when the host declines.
+            // This also prevents a raw fallback string used to make an
+            // otherwise-invalid Markdown URL clickable from being mistaken
+            // for a wiki-link identifier.
+            (textView as? NativeTextView)?.linkClickDidNavigate = true
+            return false
         }
         guard let target = WikiLinkService.resolveIdentifier(link: link, textView: textView, at: charIndex) else {
             // Web link (URL-valued): returning false lets AppKit open the URL
