@@ -48,6 +48,10 @@ public struct MarkdownEditorConfiguration: Sendable {
     public var textInsets: TextInsets
     /// Centered reading-column width; wide tables break out to full width. nil = full width (default).
     public var readingWidth: CGFloat?
+    /// Whether table images reflow at every width change during live window resize.
+    /// Set to false to retain their images while dragging and reflow synchronously
+    /// when resizing ends, including any final width delivered by the host afterward.
+    public var rendersTablesDuringLiveResize: Bool
     public var spellChecking: SpellCheckingPolicy
     /// How the editor resolves its own height.
     ///
@@ -114,6 +118,7 @@ public struct MarkdownEditorConfiguration: Sendable {
         scrollers: ScrollersPolicy = .default,
         textInsets: TextInsets = .default,
         readingWidth: CGFloat? = nil,
+        rendersTablesDuringLiveResize: Bool = true,
         spellChecking: SpellCheckingPolicy = .default,
         heightBehavior: HeightBehavior = .scrolls,
         rawSourceMode: Bool = false,
@@ -143,6 +148,7 @@ public struct MarkdownEditorConfiguration: Sendable {
         self.scrollers = scrollers
         self.textInsets = textInsets
         self.readingWidth = readingWidth
+        self.rendersTablesDuringLiveResize = rendersTablesDuringLiveResize
         self.spellChecking = spellChecking
         self.heightBehavior = heightBehavior
         self.rawSourceMode = rawSourceMode
