@@ -373,12 +373,16 @@ extension NativeTextView {
             propagateCaretRevealToEnclosingScroller(range: range)
             return
         }
-        // Only the reading column needs manual reveal; default keeps AppKit's native implementation.
-        guard configuration.readingWidth != nil else {
-            super.scrollRangeToVisible(range)
-            return
-        }
-        // Explicit reveal: native scrollRangeToVisible can't position the container's centered subview.
+        // `NSTextView.scrollRangeToVisible` still routes through its TextKit 1
+        // layout manager. This editor uses TextKit 2, so the native path is a
+        // no-op even in ordinary full-width mode. Resolve the selection through
+        // TextKit 2 for every internally scrolling editor. The same geometry also
+        // accounts for a centered reading column because fragment frames are
+        // lifted into the container's coordinate space below.
+        (enclosingScrollView as? ClampedScrollView)?.cancelPendingScrollRestore()
+
+        // Explicit reveal: the native implementation cannot locate TextKit 2
+        // fragments or position the container's centered subview.
         // A caret at the document end has no fragment at its location; step back one
         // char there so the last line's fragment is found (else nothing reveals).
         let docLength = (self.string as NSString).length
@@ -444,7 +448,6 @@ extension NativeTextView {
             } else {
                 return false   // already visible (or a spurious verdict, corrected)
             }
-            (scrollView as? ClampedScrollView)?.cancelPendingScrollRestore()
             cv.scroll(to: NSPoint(x: cv.bounds.origin.x, y: targetY))
             scrollView.reflectScrolledClipView(cv)
             (scrollView as? ClampedScrollView)?.clampToInsets()
