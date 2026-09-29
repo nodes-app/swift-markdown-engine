@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   curated data or document policy is an app concern, not an engine primitive.
 
 ### Fixed
+- Keep the caret visible during keyboard navigation in full-width internally scrolling editors.
 - A programmatic content swap — a document switch, or the SwiftUI `text` binding
   changing from outside the editor — left the code-block selection pass reading
   the PREVIOUS document's ranges: only the typing and caret paths refreshed that
