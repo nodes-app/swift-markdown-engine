@@ -79,6 +79,14 @@ public struct MarkdownEditorTheme: Sendable {
     /// Background color used for `==highlight==` inline markup.
     public var highlightColor: NSColor
 
+    // MARK: Link decoration
+
+    /// Underline style AppKit paints over every `.link` range. Defaults to
+    /// `.single` to match AppKit's stock link look; `[]` drops the underline
+    /// for palettes where an underlined link reads as clutter (a Mono canvas,
+    /// a poster-style page). Composes into ``linkTextAttributes``.
+    public var linkUnderlineStyle: NSUnderlineStyle
+
     // MARK: Init
 
     public init(
@@ -93,7 +101,8 @@ public struct MarkdownEditorTheme: Sendable {
         latexLightModeText: NSColor = .black,
         latexDarkModeText: NSColor = .white,
         strikethroughColor: NSColor = .labelColor,
-        highlightColor: NSColor = .systemOrange.withAlphaComponent(0.4)
+        highlightColor: NSColor = .systemOrange.withAlphaComponent(0.4),
+        linkUnderlineStyle: NSUnderlineStyle = .single
     ) {
         self.bodyText = bodyText
         self.mutedText = mutedText
@@ -107,6 +116,7 @@ public struct MarkdownEditorTheme: Sendable {
         self.latexDarkModeText = latexDarkModeText
         self.strikethroughColor = strikethroughColor
         self.highlightColor = highlightColor
+        self.linkUnderlineStyle = linkUnderlineStyle
     }
 
     /// System-native palette built from `NSColor` dynamic system colors.
@@ -114,4 +124,23 @@ public struct MarkdownEditorTheme: Sendable {
     /// Use this if you want the engine to look like a stock macOS
     /// `NSTextView`. It's also the default when no theme is supplied.
     public static let `default` = MarkdownEditorTheme()
+
+    /// Attributes AppKit paints over every `.link` range at display time.
+    ///
+    /// `NSTextView` layers `linkTextAttributes` on top of whatever
+    /// foreground the styler set, so a custom `link` color computed and
+    /// emitted upstream still gets overwritten by AppKit's stock
+    /// `.linkColor` blue at draw. Assigning this to `textView.linkTextAttributes`
+    /// (which the wrapper does) carries the theme's link decoration —
+    /// `link` color and `linkUnderlineStyle` — through to the screen along
+    /// with the pointing-hand cursor AppKit's default carries. For the
+    /// default theme, `link` is `.linkColor` and `linkUnderlineStyle` is
+    /// `.single`, so the rendered result is pixel-identical to before.
+    public var linkTextAttributes: [NSAttributedString.Key: Any] {
+        [
+            .foregroundColor: link,
+            .underlineStyle: linkUnderlineStyle.rawValue,
+            .cursor: NSCursor.pointingHand,
+        ]
+    }
 }
