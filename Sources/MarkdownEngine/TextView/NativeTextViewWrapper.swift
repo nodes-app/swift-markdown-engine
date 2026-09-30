@@ -298,7 +298,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         textView.isAutomaticSpellingCorrectionEnabled = configuration.spellChecking.automaticSpellingCorrection
         textView.isContinuousSpellCheckingEnabled = configuration.spellChecking.continuousSpellChecking
         textView.isGrammarCheckingEnabled = configuration.spellChecking.grammarChecking
-        textView.isAutomaticQuoteSubstitutionEnabled = true
+        textView.isAutomaticQuoteSubstitutionEnabled = configuration.spellChecking.automaticQuoteSubstitution
         textView.isAutomaticDataDetectionEnabled = true
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.onPasteImage = onPasteImage
@@ -756,6 +756,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         coordinator.userPrefersContinuousSpellChecking = configuration.spellChecking.continuousSpellChecking
         coordinator.userPrefersGrammarChecking = configuration.spellChecking.grammarChecking
         coordinator.userPrefersAutomaticSpellingCorrection = configuration.spellChecking.automaticSpellingCorrection
+        coordinator.userPrefersAutomaticQuoteSubstitution = configuration.spellChecking.automaticQuoteSubstitution
         coordinator.onSpellCheckingPolicyChanged = onSpellCheckingPolicyChanged
         return coordinator
     }
