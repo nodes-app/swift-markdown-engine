@@ -215,7 +215,19 @@ enum DirectiveCompletionScanner {
             guard !name.isEmpty else { return nil }
 
             var nameEnd = caret
-            while nameEnd < ns.length, isNameChar(ns.character(at: nameEnd)) { nameEnd += 1 }
+            while nameEnd < ns.length {
+                let c = ns.character(at: nameEnd)
+                if c == dot {
+                    // Mirrors `DirectiveScanner`: a '.' only continues the
+                    // name when an identifier-start character follows it, so
+                    // `@gl.` at the end of a sentence stops before the period
+                    // instead of swallowing it into the replacement range.
+                    guard nameEnd + 1 < ns.length, isIdentStart(ns.character(at: nameEnd + 1)) else { break }
+                } else if !isNameChar(c) {
+                    break
+                }
+                nameEnd += 1
+            }
 
             // An exact, finished match — the typed name matches a directive
             // that needs nothing more (no required parameters) — is a
@@ -225,11 +237,21 @@ enum DirectiveCompletionScanner {
             if nameEnd == caret,
                let entry = table[name],
                let matched = directives.first(where: { $0.id == entry.id }),
+               matched.syntax.form != .container,
                matched.syntax.parameters.allSatisfy({ !$0.isRequired }) {
                 return nil
             }
 
-            let candidates = nameCandidates(prefix: name, table: table, directives: directives)
+            // A call already follows the name (`@fo|nt(size: 18){x}`): the
+            // full snippet brings its own argument list and body, which would
+            // duplicate the existing ones. Insert just the marker and name,
+            // caret landing right before what's already there.
+            let hasExistingCall = nameEnd < ns.length
+                && (ns.character(at: nameEnd) == lparen || ns.character(at: nameEnd) == lbrace)
+            let candidates = nameCandidates(
+                prefix: name, table: table, directives: directives,
+                marker: marker, nameOnly: hasExistingCall
+            )
             guard !candidates.isEmpty else { return nil }
             return DirectiveCompletionContext(
                 kind: .name,
@@ -333,11 +355,24 @@ enum DirectiveCompletionScanner {
         while valueStart < caret, ns.character(at: valueStart) == 0x20 || ns.character(at: valueStart) == 0x09 {
             valueStart += 1
         }
-        let prefix = ns.substring(with: NSRange(location: valueStart, length: caret - valueStart))
         // The value may continue past the caret (`@glyph(sta|r)`); a pick
         // there must replace the whole token or it leaves the tail dangling
         // behind the inserted candidate. Find where the value actually ends.
         let valueEnd = max(caret, valueTokenEnd(in: ns, from: valueStart))
+
+        // A quoted value (`@glyph("sta|r")`) wraps the content a candidate
+        // should filter on and replace, not the quotes themselves — leaving
+        // the opening quote in `prefix` matches no candidate, and every
+        // candidate's `insertion` is bare text with no quotes of its own.
+        var contentStart = valueStart
+        var contentEnd = valueEnd
+        if contentStart < ns.length, ns.character(at: contentStart) == quote, !isEscaped(contentStart, ns) {
+            contentStart += 1
+            if contentEnd > contentStart, ns.character(at: contentEnd - 1) == quote, !isEscaped(contentEnd - 1, ns) {
+                contentEnd -= 1
+            }
+        }
+        let prefix = ns.substring(with: NSRange(location: contentStart, length: max(0, caret - contentStart)))
 
         // Resolve which parameter this is.
         let schema = directive.syntax.parameters
@@ -357,7 +392,7 @@ enum DirectiveCompletionScanner {
             kind: .argument(label: label, index: argumentIndex),
             marker: Character(UnicodeScalar(marker) ?? "@"),
             prefix: prefix,
-            replacementRange: NSRange(location: valueStart, length: valueEnd - valueStart),
+            replacementRange: NSRange(location: contentStart, length: contentEnd - contentStart),
             directiveID: directive.id,
             candidates: candidates
         )
@@ -405,7 +440,9 @@ enum DirectiveCompletionScanner {
     private static func nameCandidates(
         prefix: String,
         table: [String: DirectiveRegistry.Entry],
-        directives: [any MarkdownDirective]
+        directives: [any MarkdownDirective],
+        marker: unichar,
+        nameOnly: Bool
     ) -> [DirectiveCompletionItem] {
         let needle = prefix.lowercased()
         let registered = table.values.compactMap { entry in
@@ -425,7 +462,22 @@ enum DirectiveCompletionScanner {
                 if aName != bName { return aName }
                 return a.syntax.name < b.syntax.name
             }
-            .map { DirectiveCompletionItem($0.completion) }
+            .map { directive in
+                let item = DirectiveCompletionItem(directive.completion)
+                guard nameOnly else { return item }
+                // No snippet — a call already follows the name, so only the
+                // marker and name are inserted; the caret lands at the end
+                // (right before the existing `(` or `{`).
+                let markerScalar = UnicodeScalar(marker).map(Character.init) ?? "@"
+                return DirectiveCompletionItem(
+                    title: item.title,
+                    subtitle: item.subtitle,
+                    detail: item.detail,
+                    insertion: "\(markerScalar)\(directive.syntax.name)",
+                    caretOffset: nil,
+                    symbolName: item.symbolName
+                )
+            }
     }
 
     // MARK: Character classes
@@ -433,6 +485,12 @@ enum DirectiveCompletionScanner {
     private static func isNameChar(_ c: unichar) -> Bool {
         (c >= 0x41 && c <= 0x5A) || (c >= 0x61 && c <= 0x7A)
             || (c >= 0x30 && c <= 0x39) || c == 0x5F || c == 0x2D || c == dot
+    }
+
+    /// `[A-Za-z_]` — mirrors `DirectiveScanner.isIdentStart`, used to decide
+    /// whether a `.` continues a namespaced name or ends it.
+    private static func isIdentStart(_ c: unichar) -> Bool {
+        (c >= 0x41 && c <= 0x5A) || (c >= 0x61 && c <= 0x7A) || c == 0x5F
     }
 
     private static func isBoundary(_ c: unichar) -> Bool {

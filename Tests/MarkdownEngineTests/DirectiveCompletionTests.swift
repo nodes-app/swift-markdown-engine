@@ -170,6 +170,65 @@ struct DirectiveCompletionTests {
         #expect(found?.prefix == "sta")
     }
 
+    @Test("a name pick on a call that already has arguments doesn't duplicate them")
+    func namePickPreservesExistingCall() {
+        // `@fo|nt(size: 18){x}` picking "font" must not bring its own
+        // snippet's `(…){…}` — that call already has one. Insert just the
+        // marker and name, caret landing right before what's already there.
+        let found = context("@fo|nt(size: 18){x}")
+        let item = found?.candidates.first { $0.title == "font" }
+        #expect(item?.insertion == "@font")
+        #expect(item?.caretOffset == nil)
+    }
+
+    @Test("a name pick on a call already followed by a body doesn't duplicate it")
+    func namePickPreservesExistingBody() {
+        let found = context("@marke|r{x}")
+        let item = found?.candidates.first { $0.title == "marker" }
+        #expect(item?.insertion == "@marker")
+        #expect(item?.caretOffset == nil)
+    }
+
+    @Test("a container directive's name stays open when typed in full")
+    func containerFormStaysOpenWhenComplete() {
+        // `font`'s parameters are all optional, but its form is `.container`
+        // — a body is still required, so the name alone isn't a finished
+        // call the way `@marker` is.
+        #expect(context("@font|") != nil)
+    }
+
+    @Test("a trailing period after an exact match does not get absorbed")
+    func trailingPeriodNotAbsorbed() {
+        // The forward scan must stop before the period, mirroring the parser
+        // (a '.' only continues a name when an identifier-start character
+        // follows). Otherwise the period is swallowed into the replacement
+        // range, and the exact-match check — which only fires when the scan
+        // ends exactly at the caret — never closes the picker.
+        #expect(context("@marker|. Next") == nil)
+    }
+
+    @Test("a trailing period after a partial name is excluded from the range")
+    func trailingPeriodExcludedFromRange() {
+        let found = context("Hello @gl|. More")
+        #expect(found?.prefix == "gl")
+        #expect(found?.replacementRange == NSRange(location: 6, length: 3))
+    }
+
+    @Test("a quoted value filters on its content, not the quote")
+    func quotedValueFiltersOnContent() {
+        let found = context(#"@glyph("sta|r")"#)
+        #expect(found?.prefix == "sta")
+        #expect(found?.candidates.map(\.title).contains("star.fill") == true)
+    }
+
+    @Test("a quoted value replacement excludes the quotes")
+    func quotedValueReplacementExcludesQuotes() {
+        let text = #"@glyph("sta|r")"#
+        let found = context(text)
+        // Content is "star" inside the quotes at indices 8...11.
+        #expect(found?.replacementRange == NSRange(location: 8, length: 4))
+    }
+
     @Test("a closed keyword set completes from the schema alone")
     func schemaDerivedValues() {
         // FontDirective declares weight: .keyword(["regular", "bold"]) and

@@ -35,7 +35,8 @@ extension NativeTextViewCoordinator {
               !configuration.directives.isEmpty,
               textView.isEditable,
               !isWritingToolsActive,
-              !textView.hasMarkedText()          // mid-IME composition
+              !textView.hasMarkedText(),         // mid-IME composition
+              onDirectiveCompletion != nil        // no embedder picker to route keys to
         else {
             publishDirectiveCompletion(nil)
             return

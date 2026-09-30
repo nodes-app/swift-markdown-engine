@@ -19,7 +19,7 @@ import Testing
 @Suite("Directive completion — coordinator gates")
 struct DirectiveCompletionCoordinatorTests {
 
-    private func makeEditor() -> (NativeTextViewCoordinator, NativeTextView) {
+    private func makeEditor(withHandler: Bool = true) -> (NativeTextViewCoordinator, NativeTextView) {
         _ = NSApplication.shared   // selection path reads NSApp.currentEvent
         let coordinator = NativeTextViewCoordinator(
             text: .constant(""), fontName: "SF Pro Text", fontSize: 14,
@@ -28,6 +28,9 @@ struct DirectiveCompletionCoordinatorTests {
         var configuration = MarkdownEditorConfiguration.default
         configuration.directives = [FontDirective()]
         coordinator.configuration = configuration
+        if withHandler {
+            coordinator.onDirectiveCompletion = { _ in }
+        }
         let textView = NativeTextView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
         textView.isEditable = true
         textView.configuration = .default
@@ -130,6 +133,20 @@ struct DirectiveCompletionCoordinatorTests {
     func rawSourceModeGates() {
         let (coord, tv) = makeEditor()
         coord.configuration.rawSourceMode = true
+        tv.string = "hello @fo"
+        tv.setSelectedRange(NSRange(location: 9, length: 0))
+        coord.updateDirectiveCompletion(tv, text: tv.string as NSString, codeTokens: [], isTyping: true)
+        #expect(!coord.isDirectiveCompletionActive)
+    }
+
+    @Test("no embedder handler does not open a picker")
+    func noHandlerGates() {
+        // An embedder that registered directives but never adopted directive
+        // completion has no `onDirectiveCompletion` handler. Without this
+        // gate, `isDirectiveCompletionActive` would still flip true and
+        // `doCommandBy` would route ↑/↓/↵/Esc into an unrelated picker (e.g.
+        // a wiki-link list) that happens to share `onInlinePreviewKey`.
+        let (coord, tv) = makeEditor(withHandler: false)
         tv.string = "hello @fo"
         tv.setSelectedRange(NSRange(location: 9, length: 0))
         coord.updateDirectiveCompletion(tv, text: tv.string as NSString, codeTokens: [], isTyping: true)
