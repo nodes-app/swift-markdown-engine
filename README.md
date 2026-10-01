@@ -346,8 +346,26 @@ leaves the whole construct literal rather than producing a directive around it:
 Constructs claimed in the same pass or later (`$…$`, links, emphasis, nesting)
 work inside a body.
 
-The engine ships the seam, not a picker: there is no completion UI for
-directive names or argument values.
+**Autocomplete** covers both directive names and argument values. The engine
+detects the trigger, ranks the candidates, and routes ↑/↓/↵/Esc; you draw the
+list (the demo's picker is ~60 lines):
+
+```swift
+NativeTextViewWrapper(
+    text: $text,
+    configuration: config,
+    onCaretRectChange: { anchor = $0 },          // where to put the list
+    onInlinePreviewKey: handleKey,               // ↑/↓/↵/Esc → your list
+    onDirectiveCompletion: { completion = $0 },  // what to offer, or nil
+    pendingDirectiveCompletion: $pick            // commit a choice
+)
+```
+
+Value candidates come from `MarkdownDirective.valueCompletions(for:prefix:)`,
+whose default already answers anything the schema declares (closed keyword
+sets, booleans). Implement it only when the domain is dynamic or too large to
+declare. The demo's `@flag` offers every ISO region that way, matching on code
+or localised country name, with no shipped dataset.
 
 Conform to `MarkdownDirective` to add your own; a typical one is about 30
 lines, including its argument schema and HTML. `FontDirective` and

@@ -36,6 +36,15 @@ struct ContentView: View {
     // Base font size; all relative sizing (headings, code, math) tracks it.
     @State private var fontSize: CGFloat = 16
 
+    // Directive autocomplete. The engine detects the trigger and supplies the
+    // ranked candidates; drawing the list is the embedder's job — this whole
+    // picker is ~60 lines, and it serves BOTH directive names and argument
+    // values because the engine reports them through one context type.
+    @State private var completion: DirectiveCompletionContext?
+    @State private var completionAnchor: CGRect = .zero
+    @State private var completionIndex = 0
+    @State private var pendingCompletion: DirectiveCompletionRequest?
+
     // Scroll-away header demo.
     @State private var showHeader = false
     @State private var headerExpanded = true
@@ -46,6 +55,13 @@ struct ContentView: View {
             configuration: configuration,
             fontSize: fontSize,
             isEditable: !isReadOnly,
+            onCaretRectChange: { completionAnchor = $0 },
+            onInlinePreviewKey: handleCompletionKey,
+            onDirectiveCompletion: { context in
+                completion = context
+                completionIndex = 0
+            },
+            pendingDirectiveCompletion: $pendingCompletion,
             placeholder: NSAttributedString(
                 string: "Empty document — start typing, markdown styles live…",
                 attributes: [
@@ -57,6 +73,7 @@ struct ContentView: View {
             headerCollapsedHeight: 40,
             headerExpanded: headerExpanded
         )
+        .overlay(alignment: .topLeading) { completionPicker }
         // `readingWidth` is applied when the underlying NSView is built, so
         // flipping the reading column recreates the editor via `.id`. The
         // `text` binding survives; scroll position resets — fine for a demo.
@@ -110,6 +127,95 @@ struct ContentView: View {
                 .help("Scroll-away header: an embedder-supplied SwiftUI view hosted above the document")
             }
         }
+    }
+
+    // MARK: - Directive autocomplete
+
+    /// The picker. The engine ships no UI — it reports WHAT to offer and
+    /// WHERE, and routes keys; everything below is ordinary SwiftUI.
+    ///
+    /// One list serves both completion kinds: `.name` while typing `@fo`, and
+    /// `.argument` while typing inside `@icon(sta`. The rows differ only in
+    /// what each candidate chose to preview — an SF Symbol, a flag, an emoji.
+    @ViewBuilder
+    private var completionPicker: some View {
+        if let completion, !completion.candidates.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(completion.candidates.prefix(8).enumerated()), id: \.offset) { index, item in
+                    completionRow(item, isSelected: index == completionIndex)
+                        .contentShape(Rectangle())
+                        .onTapGesture { commit(item) }
+                }
+            }
+            .padding(4)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator))
+            .shadow(radius: 12, y: 4)
+            .frame(width: 280, alignment: .leading)
+            // `onCaretRectChange` arrives already viewport-relative — scroll
+            // offset and any header band are accounted for — so it maps
+            // straight onto the editor's own frame.
+            .offset(x: completionAnchor.minX, y: completionAnchor.maxY + 4)
+            .allowsHitTesting(true)
+        }
+    }
+
+    private func completionRow(_ item: DirectiveCompletionItem, isSelected: Bool) -> some View {
+        HStack(spacing: 8) {
+            // A candidate previews its own result: the flag, the emoji, or
+            // the symbol it will draw.
+            if let detail = item.detail {
+                Text(detail).frame(width: 20)
+            } else if let symbol = item.symbolName {
+                Image(systemName: symbol).frame(width: 20)
+            } else {
+                Color.clear.frame(width: 20, height: 1)
+            }
+            Text(item.title)
+                .fontWeight(isSelected ? .semibold : .regular)
+            if !item.subtitle.isEmpty {
+                Text(item.subtitle)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .font(.callout)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(isSelected ? Color.accentColor.opacity(0.18) : .clear,
+                    in: RoundedRectangle(cornerRadius: 5))
+    }
+
+    /// ↑/↓/↵/Esc while the picker is open. Returning `true` consumes the key
+    /// so it never reaches the editor; `false` lets normal editing proceed.
+    private func handleCompletionKey(_ key: InlinePreviewKey) -> Bool {
+        guard let completion, !completion.candidates.isEmpty else { return false }
+        let count = min(completion.candidates.count, 8)
+        switch key {
+        case .moveUp:
+            completionIndex = (completionIndex - 1 + count) % count
+            return true
+        case .moveDown:
+            completionIndex = (completionIndex + 1) % count
+            return true
+        case .confirm, .confirmAndOpen:
+            commit(completion.candidates[completionIndex])
+            return true
+        case .cancel:
+            self.completion = nil
+            return true
+        }
+    }
+
+    private func commit(_ item: DirectiveCompletionItem) {
+        guard let completion else { return }
+        // `documentId` matches the wrapper's default; the engine ignores a
+        // request aimed at a different document.
+        pendingCompletion = DirectiveCompletionRequest(
+            documentId: "default", context: completion, item: item
+        )
+        self.completion = nil
     }
 
     /// Sample scroll-away header: a fixed top row (kept visible when collapsed)
@@ -352,6 +458,24 @@ Put the caret inside any directive to reveal its source; move away and the \
 syntax collapses back to just the styled text or the glyph — exactly like \
 every other marker. The characters are never deleted, so selection, find, \
 copy, and undo all still see them.
+
+### Autocomplete
+
+**Type `@` anywhere below to try it.** The picker offers every registered \
+directive; keep typing to filter, ↑/↓ to move, ↵ to insert, Esc to dismiss.
+
+It completes ARGUMENT VALUES too, which is where it earns its keep. Inside \
+`@flag(` you get country codes matched on the code *or* the country name — \
+type `jap` and get `JP` @flag(JP). Inside `@emoji(` you get names with the \
+glyph previewed: @emoji(tada) @emoji(rocket) @emoji(ship). Inside `@icon(` \
+you get SF Symbols, and inside `@color(` the palette.
+
+Each directive declares its own parameters, so the picker knows what to offer \
+without the editor knowing anything about flags, emoji, or symbols. \
+Only `@font` and `@color` come from the engine. `@icon`, `@flag`, `@emoji`, \
+and `@pagebreak` are defined in this demo's own `DemoDirectives.swift` — \
+30–60 lines each, schema and completions included — because curated data and \
+print semantics belong to the app, not the editor.
 """
 
 /// Table layout demo: the first table's cells WRAP to the available width
