@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   curated data or document policy is an app concern, not an engine primitive.
 
 ### Fixed
+- A trackpad held against the top or bottom of the editor no longer flickers.
+  AppKit applies a scroll on the next display refresh, after `scrollWheel(with:)`
+  has returned, so the clamp there only ever corrected the PREVIOUS event — with
+  the rubber band allowed, every refresh committed a fresh overshoot (12–24pt)
+  and every event pulled it back. `ClampedScrollView` now disables vertical
+  elasticity; the document view is already sized to the real content height, so
+  AppKit stops exactly at the edge and the clamp is a backstop again.
 - A programmatic content swap — a document switch, or the SwiftUI `text` binding
   changing from outside the editor — left the code-block selection pass reading
   the PREVIOUS document's ranges: only the typing and caret paths refreshed that
