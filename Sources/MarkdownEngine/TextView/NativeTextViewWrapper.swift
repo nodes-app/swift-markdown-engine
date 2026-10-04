@@ -71,9 +71,13 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     public var documentId: String
     /// When `false` the editor renders read-only with no caret.
     public var isEditable: Bool
-    /// Optional two-way focus state. Set the binding to `true` to request first
-    /// responder status; user-driven focus and blur are written back. When no
-    /// binding is supplied, focus behavior remains entirely AppKit-managed.
+    /// Optional two-way focus state. Changes to the binding request or release
+    /// first responder status; an initial request waits for window attachment.
+    /// Repeated values (including `.constant(true)`) do not reclaim focus.
+    /// Focus and blur are written back asynchronously on the main queue, including
+    /// removal and window closure. Focus means first responder in this editor's
+    /// own window, not key-window or active-app status.
+    /// Without a binding, focus remains entirely AppKit-managed.
     public var isFocused: Binding<Bool>?
     /// Optional paste hook. Return a Markdown image-embed string (e.g.
     /// `"![[my-image]]"`) to insert at the caret, or `nil` to fall through

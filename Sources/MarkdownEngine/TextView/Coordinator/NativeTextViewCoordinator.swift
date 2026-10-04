@@ -184,12 +184,19 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     /// nil = no span, use the theme.
     var resolvedCaretColor: NSColor?
 
-    /// Mirrors an actual AppKit first-responder transition into the optional
-    /// host binding. Equality guards keep host-driven reconciliation from
-    /// feeding the same value back into SwiftUI.
+    private var focusReportGeneration = 0
+
+    /// Defer binding writes out of SwiftUI view updates, retaining the binding
+    /// through teardown. A newer responder transition supersedes a queued one.
     func reportFocusChange(_ focused: Bool) {
-        guard let isFocused, isFocused.wrappedValue != focused else { return }
-        isFocused.wrappedValue = focused
+        focusReportGeneration &+= 1
+        let generation = focusReportGeneration
+        guard let isFocused else { return }
+        DispatchQueue.main.async { [self] in
+            guard focusReportGeneration == generation,
+                  isFocused.wrappedValue != focused else { return }
+            isFocused.wrappedValue = focused
+        }
     }
 
     var cachedCodeBlockTokens: [(index: Int, token: MarkdownToken)] = []

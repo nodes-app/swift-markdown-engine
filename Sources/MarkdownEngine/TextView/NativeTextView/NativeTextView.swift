@@ -52,7 +52,13 @@ final class NativeTextView: NSTextView {
     private var reportedFocus = false
     /// `nil` preserves AppKit-owned focus. A value represents the latest
     /// explicit host request and stays pending until the view has a window.
-    var requestedFocus: Bool?
+    var requestedFocus: Bool? {
+        didSet {
+            guard requestedFocus != oldValue else { return }
+            hasPendingFocusRequest = requestedFocus != nil
+        }
+    }
+    private var hasPendingFocusRequest = false
     weak var layoutBridge: LayoutBridge?
     var baseFont: NSFont = NSFont.systemFont(ofSize: NSFont.systemFontSize)
 
@@ -81,9 +87,34 @@ final class NativeTextView: NSTextView {
     /// Persisted horizontal scroll offset per wide table; survives restyles.
     var tableHorizontalScrollOffsets: [Int: CGFloat] = [:]
 
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if let window, window !== newWindow {
+            NotificationCenter.default.removeObserver(self, name: NSWindow.willCloseNotification, object: window)
+            reportFocusLossOnRemoval()
+        }
+        super.viewWillMove(toWindow: newWindow)
+    }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        if let window {
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(focusWindowWillClose(_:)),
+                name: NSWindow.willCloseNotification, object: window
+            )
+        }
         reconcileRequestedFocus()
+    }
+
+    @objc private func focusWindowWillClose(_ notification: Notification) {
+        reportFocusLossOnRemoval()
+    }
+
+    private func reportFocusLossOnRemoval() {
+        hasPendingFocusRequest = false
+        guard reportedFocus else { return }
+        reportedFocus = false
+        onFocusChange?(false)
     }
 
     override func becomeFirstResponder() -> Bool {
@@ -105,7 +136,9 @@ final class NativeTextView: NSTextView {
     }
 
     func reconcileRequestedFocus() {
-        guard let requestedFocus, let window else { return }
+        guard hasPendingFocusRequest, let requestedFocus, let window else { return }
+        // Consume before calling AppKit: responder callbacks can update the host.
+        hasPendingFocusRequest = false
         if requestedFocus {
             if window.firstResponder !== self {
                 window.makeFirstResponder(self)
