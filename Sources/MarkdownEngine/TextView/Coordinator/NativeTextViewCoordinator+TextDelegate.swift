@@ -857,15 +857,22 @@ extension NativeTextViewCoordinator {
               let replacement, !replacement.isEmpty,
               !replacement.utf16.contains(where: { $0 == 0x5B || $0 == 0x5D || $0 == 0x0A || $0 == 0x0D }),
               let storage = textView.textStorage,
-              NSMaxRange(affectedCharRange) <= storage.length else { return nil }
-        var runRange = NSRange(location: NSNotFound, length: 0)
-        guard let id = storage.attribute(
-                .wikiLinkID, at: affectedCharRange.location,
-                longestEffectiveRange: &runRange,
-                in: NSRange(location: 0, length: storage.length)
+              NSMaxRange(affectedCharRange) <= storage.length,
+              // Point probe first: most selection replacements (autocorrect, typing
+              // or pasting over a selection) are nowhere near a link, and the run
+              // lookup below on a nil value walks every attribute run in the
+              // document. With an id there, the run ends at the name's markers.
+              let id = storage.attribute(
+                .wikiLinkID, at: affectedCharRange.location, effectiveRange: nil
               ) as? String,
-              !id.isEmpty,
-              NSIntersectionRange(runRange, affectedCharRange).length == affectedCharRange.length
+              !id.isEmpty else { return nil }
+        var runRange = NSRange(location: NSNotFound, length: 0)
+        _ = storage.attribute(
+            .wikiLinkID, at: affectedCharRange.location,
+            longestEffectiveRange: &runRange,
+            in: NSRange(location: 0, length: storage.length)
+        )
+        guard NSIntersectionRange(runRange, affectedCharRange).length == affectedCharRange.length
         else { return nil }
         return (id, affectedCharRange.location)
     }

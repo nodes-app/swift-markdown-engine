@@ -24,11 +24,15 @@ struct WikiLinkIDSurvivalTests {
 
     /// Editor wired like production, loaded through the real rebuild so the
     /// display form and its `.wikiLinkID` attributes come from the engine.
-    private func makeEditor(storage: String = doc) -> (NativeTextView, NativeTextViewCoordinator) {
+    private func makeEditor(
+        storage: String = doc, rawSourceMode: Bool = false
+    ) -> (NativeTextView, NativeTextViewCoordinator) {
         _ = NSApplication.shared   // the selection path reads NSApp.currentEvent
+        var configuration = MarkdownEditorConfiguration.default
+        configuration.rawSourceMode = rawSourceMode
         let textView = NativeTextView(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
         textView.isEditable = true
-        textView.configuration = .default
+        textView.configuration = configuration
         let coordinator = NativeTextViewCoordinator(
             text: .constant(storage),
             fontName: "SF Pro Text",
@@ -39,7 +43,7 @@ struct WikiLinkIDSurvivalTests {
         )
         coordinator.textView = textView
         textView.delegate = coordinator
-        coordinator.configuration = .default
+        coordinator.configuration = configuration
         coordinator.rebuildTextStorageAndStyle(textView, from: storage)
         return (textView, coordinator)
     }
@@ -136,15 +140,6 @@ struct WikiLinkIDSurvivalTests {
                 == "![[a.png|\(Self.id)]]")
     }
 
-    @Test func cutThenPasteRoundTripsTheID() {
-        let (tv, coord) = makeEditor()
-        let embed = (tv.string as NSString).range(of: "![[a.png]]")
-        tv.setSelectedRange(embed)
-        tv.cut(nil)
-        tv.paste(nil)
-        #expect(coord.lastComputedStorage.contains("![[a.png|\(Self.id)]]"))
-    }
-
     /// Node links use the same side-channel and the same copy path.
     @Test func copyCarriesTheStorageFormForNodeLinksToo() {
         let (tv, _) = makeEditor(storage: "see [[Note|abc123]] here")
@@ -155,5 +150,81 @@ struct WikiLinkIDSurvivalTests {
         let pasteboard = NSPasteboard.general
         #expect(pasteboard.string(forType: .string) == "[[Note]]")
         #expect(pasteboard.string(forType: MarkdownPasteboardWriter.markdownType) == "[[Note|abc123]]")
+    }
+
+    // MARK: 4 — paste
+
+    /// Paste turns the private flavor's storage form back into display form, with
+    /// the suffix on `.wikiLinkID` — the shape a load produces. Checking storage
+    /// alone missed a buffer showing `![[a.png|<id>]]` until the next rebuild.
+    @Test func cutThenPasteRoundTripsTheID() {
+        let (tv, coord) = makeEditor()
+        let embed = (tv.string as NSString).range(of: "![[a.png]]")
+        tv.setSelectedRange(embed)
+        tv.cut(nil)
+        tv.paste(nil)
+        #expect(tv.string == "Cover\n\n![[a.png]]\n")
+        #expect(coord.lastComputedStorage == Self.doc)
+    }
+
+    @Test func pastingANodeLinkShowsItsDisplayForm() {
+        let (tv, coord) = makeEditor(storage: "see [[Note|abc123]] here")
+        tv.setSelectedRange((tv.string as NSString).range(of: "[[Note]]"))
+        tv.copy(nil)
+        tv.setSelectedRange(NSRange(location: (tv.string as NSString).length, length: 0))
+        tv.paste(nil)
+        #expect(tv.string == "see [[Note]] here[[Note]]")
+        #expect(coord.lastComputedStorage == "see [[Note|abc123]] here[[Note|abc123]]")
+    }
+
+    /// An embed's suffix can carry more than the id (`|width`); all of it rides
+    /// the side-channel and none of it reaches the other editor's buffer.
+    @Test func pastingIntoAnotherEditorKeepsTheWholeSuffixOffScreen() {
+        let (source, _) = makeEditor(storage: "![[pic.png|\(Self.id)|300]]")
+        source.setSelectedRange(NSRange(location: 0, length: (source.string as NSString).length))
+        source.copy(nil)
+
+        let (target, coord) = makeEditor(storage: "Intro\n\n")
+        target.setSelectedRange(NSRange(location: (target.string as NSString).length, length: 0))
+        target.paste(nil)
+        #expect(target.string == "Intro\n\n![[pic.png]]")
+        #expect(coord.lastComputedStorage == "Intro\n\n![[pic.png|\(Self.id)|300]]")
+    }
+
+    @Test func eachLinkInAPasteGetsItsOwnID() {
+        let storage = "[[A|id-a]] and ![[b.png|id-b]]"
+        let (source, _) = makeEditor(storage: storage)
+        source.setSelectedRange(NSRange(location: 0, length: (source.string as NSString).length))
+        source.copy(nil)
+
+        let (target, coord) = makeEditor(storage: "")
+        target.paste(nil)
+        #expect(target.string == "[[A]] and ![[b.png]]")
+        #expect(coord.lastComputedStorage == storage)
+    }
+
+    /// The blockquote continuation inserts a prefix on every pasted line; each id
+    /// still has to land on its own name, not on characters the prefix shifted in.
+    @Test func pastingIntoABlockquoteStampsEachIDOnItsName() {
+        let (source, _) = makeEditor(storage: "[[A|id-a]]\n[[B|id-b]]")
+        source.setSelectedRange(NSRange(location: 0, length: (source.string as NSString).length))
+        source.copy(nil)
+
+        let (target, coord) = makeEditor(storage: "> ")
+        target.setSelectedRange(NSRange(location: 2, length: 0))
+        target.paste(nil)
+        #expect(target.string == "> [[A]]\n> [[B]]")
+        #expect(coord.lastComputedStorage == "> [[A|id-a]]\n> [[B|id-b]]")
+    }
+
+    /// Raw source mode shows storage verbatim, so a paste into it stays verbatim.
+    @Test func rawSourceModePastesTheStorageFormVerbatim() {
+        let (source, _) = makeEditor(storage: "see [[Note|abc123]] here")
+        source.setSelectedRange((source.string as NSString).range(of: "[[Note]]"))
+        source.copy(nil)
+
+        let (target, _) = makeEditor(storage: "", rawSourceMode: true)
+        target.paste(nil)
+        #expect(target.string == "[[Note|abc123]]")
     }
 }

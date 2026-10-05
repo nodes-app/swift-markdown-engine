@@ -12,7 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its name. `makeStorageState` scans the name's `.wikiLinkID` run instead of
   probing its first character, an edit confined to one name carries the id
   across, and `copy` puts the storage form on the private pasteboard flavor
-  rather than the buffer's display text.
+  rather than the buffer's display text. `paste` turns that flavor back into
+  display form with the suffix on `.wikiLinkID`, so the id never shows in the
+  editor.
 
 ## [0.14.0] - 2026-10-04
 

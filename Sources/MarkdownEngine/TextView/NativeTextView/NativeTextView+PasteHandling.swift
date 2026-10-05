@@ -29,11 +29,12 @@ extension NativeTextView {
         // Our own copy: prefer the private raw-markdown flavor so an in-app
         // copy→paste round-trips byte-exact. The derived HTML flavor is lossy
         // (e.g. the HTML renderer drops the `|UUID` of a wiki link), so this
-        // must win over the HTML branch below.
+        // must win over the HTML branch below. It holds links in STORAGE form
+        // (see NativeTextView+Copy), so they go back to display form on the way in.
         if let ownMarkdown = pasteboard.string(forType: MarkdownPasteboardWriter.markdownType) {
             let sanitized = sanitizePastedText(ownMarkdown)
             if !sanitized.isEmpty {
-                insertPreservingBlockquote(sanitized)
+                insertPreservingBlockquote(sanitized, linksInStorageForm: true)
                 return
             }
         }
@@ -77,7 +78,7 @@ extension NativeTextView {
     /// Insert pasted content as its own coalescing-fenced undo step: the paste
     /// enters via `insertText` (the typing path), so without fences before and
     /// after, the next edit coalesces into it and one Cmd+Z reverts both.
-    private func insertPasted(_ text: String, replacementRange: NSRange) {
+    private func insertPasted(_ text: Any, replacementRange: NSRange) {
         breakUndoCoalescing()
         insertText(text, replacementRange: replacementRange)
         undoManager?.setActionName("Paste")
@@ -87,14 +88,41 @@ extension NativeTextView {
     /// Insert pasted text, extending the `>` prefix to every line when the
     /// caret sits on a blockquote line — so a multi-line paste stays quoted
     /// instead of only its first line landing after the existing marker.
-    private func insertPreservingBlockquote(_ text: String) {
+    private func insertPreservingBlockquote(_ text: String, linksInStorageForm: Bool = false) {
         let sel = selectedRange()
         var prepared = MarkdownLists.blockquoteContinuedPaste(text, at: sel.location, in: string)
         // A paste ENDING in a table row would park the caret inside the table,
         // keeping its raw pipe source on screen. Add a line break so the caret
         // lands on a fresh line below and the table renders immediately.
         if endsInTableRow(prepared) { prepared += "\n" }
-        insertPasted(prepared, replacementRange: sel)
+        if linksInStorageForm, !configuration.rawSourceMode, prepared.contains("[[") {
+            insertPasted(displayForm(ofStorage: prepared), replacementRange: sel)
+        } else {
+            insertPasted(prepared, replacementRange: sel)
+        }
+    }
+
+    /// `text` with each storage-form link (`[[Name|id]]`, `![[Name|id|width]]`)
+    /// rewritten to its display form and the suffix stamped as `.wikiLinkID` on
+    /// the name — the shape `rebuildTextStorageAndStyle` gives a loaded document.
+    /// The attribute rides in with the inserted text, so the writeback in
+    /// `textDidChange` reads it; stamping it afterwards would be too late.
+    private func displayForm(ofStorage text: String) -> NSAttributedString {
+        let state = WikiLinkService.makeDisplayState(from: text)
+        var base = typingAttributes
+        base[.wikiLinkID] = nil
+        let result = NSMutableAttributedString(string: state.display, attributes: base)
+        let display = state.display as NSString
+        for (key, meta) in state.metadata {
+            guard let id = meta.id, !id.isEmpty else { continue }
+            let openLength = display.character(at: key.location) == 0x21 ? 3 : 2   // "![[" or "[["
+            let nameRange = NSRange(location: key.location + openLength,
+                                    length: key.length - openLength - 2)
+            if nameRange.length > 0 {
+                result.addAttribute(.wikiLinkID, value: id, range: nameRange)
+            }
+        }
+        return result
     }
 
     /// Last line looks like a `|…|` table row and no newline follows it yet.
