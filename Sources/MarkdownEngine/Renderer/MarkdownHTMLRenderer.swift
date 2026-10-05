@@ -148,9 +148,24 @@ public enum MarkdownHTMLRenderer {
         return String(s)
     }
 
-    /// Emit `<ul>`/`<ol>` groups, switching container when ordered-ness flips.
-    /// Nesting is flattened to a single level for v1 (see deviations).
+    /// Emit `<ul>`/`<ol>` groups, switching container when ordered-ness flips
+    /// and opening a nested list inside the preceding `<li>` when an item is
+    /// indented deeper.
     private static func renderList(items: [ListItem], ns: NSString, env: Env) -> String {
+        var index = 0
+        // The shallowest item is the outer level: starting at the FIRST item's
+        // indent dropped every shallower item after it (a copy opening on a sub-item).
+        return renderListLevel(items, &index, indent: items.map(\.indent).min() ?? 0, ns: ns, env: env)
+    }
+
+    /// One nesting level, consuming items until one is shallower than `indent`.
+    ///
+    /// `ListItem.indent` counts raw leading space/tab CHARACTERS, not levels,
+    /// so depth is read as a stack (deeper pushes, shallower pops) instead of
+    /// divided by a fixed unit — a tab-indented, a 2-space and a 4-space list
+    /// then all nest the same way.
+    private static func renderListLevel(_ items: [ListItem], _ index: inout Int,
+                                        indent: Int, ns: NSString, env: Env) -> String {
         var out: [String] = []
         var currentOrdered: Bool?
         var buffer: [String] = []
@@ -162,12 +177,28 @@ public enum MarkdownHTMLRenderer {
             buffer.removeAll()
         }
 
-        for item in items {
+        while index < items.count {
+            let item = items[index]
+            if item.indent < indent { break }
+            if item.indent > indent {
+                let sub = renderListLevel(items, &index, indent: item.indent, ns: ns, env: env)
+                // The sublist belongs INSIDE the item it hangs under, before
+                // that item's `</li>`. A deeper item with nothing above it
+                // (a document opening on an indented bullet) stands alone.
+                if let last = buffer.last, last.hasSuffix("</li>") {
+                    buffer[buffer.count - 1] = String(last.dropLast(5)) + "\n" + sub + "\n</li>"
+                } else {
+                    flush()
+                    out.append(sub)
+                }
+                continue
+            }
             if currentOrdered != item.ordered {
                 flush()
                 currentOrdered = item.ordered
             }
             buffer.append(listItem(item, ns: ns, env: env))
+            index += 1
         }
         flush()
         return out.joined(separator: "\n")

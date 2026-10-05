@@ -62,7 +62,9 @@ extension NativeTextViewCoordinator {
         textView.isGrammarCheckingEnabled = shouldDisableSpelling
             ? false
             : userPrefersGrammarChecking
-        textView.isAutomaticQuoteSubstitutionEnabled = !shouldDisableSpelling
+        textView.isAutomaticQuoteSubstitutionEnabled = shouldDisableSpelling
+            ? false
+            : userPrefersAutomaticQuoteSubstitution
         textView.isAutomaticDashSubstitutionEnabled = false
     }
 
