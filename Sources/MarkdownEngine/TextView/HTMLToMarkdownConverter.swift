@@ -241,8 +241,25 @@ enum HTMLToMarkdownConverter {
         case "head", "style", "script", "title":
             return ""   // metadata / code-for-the-browser — never content
         default:
-            return nil
+            // Any other element — a web component such as Gemini's
+            // <response-element>/<table-block>, a <section>, even a <span> —
+            // is a transparent wrapper when it holds block content. Folding it
+            // into the inline run unwrapped the table or list inside as well
+            // and glued all of its text into one line.
+            return containsBlock(node) ? renderBlocks(node.children) : nil
         }
+    }
+
+    /// Elements that open a Markdown block of their own.
+    private static let blockElements: Set<String> = [
+        "p", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6",
+        "table", "blockquote", "pre", "hr"
+    ]
+
+    /// True when `node`'s subtree holds a block element, i.e. `node` wraps
+    /// structure rather than a run of inline text.
+    private static func containsBlock(_ node: Node) -> Bool {
+        node.children.contains { blockElements.contains($0.name) || containsBlock($0) }
     }
 
     private static func renderList(_ node: Node, ordered: Bool, depth: Int) -> String {
@@ -314,7 +331,9 @@ enum HTMLToMarkdownConverter {
                     flushInline()
                     if let block = renderBlock(child), !block.isEmpty { blocks.append(block) }
                 default:
-                    inlineRun.append(child)
+                    // Same rule as `renderBlock`: an unknown wrapper around
+                    // block content is transparent, like a <div>.
+                    if containsBlock(child) { walk(child.children) } else { inlineRun.append(child) }
                 }
             }
         }
