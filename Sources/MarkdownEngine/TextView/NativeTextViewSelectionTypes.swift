@@ -34,6 +34,9 @@ public enum InlineSelectionKind: Sendable {
     case wikiLink
     /// A `![[Name]]` embedded-image reference.
     case imageEmbed
+    /// A `#tag` the caret is typing/inside. `selection.placeholder` is the tag
+    /// text including the leading `#`.
+    case tag
 }
 
 /// Snapshot of the inline token the caret is inside, delivered through
@@ -78,18 +81,24 @@ public struct InlineReplacementRequest: Sendable {
     /// `true` when the fragment is a `![[…]]` image embed and the engine
     /// should treat it as a standalone block.
     public let isImageEmbedMode: Bool
+    /// `true` when the fragment is plain literal text (e.g. a `#tag`) that the
+    /// engine should insert verbatim, placing the caret at its end — no
+    /// wiki-link `[[Name|id]]` parsing.
+    public let isLiteralMode: Bool
 
     public init(
         id: UUID = UUID(),
         documentId: String,
         selection: WikiLinkSelection,
         storageFragment: String,
-        isImageEmbedMode: Bool
+        isImageEmbedMode: Bool,
+        isLiteralMode: Bool = false
     ) {
         self.id = id
         self.documentId = documentId
         self.selection = selection
         self.storageFragment = storageFragment
         self.isImageEmbedMode = isImageEmbedMode
+        self.isLiteralMode = isLiteralMode
     }
 }
