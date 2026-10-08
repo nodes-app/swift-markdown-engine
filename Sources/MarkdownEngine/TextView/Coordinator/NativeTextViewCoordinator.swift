@@ -46,6 +46,7 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var undoContentSnapshots: [String: String] = [:]
     @Binding var text: String
     @Binding var isWikiLinkActive: Bool
+    var isFocused: Binding<Bool>?
     var fontName: String
     var fontSize: CGFloat
     var configuration: MarkdownEditorConfiguration = .default {
@@ -182,6 +183,21 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     /// resetting to `theme.bodyText`, which would stomp it on any SwiftUI pass;
     /// nil = no span, use the theme.
     var resolvedCaretColor: NSColor?
+
+    private var focusReportGeneration = 0
+
+    /// Defer binding writes out of SwiftUI view updates, retaining the binding
+    /// through teardown. A newer responder transition supersedes a queued one.
+    func reportFocusChange(_ focused: Bool) {
+        focusReportGeneration &+= 1
+        let generation = focusReportGeneration
+        guard let isFocused else { return }
+        DispatchQueue.main.async { [self] in
+            guard focusReportGeneration == generation,
+                  isFocused.wrappedValue != focused else { return }
+            isFocused.wrappedValue = focused
+        }
+    }
 
     var cachedCodeBlockTokens: [(index: Int, token: MarkdownToken)] = []
     /// Dedupe key of the last emitted code-block selections — identical
