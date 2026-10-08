@@ -697,6 +697,18 @@ extension NativeTextViewCoordinator {
             }
         }
 
+        // Directive autocomplete: a separate detector, because while you type
+        // `@ico` there is no directive in the AST yet for a token-based path
+        // to find. A wiki-link/image-embed context already claims this caret
+        // this pass — e.g. a marker inside an unclosed `[[…]]` — so it wins;
+        // both contexts feeding the same key-routing handler with nothing to
+        // tell them apart would leave an embedder with two real pickers
+        // unable to route ↑/↓/↵ to the right one.
+        updateDirectiveCompletion(
+            tv, text: nsText, codeTokens: codeTokens, isTyping: isTyping,
+            suppressed: inlineSelectionState != nil
+        )
+
         DispatchQueue.main.async {
             self.isWikiLinkActive = inlineSelectionState?.kind == .wikiLink
             self.isImageEmbedActive = isInsideImageEmbed
@@ -946,9 +958,10 @@ extension NativeTextViewCoordinator {
         if commandSelector == #selector(NSResponder.insertBacktab(_:)) {
             return handleBacktab(textView)
         }
-        // While an inline [[…]] / ![[…]] preview is open, route ↑/↓/Enter/Esc to the embedder's
-        // autocomplete list (it returns true to consume the key; false → normal editor handling).
-        if (isWikiLinkActive || isImageEmbedActive), let handler = onInlinePreviewKey {
+        // While an inline [[…]] / ![[…]] preview OR a directive picker is open,
+        // route ↑/↓/Enter/Esc to the embedder's autocomplete list (it returns
+        // true to consume the key; false → normal editor handling).
+        if (isWikiLinkActive || isImageEmbedActive || isDirectiveCompletionActive), let handler = onInlinePreviewKey {
             let key: InlinePreviewKey?
             switch commandSelector {
             case #selector(NSResponder.moveUp(_:)): key = .moveUp
