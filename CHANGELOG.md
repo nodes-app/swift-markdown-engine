@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `NativeTextViewWrapper.onUnhandledCommand` lets embedders handle Escape,
+  Tab, and Shift-Tab after inline previews and list editing decline them.
+
 ### Fixed
 - Smart paste keeps tables, lists and headings that arrive wrapped in elements the converter doesn't know (Gemini's `<response-element>`/`<table-block>` web components, `<section>`, a Google Docs `<b>` wrapper); they used to collapse into one line of text.
 

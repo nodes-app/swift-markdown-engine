@@ -92,6 +92,7 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     /// `doCommandBy` uses to route ↑/↓/↵/Esc to the embedder's picker.
     var isDirectiveCompletionActive: Bool = false
     var lastAppliedDirectiveCompletionID: UUID?
+    var onUnhandledCommand: ((MarkdownEditorCommand) -> Bool)?
     var onCodeBlockSelectionChange: (([CodeBlockSelection]) -> Void)?
     var didInitialFormatting: Bool = false
     /// One-shot guard so `updateCodeBlockSelection` only forces a full-document layout once per document.

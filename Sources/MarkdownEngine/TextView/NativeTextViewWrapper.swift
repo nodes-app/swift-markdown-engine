@@ -104,6 +104,11 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     /// Commit a picked directive completion. The engine applies it, places the
     /// caret, and clears the binding.
     @Binding public var pendingDirectiveCompletion: DirectiveCompletionRequest?
+    /// Receives Escape, Tab, or Shift-Tab only after the engine declines the
+    /// command. Return `true` when the host consumed it; `false` preserves the
+    /// normal AppKit fallback. Inline previews, directive completion and list
+    /// editing take priority.
+    public var onUnhandledCommand: ((MarkdownEditorCommand) -> Bool)?
     /// Fires when the set of visible code blocks changes, so embedders can
     /// overlay copy buttons (see ``CodeBlockButton``).
     public var onCodeBlockSelectionChange: (([CodeBlockSelection]) -> Void)?
@@ -167,6 +172,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         onInlinePreviewKey: ((InlinePreviewKey) -> Bool)? = nil,
         onDirectiveCompletion: ((DirectiveCompletionContext?) -> Void)? = nil,
         pendingDirectiveCompletion: Binding<DirectiveCompletionRequest?> = .constant(nil),
+        onUnhandledCommand: ((MarkdownEditorCommand) -> Bool)? = nil,
         onCodeBlockSelectionChange: (([CodeBlockSelection]) -> Void)? = nil,
         onSpellCheckingPolicyChanged: ((SpellCheckingPolicy) -> Void)? = nil,
         placeholder: NSAttributedString? = nil,
@@ -195,6 +201,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         self.onInlinePreviewKey = onInlinePreviewKey
         self.onDirectiveCompletion = onDirectiveCompletion
         self._pendingDirectiveCompletion = pendingDirectiveCompletion
+        self.onUnhandledCommand = onUnhandledCommand
         self.onCodeBlockSelectionChange = onCodeBlockSelectionChange
         self.onSpellCheckingPolicyChanged = onSpellCheckingPolicyChanged
         self.placeholder = placeholder
@@ -346,6 +353,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.onInlineSelectionChange = onInlineSelectionChange
         context.coordinator.onInlinePreviewKey = onInlinePreviewKey
         context.coordinator.onDirectiveCompletion = onDirectiveCompletion
+        context.coordinator.onUnhandledCommand = onUnhandledCommand
         context.coordinator.onCodeBlockSelectionChange = onCodeBlockSelectionChange
 
         textView.recalcOverscroll(for: scrollView)
@@ -727,6 +735,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.onInlineSelectionChange = onInlineSelectionChange
         context.coordinator.onInlinePreviewKey = onInlinePreviewKey
         context.coordinator.onDirectiveCompletion = onDirectiveCompletion
+        context.coordinator.onUnhandledCommand = onUnhandledCommand
         context.coordinator.onCodeBlockSelectionChange = onCodeBlockSelectionChange
         context.coordinator.didInitialFormatting = true
     }
