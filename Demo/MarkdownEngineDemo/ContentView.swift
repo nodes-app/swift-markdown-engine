@@ -36,6 +36,8 @@ struct ContentView: View {
     // Base font size; all relative sizing (headings, code, math) tracks it.
     @State private var fontSize: CGFloat = 16
 
+    private let paragraphRequest = Notification.Name("demo.applyParagraph")
+    private let taskListRequest = Notification.Name("demo.applyTaskList")
     // Directive autocomplete. The engine detects the trigger and supplies the
     // ranked candidates; drawing the list is the embedder's job — this whole
     // picker is ~60 lines, and it serves BOTH directive names and argument
@@ -116,6 +118,16 @@ struct ContentView: View {
                     .disabled(fontSize >= 28)
                 }
                 .help("Base font size — headings, code, and math scale relative to it")
+
+                ControlGroup {
+                    Button("Paragraph") {
+                        NotificationCenter.default.post(name: paragraphRequest, object: nil)
+                    }
+                    Button("Task list") {
+                        NotificationCenter.default.post(name: taskListRequest, object: nil)
+                    }
+                }
+                .help("Apply block formatting through the embedder notification bus")
 
                 Menu {
                     Toggle("Show header", isOn: $showHeader)
@@ -250,6 +262,10 @@ struct ContentView: View {
     /// so you can see exactly what each one adds.
     private var configuration: MarkdownEditorConfiguration {
         var config = MarkdownEditorConfiguration.default
+        config.services.bus = MarkdownEditorBus(
+            applyParagraphRequest: paragraphRequest,
+            applyTaskListRequest: taskListRequest
+        )
 
         #if canImport(MarkdownEngineCodeBlocks)
         // Syntax highlighting for fenced code blocks. Auto-switches between
@@ -604,4 +620,3 @@ private let markdownFooter = """
 ---
 
 """
-
