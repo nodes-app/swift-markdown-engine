@@ -11,6 +11,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `onLinkActivation` lets hosts handle link destinations and source ranges before default navigation.
 
 ### Fixed
+- Smart paste keeps tables, lists and headings that arrive wrapped in elements the converter doesn't know (Gemini's `<response-element>`/`<table-block>` web components, `<section>`, a Google Docs `<b>` wrapper); they used to collapse into one line of text.
+
+## [0.14.0] - 2026-10-04
+
+### Added
+- `SpellCheckingPolicy.automaticQuoteSubstitution` (default `true`, unchanged behavior) lets embedders editing raw Markdown/LaTeX source keep straight `'` and `"`; smart quotes were forced on at creation and re-enabled on every caret move out of a code/LaTeX/link span. The Smart Quotes menu toggle is now captured like the spelling toggles.
+- **Directive glyph presentation**: a self-contained call (`@marker`,
+  `@glyph(star.fill)`) collapses its source behind an SF Symbol, replacement
+  text, or an image supplied by the directive's `presentation`, and reveals the
+  real characters again under the caret. The source is never removed from the
+  storage — it collapses to zero width the same way inline LaTeX does — so
+  selection, find, copy, and undo still see it. `Demo/` gains `@icon`, `@flag`,
+  `@emoji`, and `@pagebreak` as embedder-side directives — anything carrying
+  curated data or document policy is an app concern, not an engine primitive.
+- **Directive autocomplete** for both directive names and argument values,
+  riding the existing inline-preview seam (`onDirectiveCompletion`,
+  `pendingDirectiveCompletion`); the engine detects the trigger, ranks the
+  candidates from the registry and from the directive's own
+  `valueCompletions`, routes ↑/↓/↵/Esc, and ships no picker UI. The default
+  `valueCompletions` already answers anything the declared schema can — closed
+  keyword sets and booleans — so a directive implements it only when its domain
+  is dynamic or too large to declare.
+
+### Fixed
+- Nested lists keep their levels both ways: copied out as nested HTML/RTF
+  instead of one flat list, and read back from WebKit's sibling-sublist shape
+  (Mail, Notes) instead of dropping its items. Task boxes render with the list
+  helpers turned off.
+- A trackpad held against the top or bottom of the editor no longer flickers.
+  AppKit applies a scroll on the next display refresh, after `scrollWheel(with:)`
+  has returned, so the clamp there only ever corrected the PREVIOUS event — with
+  the rubber band allowed, every refresh committed a fresh overshoot (12–24pt)
+  and every event pulled it back. `ClampedScrollView` now disables vertical
+  elasticity; the document view is already sized to the real content height, so
+  AppKit stops exactly at the edge and the clamp is a backstop again.
 - A programmatic content swap — a document switch, or the SwiftUI `text` binding
   changing from outside the editor — left the code-block selection pass reading
   the PREVIOUS document's ranges: only the typing and caret paths refreshed that

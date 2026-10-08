@@ -47,8 +47,8 @@ struct DirectiveMatch: Equatable {
     /// Inside the braces; `nil` for a self-contained call.
     let bodyRange: NSRange?
     /// Ranges that shrink when the caret leaves: `[prefix, closingBrace]` for
-    /// a container, empty for a self-contained call (Phase 1 renders those
-    /// literally — the glyph pass that collapses them lands in Phase 3).
+    /// a container, empty for a self-contained call — there the whole call is
+    /// the content, and the glyph pass collapses it at styling time.
     let markers: [NSRange]
     /// Range carrying the node's content: the body for a container, the whole
     /// call for a self-contained one.
@@ -150,11 +150,10 @@ enum DirectiveScanner {
             )
         }
 
-        // Self-contained: no markers in Phase 1, so the call renders as plain
-        // literal text instead of collapsing to nothing. It is still CLAIMED,
-        // so emphasis and autolinking can't fire inside it, and it still
-        // projects a token — the glyph pass in Phase 3 only has to add
-        // presentation.
+        // Self-contained: no markers, so the whole call is the content. It is
+        // CLAIMED, so emphasis and autolinking can't fire inside it, and it
+        // projects a token like any other node — the glyph pass at styling
+        // time only has to add presentation.
         return DirectiveMatch(
             nodeID: DirectiveRegistry.nodeID(for: entry.id),
             range: range,
