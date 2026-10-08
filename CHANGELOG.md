@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Smart paste keeps tables, lists and headings that arrive wrapped in elements the converter doesn't know (Gemini's `<response-element>`/`<table-block>` web components, `<section>`, a Google Docs `<b>` wrapper); they used to collapse into one line of text.
+
+## [0.14.0] - 2026-10-04
+
 ### Added
 - `NativeTextViewWrapper.isFocused` provides optional two-way first-responder
   coordination for embedders without changing AppKit-owned focus by default.
@@ -29,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is dynamic or too large to declare.
 
 ### Fixed
+- Nested lists keep their levels both ways: copied out as nested HTML/RTF
+  instead of one flat list, and read back from WebKit's sibling-sublist shape
+  (Mail, Notes) instead of dropping its items. Task boxes render with the list
+  helpers turned off.
 - A trackpad held against the top or bottom of the editor no longer flickers.
   AppKit applies a scroll on the next display refresh, after `scrollWheel(with:)`
   has returned, so the clamp there only ever corrected the PREVIOUS event — with

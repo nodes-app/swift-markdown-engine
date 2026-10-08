@@ -122,6 +122,36 @@ struct HTMLToMarkdownConverterTests {
         #expect(md(html) == "| Feld | Wert |\n|---|---|\n| Arbeitgeber | CF GmbH |")
     }
 
+    @Test("a table inside unknown web components (Gemini) stays a table")
+    func tableInsideWebComponents() {
+        // Gemini wraps every table in Angular custom elements. Unknown tags
+        // used to fold into the inline run, which unwrapped the <table> too
+        // and glued every cell into one line of bold text.
+        let html = "<meta charset='utf-8'><div class=\"horizontal-scroll-wrapper\">"
+            + "<div class=\"table-block-component\"><response-element class=\"no-md\">"
+            + "<table-block _nghost-ng-c1857903257=\"\"><div class=\"table-block\">"
+            + "<div not-end-of-paragraph=\"\" class=\"table-content md-content\"><table>"
+            + "<thead><tr><td><strong>Land</strong></td><td><strong>QoQ</strong></td></tr></thead>"
+            + "<tbody><tr><td><span><b>China</b> 🇨🇳</span></td><td><span><b>+0,9 %</b></span></td></tr></tbody>"
+            + "</table></div><div class=\"table-footer\"><gem-icon-button arialabel=\"Weitere Optionen\">"
+            + "</gem-icon-button></div></div></table-block></response-element></div></div>"
+        #expect(md(html) == "| **Land** | **QoQ** |\n|---|---|\n| **China** 🇨🇳 | **+0,9 %** |")
+    }
+
+    @Test("block content inside an unknown or inline wrapper keeps its structure")
+    func blocksInsideUnknownWrapper() {
+        #expect(md("<section><ul><li>A</li><li>B</li></ul></section>") == "- A\n- B")
+        #expect(md("<span><table><tr><td>a</td><td>b</td></tr><tr><td>1</td><td>2</td></tr></table></span>")
+            == "| a | b |\n|---|---|\n| 1 | 2 |")
+        #expect(md("<ul><li>Parent<x-wrap><ul><li>Child</li></ul></x-wrap></li></ul>") == "- Parent\n\t- Child")
+    }
+
+    @Test("an unknown wrapper around inline content stays inline")
+    func inlineUnknownWrapper() {
+        #expect(md("<p>a <x-chip>b</x-chip> c</p>") == "a b c")
+        #expect(md("<h2>Title <x-badge><b>new</b></x-badge></h2>") == "## Title **new**")
+    }
+
     @Test("bare li fragments become one tight bullet list")
     func bareListItems() {
         #expect(md("<meta charset='utf-8'><li class=\"x\"><strong>A:</strong> one</li>\n  <li>two</li>")
