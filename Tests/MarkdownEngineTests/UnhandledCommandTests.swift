@@ -44,6 +44,28 @@ struct UnhandledCommandTests {
         #expect(received == [.escape])
     }
 
+    @Test("Directive cancellation gets first refusal before host fallback", arguments: [true, false])
+    func directiveCancellationFirstRefusal(previewConsumes: Bool) {
+        let (coordinator, textView) = makeEditor("plain")
+        coordinator.isDirectiveCompletionActive = true
+        var previewKeys: [InlinePreviewKey] = []
+        var hostCommands: [MarkdownEditorCommand] = []
+        coordinator.onInlinePreviewKey = { key in
+            previewKeys.append(key)
+            return previewConsumes
+        }
+        coordinator.onUnhandledCommand = { command in
+            hostCommands.append(command)
+            return false
+        }
+
+        let consumed = coordinator.textView(textView, doCommandBy: #selector(NSResponder.cancelOperation(_:)))
+
+        #expect(previewKeys == [.cancel])
+        #expect(hostCommands == (previewConsumes ? [] : [.escape]))
+        #expect(consumed == previewConsumes)
+    }
+
     @Test("A list consumes Tab before the host")
     func listTabWins() {
         let (coordinator, textView) = makeEditor("- item")
