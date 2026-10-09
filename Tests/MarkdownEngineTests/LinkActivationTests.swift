@@ -34,6 +34,18 @@ struct LinkActivationTests {
 
     private let linkCases = [
         LinkCase(source: "[x](my file.md)", linkText: "x", kind: .inlineLink, destination: "my file.md"),
+        LinkCase(
+            source: #"[Notes \[draft\]](#section)"#,
+            linkText: #"Notes \[draft\]"#,
+            kind: .inlineLink,
+            destination: "#section"
+        ),
+        LinkCase(
+            source: #"[Notes \[draft\]](../My%20file.md)"#,
+            linkText: #"Notes \[draft\]"#,
+            kind: .inlineLink,
+            destination: "../My%20file.md"
+        ),
         LinkCase(source: "[x](../Foo Bar/)", linkText: "x", kind: .inlineLink, destination: "../Foo Bar/"),
         LinkCase(
             source: "[Task](../Tasks/Jaron%20vraagt%20na.md)",
@@ -180,6 +192,29 @@ struct LinkActivationTests {
         let expectedRange = (source as NSString).range(of: "[Task](Map/Notitie.md#Kop)")
         #expect(received.first?.sourceRange == expectedRange)
         #expect(received.first?.destination == "Map/Notitie.md#Kop")
+    }
+
+    @Test
+    func escapedLinkLabelKeepsSourceCoordinatesAfterProjectedContent() throws {
+        _ = NSApplication.shared
+        let linkSource = #"[Notes \[draft\]](../My%20file.md#section)"#
+        let source = "🌙 [[Prior|opaque-id]] " + linkSource
+        var received: [MarkdownLinkActivation] = []
+        let fixture = try makeFixture(
+            source: source,
+            linkText: #"Notes \[draft\]"#,
+            isEditable: false,
+            onLinkActivation: { received.append($0); return true },
+            onLinkClick: nil
+        )
+
+        #expect(fixture.coordinator.textView(
+            fixture.textView, clickedOnLink: fixture.linkValue, at: fixture.clickIndex
+        ))
+        #expect(received.count == 1)
+        #expect(received.first?.kind == .inlineLink)
+        #expect(received.first?.destination == "../My%20file.md#section")
+        #expect(received.first?.sourceRange == (source as NSString).range(of: linkSource))
     }
 
     @Test
