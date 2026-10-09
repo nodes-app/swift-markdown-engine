@@ -31,9 +31,8 @@ extension NativeTextView {
         // (e.g. the HTML renderer drops the `|UUID` of a wiki link), so this
         // must win over the HTML branch below.
         if let ownMarkdown = pasteboard.string(forType: MarkdownPasteboardWriter.markdownType) {
-            let sanitized = sanitizePastedText(ownMarkdown)
-            if !sanitized.isEmpty {
-                insertPreservingBlockquote(sanitized)
+            if !ownMarkdown.isEmpty {
+                insertPreservingBlockquote(ownMarkdown)
                 return
             }
         }
@@ -140,11 +139,9 @@ extension NativeTextView {
             let nsRange = NSRange(location: 0, length: (out as NSString).length)
             out = bulletRegex.stringByReplacingMatches(in: out, range: nsRange, withTemplate: "$1- ")
         }
-        if let regex = try? NSRegularExpression(pattern: "\\n{3,}") {
-            let nsRange = NSRange(location: 0, length: (out as NSString).length)
-            out = regex.stringByReplacingMatches(in: out, range: nsRange, withTemplate: "\n\n")
-        }
-        return out.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Whitespace is Markdown source: paragraph boundaries, code
+        // indentation and hard breaks must survive a paste at any caret.
+        return out
     }
 
     override func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
