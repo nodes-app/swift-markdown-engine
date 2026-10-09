@@ -46,6 +46,22 @@ struct MarkdownToken {
     let range: NSRange
     let contentRange: NSRange
     let markerRanges: [NSRange]
+    /// Raw destination range for inline and wiki links, when the parser has one.
+    let destinationRange: NSRange?
+
+    init(
+        kind: MarkdownTokenKind,
+        range: NSRange,
+        contentRange: NSRange,
+        markerRanges: [NSRange],
+        destinationRange: NSRange? = nil
+    ) {
+        self.kind = kind
+        self.range = range
+        self.contentRange = contentRange
+        self.markerRanges = markerRanges
+        self.destinationRange = destinationRange
+    }
 }
 
 extension MarkdownToken {

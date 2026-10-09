@@ -76,6 +76,7 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var headerController: ScrollingHeaderController?
     var layoutBridge: LayoutBridge?
     var layoutDelegate: MarkdownLayoutManagerDelegate?
+    var onLinkActivation: ((MarkdownLinkActivation) -> Bool)?
     var onLinkClick: ((String) -> Void)?
     var onCaretRectChange: ((CGRect) -> Void)?
     var onTextMutation: ((MarkdownTextMutation) -> Void)?
@@ -296,12 +297,14 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
          fontName: String,
          fontSize: CGFloat,
          isWikiLinkActive: Binding<Bool>,
+         onLinkActivation: ((MarkdownLinkActivation) -> Bool)? = nil,
          onLinkClick: ((String) -> Void)?,
          onInlineSelectionChange: ((InlineSelectionState?) -> Void)?) {
         _text = text
         self.fontName = fontName
         self.fontSize = fontSize
         _isWikiLinkActive = isWikiLinkActive
+        self.onLinkActivation = onLinkActivation
         self.onLinkClick = onLinkClick
         self.onCaretRectChange = nil
         self.onInlineSelectionChange = onInlineSelectionChange
