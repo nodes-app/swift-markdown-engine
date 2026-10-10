@@ -1015,6 +1015,9 @@ extension NativeTextViewCoordinator {
             // (the mouseDown fallback mirrors that). Opening a link is navigation
             // too — flag it so mouseDown restores the pre-click caret.
             (textView as? NativeTextView)?.linkClickDidNavigate = true
+            if let onMarkdownLinkClick, let target = markdownLinkTarget(in: textView, link: link, at: charIndex) {
+                return onMarkdownLinkClick(target)
+            }
             return false
         }
         // Direkt deaktivieren, bevor der Navigation-Callback läuft.
@@ -1024,6 +1027,20 @@ extension NativeTextViewCoordinator {
             self.onLinkClick?(target)
         }
         return true
+    }
+
+    /// The target of the `[text](target)` link at `charIndex` as written in the source, or the
+    /// URL of a bare autolink. The `.link` attribute can't supply this: it holds a URL the styler
+    /// completed with a scheme.
+    private func markdownLinkTarget(in textView: NSTextView, link: Any, at charIndex: Int) -> String? {
+        let token = parsedDocument(for: textView.string).tokens
+            .first { $0.kind == .link && NSLocationInRange(charIndex, $0.range) }
+        if let token, token.markerRanges.count == 4 {
+            let start = NSMaxRange(token.markerRanges[2])
+            let range = NSRange(location: start, length: token.markerRanges[3].location - start)
+            return (textView.string as NSString).substring(with: range)
+        }
+        return (link as? URL)?.absoluteString
     }
 
     /// Horizontal fraction (0 = leading, 1 = trailing) of the current click through the glyph at

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `NativeTextViewWrapper.onMarkdownLinkClick`: a click on `[text](target)` or a
+  bare URL hands the target, as written in the source, to the embedder. Return
+  `true` to handle it (for example to open a relative path as another
+  document); `false` lets the system open the link.
+
 ### Fixed
 - Switching documents drops AppKit's blue autocorrection underline; it stood over the incoming document, and its range moved into the new text.
 - Smart paste keeps tables, lists and headings that arrive wrapped in elements the converter doesn't know (Gemini's `<response-element>`/`<table-block>` web components, `<section>`, a Google Docs `<b>` wrapper); they used to collapse into one line of text.
