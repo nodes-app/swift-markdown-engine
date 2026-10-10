@@ -643,6 +643,8 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             context.coordinator.resetImageEmbedState()
             // Drop old document's wide-table overlays synchronously.
             textView.removeAllWideTableOverlays()
+            // And its autocorrection underlines, which AppKit keeps per view.
+            textView.removeCorrectionUnderlines()
             // Park at top during the rebuild; the new document's own saved offset
             // (if any) is restored after its height is known (see below).
             nsView.contentView.scroll(to: NSPoint(x: 0, y: -nsView.contentInsets.top))
