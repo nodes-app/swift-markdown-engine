@@ -22,8 +22,6 @@ extension NativeTextView {
         targetWidth: CGFloat? = nil,
         debugTag: String = "?"
     ) {
-        scrollView.contentInsets.bottom = 0
-
         let lineHeight = layoutBridgeDefaultLineHeight(for: self.baseFont, using: layoutBridge)
         // File switch/resize forces full layout until height settles; typing stays O(edit).
         if debugTag == "?" { pendingFullLayoutMeasure = true }
