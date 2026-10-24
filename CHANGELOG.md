@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The extension and directive seams' syntax types (`InlineSyntax`, `BlockSyntax`,
+  `DirectiveSyntax` and its values) and `MarkdownToken`'s attribute keys are in
+  their own files, apart from styling (#208). No API or behaviour change.
+
 ## [0.15.0] - 2026-10-22
 
 ### Added

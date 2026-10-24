@@ -6,14 +6,8 @@
 //
 
 // Defines the basic Markdown building blocks the editor works with (bold,
-// links, code, LaTeX, etc.), plus shared text attributes.
-import AppKit
+// links, code, LaTeX, etc.).
 import Foundation
-
-extension NSAttributedString.Key {
-    public static let wikiLinkID = NSAttributedString.Key("NodeLinkID")
-    public static let taskCheckbox = NSAttributedString.Key("TaskCheckbox")
-}
 
 enum MarkdownTokenKind: Equatable {
     case italic
