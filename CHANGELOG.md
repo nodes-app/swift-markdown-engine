@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- VoiceOver no longer scrolls the text about 75 pt each time its cursor lands on it. The text view now reports only its visible part as its accessibility frame; an element taller than the viewport was scrolled until its top sat near the scroll area's top, past the header band.
+
 ## [0.15.0] - 2026-10-22
 
 ### Added
