@@ -285,6 +285,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         textView.minOverscrollPoints = configuration.overscroll.minPoints
         context.coordinator.configuration = configuration
         textView.insertionPointColor = configuration.theme.bodyText
+        textView.linkTextAttributes = configuration.theme.linkTextAttributes
         textView.isEditable = isEditable
         textView.isSelectable = true
         textView.isRichText = true
@@ -608,6 +609,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         textView.insertionPointColor = isEditable
             ? (context.coordinator.resolvedCaretColor ?? context.coordinator.configuration.theme.bodyText)
             : .clear
+        textView.linkTextAttributes = context.coordinator.configuration.theme.linkTextAttributes
         let fontChanged = (context.coordinator.fontName != fontName) || (context.coordinator.fontSize != fontSize)
         if let pendingDirectiveCompletion {
             if pendingDirectiveCompletion.documentId == documentId,
