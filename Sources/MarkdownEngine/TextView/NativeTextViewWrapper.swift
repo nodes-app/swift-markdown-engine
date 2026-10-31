@@ -633,7 +633,10 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             }
             return
         }
-        if context.coordinator.didInitialFormatting
+        // Never on a switch: two documents can hold the same text (two empty notes),
+        // and returning here left `documentId` on the old one for the editor's life.
+        if !isNodeSwitch
+            && context.coordinator.didInitialFormatting
             && context.coordinator.lastSyncedText == text
             && !fontChanged {
             return
