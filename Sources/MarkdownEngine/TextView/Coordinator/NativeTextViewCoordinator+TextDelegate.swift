@@ -976,6 +976,10 @@ extension NativeTextViewCoordinator {
             }
             if let key, handler(key) { return true }
         }
+        if let nativeTextView = textView as? NativeTextView,
+           nativeTextView.startLineMoveFromHangingCaret(commandSelector) {
+            return true
+        }
         return false
     }
 

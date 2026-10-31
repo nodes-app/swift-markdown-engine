@@ -4,7 +4,8 @@
 //
 //  Created by Luca Chen on 16.03.26.
 //
-//  Caret-indicator workarounds: block-image hide/resize + trailing-`\n` Y-snap (FB22524198).
+//  Caret-indicator workarounds: block-image hide/resize + trailing-`\n` Y-snap (FB22524198)
+//  + a caret in whitespace past the right margin (NativeTextView+HangingCaret).
 //
 
 import AppKit
@@ -13,7 +14,10 @@ extension NativeTextView {
     override func updateInsertionPointStateAndRestartTimer(_ restartFlag: Bool) {
         super.updateInsertionPointStateAndRestartTimer(restartFlag)
         applyBlockImageCaretPolicy()
-        DispatchQueue.main.async { [weak self] in self?.fixPhantomTrailingCaret() }
+        DispatchQueue.main.async { [weak self] in
+            self?.fixPhantomTrailingCaret()
+            self?.placeCaretPastMargin()
+        }
     }
 
     func applyBlockImageCaretPolicy() {
@@ -75,6 +79,7 @@ extension NativeTextView {
                 guard let self, !self.isApplyingCaretShift else { return }
                 self.applyBlockImageCaretPolicy()
                 self.fixPhantomTrailingCaret()
+                self.placeCaretPastMargin()
             }
         }
         guard let ts = textStorage, let indicator = observedCaretIndicator,
