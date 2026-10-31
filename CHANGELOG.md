@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- A space typed at the right edge of a wrapped line shows where the next character will go: the caret is drawn at the start of the next line, or of the new line below a paragraph's last line, and ↑ ↓ ⌘← ⌘→ start from there. TextKit clamped it to the margin, where the clipped text view cut it off, so the space looked like it did nothing.
+
 ## [0.15.0] - 2026-10-22
 
 ### Added
