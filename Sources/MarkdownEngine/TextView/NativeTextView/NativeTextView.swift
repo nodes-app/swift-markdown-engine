@@ -60,6 +60,7 @@ final class NativeTextView: NSTextView {
         }
     }
     private var hasPendingFocusRequest = false
+    var allowsTaskCheckboxInteractionWhenReadOnly = false
     weak var layoutBridge: LayoutBridge?
     var baseFont: NSFont = NSFont.systemFont(ofSize: NSFont.systemFontSize)
 
