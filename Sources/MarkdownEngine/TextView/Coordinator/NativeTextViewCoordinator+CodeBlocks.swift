@@ -83,7 +83,7 @@ extension NativeTextViewCoordinator {
             if let visibleRange, NSIntersectionRange(token.range, visibleRange).length == 0 { return nil }
             guard var boundingRect = textView.viewRect(forCharacterRange: token.range, using: layoutBridge) else { return nil }
 
-            boundingRect.origin.x = textView.frame.origin.x + textView.textContainerOrigin.x - scrollOffset.x
+            boundingRect.origin.x = textView.rectInClipView(NSRect(origin: textView.textContainerOrigin, size: .zero)).minX - scrollOffset.x
             boundingRect.size.width = textContainer.containerSize.width
 
             return CodeBlockSelection(

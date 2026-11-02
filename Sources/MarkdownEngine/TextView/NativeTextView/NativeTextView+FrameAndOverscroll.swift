@@ -22,8 +22,6 @@ extension NativeTextView {
         targetWidth: CGFloat? = nil,
         debugTag: String = "?"
     ) {
-        scrollView.contentInsets.bottom = 0
-
         let lineHeight = layoutBridgeDefaultLineHeight(for: self.baseFont, using: layoutBridge)
         // File switch/resize forces full layout until height settles; typing stays O(edit).
         if debugTag == "?" { pendingFullLayoutMeasure = true }
@@ -219,8 +217,8 @@ extension NativeTextView {
         isApplyingManagedFrameSize = true
         super.setFrameSize(targetSize)
         isApplyingManagedFrameSize = false
-        // Tell the container our height changed so it can re-stack (move us below the
-        // header) and size itself. Re-entrancy is guarded inside the container.
+        // Tell the container our height changed so it can re-stack and size itself.
+        // Re-entrancy is guarded inside the container.
         (superview as? NativeTextViewContainer)?.textViewDidResize()
 
         // Nudge SwiftUI to re-query sizeThatFits when content height changes outside
@@ -240,10 +238,8 @@ extension NativeTextView {
             container.frame = f
         }
         let originX = floor(max(0, (clipWidth - readingColumnWidth) / 2))
-        let delta = originX - frame.origin.x
-        if delta != 0 {
-            setFrameOrigin(NSPoint(x: originX, y: frame.origin.y))
-        }
+        let delta = originX - container.columnOriginX
+        container.setColumnOriginX(originX)
         // The breakout host keeps changing width after a narrow viewport has
         // pinned the reading column to x = 0. Resize overlays on every host
         // width change, even when the column itself no longer moves.
@@ -400,7 +396,7 @@ extension NativeTextView {
             // renders its block below the source line via paragraphSpacing, so layoutFragmentFrame is
             // as tall as the image; revealing its maxY would scroll the viewport down by the block
             // height even though the caret sits on the source line at the top. Frames are text-view-
-            // local; lift by the text view's offset inside the container (the header band).
+            // local; `rectInClipView` takes them into the scroll offset's space.
             var revealRect = fragment.layoutFragmentFrame
             // Reveal the ACTUAL caret location's segment (not the stepped-back revealOffset), so a
             // freshly soft-wrapped last line at the document end still scrolls into view; fall back to
@@ -419,7 +415,7 @@ extension NativeTextView {
                 return rect
             }
             revealRect = caretSegmentRect(fallback: revealRect)
-            var frame = revealRect.offsetBy(dx: 0, dy: self.frame.origin.y)
+            var frame = rectInClipView(revealRect)
             let visibleTop = cv.bounds.origin.y + insetsTop
             let visibleBottom = cv.bounds.origin.y + cv.bounds.height
             let margin: CGFloat = 24
@@ -438,7 +434,7 @@ extension NativeTextView {
                     PerfTrace.accumulate("revealSettle") { tlm.ensureLayout(for: settleRange) }
                 }
                 revealRect = caretSegmentRect(fallback: revealRect)
-                frame = revealRect.offsetBy(dx: 0, dy: self.frame.origin.y)
+                frame = rectInClipView(revealRect)
             }
             let targetY: CGFloat
             if frame.minY < visibleTop {
@@ -468,15 +464,12 @@ extension NativeTextView {
         // into whichever enclosing scroller we find.
         var caretRect: CGRect?
         tlm.enumerateTextLayoutFragments(from: start, options: [.ensuresLayout]) { fragment in
-            caretRect = fragment.layoutFragmentFrame.offsetBy(dx: 0, dy: self.frame.origin.y)
+            caretRect = fragment.layoutFragmentFrame
             return false
         }
         guard let rect = caretRect else { return }
-        // Convert from document-view space (container) to the inner scroll
-        // view's coordinate space, then to window, so we can convert into
-        // any ancestor we find.
-        let container = innerScrollView.documentView ?? self
-        let rectInWindow = container.convert(rect, to: nil)
+        // To window space, so we can convert into any ancestor we find.
+        let rectInWindow = convert(rect, to: nil)
         // Walk up past the inner scroll view looking for a parent NSScrollView.
         var view: NSView? = innerScrollView.superview
         while let v = view {

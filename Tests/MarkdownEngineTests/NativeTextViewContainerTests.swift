@@ -51,7 +51,7 @@ struct NativeTextViewContainerTests {
 
         stack.container.headerHeight = 40
 
-        #expect(stack.textView.frame.origin.y == 40)
+        #expect(stack.container.shownTextViewOrigin.y == 40)
         // Band changes re-run the overscroll policy — assert slack-agnostic
         // stacking so policy tuning can't break this test.
         #expect(stack.textView.frame.height == 900 + stack.textView.activeBottomOverscroll)
@@ -98,12 +98,11 @@ struct NativeTextViewContainerTests {
         stack.textView.applyManagedFrameSize(width: 600)
         stack.textView.centerReadingColumn(forClipWidth: 600)
         let expectedX = floor((600 - stack.textView.readingColumnWidth) / 2)
-        #expect(stack.textView.frame.origin.x == expectedX)
+        #expect(stack.container.shownTextViewOrigin.x == expectedX)
 
         // A height-only restack (header change) must not reset the centered X.
         stack.container.headerHeight = 40
-        #expect(stack.textView.frame.origin.x == expectedX)
-        #expect(stack.textView.frame.origin.y == 40)
+        #expect(stack.container.shownTextViewOrigin == CGPoint(x: expectedX, y: 40))
     }
 
     @Test func viewportWidthChangeRecentersReadingColumn() {
@@ -115,7 +114,7 @@ struct NativeTextViewContainerTests {
         stack.container.setFrameSize(NSSize(width: 1000, height: stack.container.frame.height))
 
         let expectedX = floor((1000 - stack.textView.readingColumnWidth) / 2)
-        #expect(stack.textView.frame.origin.x == expectedX)
+        #expect(stack.container.shownTextViewOrigin.x == expectedX)
         // The column keeps its fixed width — only its position moves.
         #expect(stack.textView.frame.width == stack.textView.readingColumnWidth)
     }
@@ -152,6 +151,31 @@ struct NativeTextViewContainerTests {
         stack.container.setFrameSize(NSSize(width: 1000, height: stack.container.frame.height))
 
         #expect(stack.textView.frame.width == 1000)
-        #expect(stack.textView.frame.origin.x == 0)
+        #expect(stack.container.shownTextViewOrigin.x == 0)
+    }
+
+    /// #205: Writing Tools draws its proofreading overlay in text-view coordinates
+    /// against the container's origin, so a text view offset inside the container got
+    /// its words drawn that far up and left. The header band and the column offset
+    /// live in the container's bounds origin instead.
+    @Test func textViewSitsAtTheContainerOriginWhereverItShows() {
+        let stack = makeStack(readingWidth: 400)
+        stack.textView.baseContentHeight = 500
+        stack.textView.applyManagedFrameSize(width: 600)
+        stack.textView.centerReadingColumn(forClipWidth: 600)
+        stack.container.headerHeight = 40
+
+        let expectedX = floor((600 - stack.textView.readingColumnWidth) / 2)
+        #expect(stack.textView.frame.origin == .zero)
+        #expect(stack.container.shownTextViewOrigin == CGPoint(x: expectedX, y: 40))
+    }
+}
+
+extension NativeTextViewContainer {
+    /// Where the text view shows, from the container's top-left.
+    var shownTextViewOrigin: CGPoint {
+        guard let textView else { return .zero }
+        let origin = textView.convert(NSPoint.zero, to: self)
+        return CGPoint(x: origin.x - bounds.origin.x, y: origin.y - bounds.origin.y)
     }
 }
