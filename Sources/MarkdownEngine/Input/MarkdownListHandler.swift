@@ -175,37 +175,10 @@ struct MarkdownLists {
             return insertAutoPair(open: replacementString, close: closeChar)
         }
 
-        // TAB: indent list items (skip in code blocks)
-        if replacementString == "\t" && !isInCodeBlock {
-            guard listsEnabled else { return true }
-            let nsText = textView.string as NSString
-            let insertionLocation = affectedCharRange.location
-            let safeLocTAB = min(affectedCharRange.location, nsText.length)
-            let currentLineRange = nsText.lineRange(for: NSRange(location: safeLocTAB, length: 0))
-            let currentLine = nsText.substring(with: currentLineRange)
-            if MarkdownLists.listRegex.firstMatch(in: currentLine, range: NSRange(location: 0, length: currentLine.utf16.count)) != nil {
-                if let wsMatch = MarkdownLists.leadingWhitespaceRegex.firstMatch(in: currentLine, range: NSRange(location: 0, length: currentLine.utf16.count)) {
-                    let ws = (currentLine as NSString).substring(with: wsMatch.range)
-                    let level = MarkdownLists.indentLevel(from: ws)
-                    if level >= MarkdownEditorConfiguration.default.lists.maximumNestingLevel {
-                        return false
-                    }
-                }
-                MarkdownLists.performEdit(textView, replace: NSRange(location: currentLineRange.location, length: 0), with: "\t")
-                textView.setSelectedRange(NSRange(location: insertionLocation + 1, length: 0))
-                return false
-            }
-            if MarkdownLists.dashNoSpaceRegex.firstMatch(in: currentLine, range: NSRange(location: 0, length: currentLine.utf16.count)) != nil {
-                if let wsMatch = MarkdownLists.leadingWhitespaceRegex.firstMatch(in: currentLine, range: NSRange(location: 0, length: currentLine.utf16.count)) {
-                    let ws = (currentLine as NSString).substring(with: wsMatch.range)
-                    let level = MarkdownLists.indentLevel(from: ws)
-                    if level >= MarkdownEditorConfiguration.default.lists.maximumNestingLevel { return false }
-                }
-                MarkdownLists.performEdit(textView, replace: NSRange(location: currentLineRange.location, length: 0), with: "\t")
-                textView.setSelectedRange(NSRange(location: insertionLocation + 1, length: 0))
-                return false
-            }
-            return true
+        // AppKit may still offer Tab as a text insertion when doCommandBy
+        // declines it. Share the same list ownership decision in both paths.
+        if replacementString == "\t" {
+            return !handleTab(textView: textView, isInsideCodeBlock: isInCodeBlock)
         }
 
         // ENTER: list continuation/outdent
@@ -322,6 +295,48 @@ struct MarkdownLists {
             }
         }
 
+        return true
+    }
+
+    /// Indents the current list item and reports whether the engine consumed
+    /// Tab. Maximum-depth list items remain consumed without changing text,
+    /// matching the previous input-handler behavior.
+    static func handleTab(textView: NSTextView, isInsideCodeBlock: Bool) -> Bool {
+        guard !isInsideCodeBlock else { return false }
+        let lists = (textView as? NativeTextView)?.configuration.lists
+            ?? MarkdownEditorConfiguration.default.lists
+        guard lists.helpersEnabled else { return false }
+
+        let nsText = textView.string as NSString
+        let insertionLocation = min(textView.selectedRange().location, nsText.length)
+        let currentLineRange = nsText.lineRange(for: NSRange(location: insertionLocation, length: 0))
+        let currentLine = nsText.substring(with: currentLineRange)
+        let isList = listRegex.firstMatch(
+            in: currentLine,
+            range: NSRange(location: 0, length: currentLine.utf16.count)
+        ) != nil
+        let isIncompleteList = dashNoSpaceRegex.firstMatch(
+            in: currentLine,
+            range: NSRange(location: 0, length: currentLine.utf16.count)
+        ) != nil
+        guard isList || isIncompleteList else { return false }
+
+        if let whitespace = leadingWhitespaceRegex.firstMatch(
+            in: currentLine,
+            range: NSRange(location: 0, length: currentLine.utf16.count)
+        ) {
+            let prefix = (currentLine as NSString).substring(with: whitespace.range)
+            if indentLevel(from: prefix) >= lists.maximumNestingLevel {
+                return true
+            }
+        }
+
+        performEdit(
+            textView,
+            replace: NSRange(location: currentLineRange.location, length: 0),
+            with: "\t"
+        )
+        textView.setSelectedRange(NSRange(location: insertionLocation + 1, length: 0))
         return true
     }
 }
