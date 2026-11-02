@@ -170,9 +170,10 @@ final class ScrollingHeaderController {
         equalityConstraint = nil
         constantConstraint = nil
         hostingView = nil
+        container?.unpinHeader()
         clipView?.removeFromSuperview()
         clipView = nil
-        container?.headerHeight = 0   // → restack: text view back to y=0, container shrinks
+        container?.headerHeight = 0   // → restack: no band above the text view, container shrinks
     }
 
     // MARK: - Internals
@@ -215,8 +216,9 @@ final class ScrollingHeaderController {
         clip.clipsToBounds = true
         clip.postsFrameChangedNotifications = true
         // The clip is a SIBLING of the text view inside the container (top band).
-        // Auto-Layout-pinned to the container's top/leading/trailing; its height is
-        // owned by the equality/constant constraint pair below and read back into
+        // Auto-Layout-pinned to the container's visible top/left/right (the
+        // container sets the constants from its bounds origin); its height is owned by
+        // the equality/constant constraint pair below and read back into
         // `container.headerHeight`.
         container.addSubview(clip)
 
@@ -228,16 +230,20 @@ final class ScrollingHeaderController {
         //  • constant: clip.height == <value>      → collapsed, or animating.
         let equalityC = clip.heightAnchor.constraint(equalTo: host.heightAnchor)
         let constantC = clip.heightAnchor.constraint(equalToConstant: max(0, collapsedHeight))
+        // Left/right, not leading/trailing: their constants carry the bounds origin,
+        // and a leading constant flips sign in a right-to-left layout.
+        let top = clip.topAnchor.constraint(equalTo: container.topAnchor)
+        let left = clip.leftAnchor.constraint(equalTo: container.leftAnchor)
+        let right = clip.rightAnchor.constraint(equalTo: container.rightAnchor)
         NSLayoutConstraint.activate([
-            clip.topAnchor.constraint(equalTo: container.topAnchor),
-            clip.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            clip.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            top, left, right,
             // Host is full-height (top-pinned); overflow below the clip is hidden.
             host.topAnchor.constraint(equalTo: clip.topAnchor),
             host.leadingAnchor.constraint(equalTo: clip.leadingAnchor),
             host.trailingAnchor.constraint(equalTo: clip.trailingAnchor)
         ])
         if expanded { equalityC.isActive = true } else { constantC.isActive = true }
+        container.pinHeader(clip, top: top, left: left, right: right)
 
         hostingView = host
         clipView = clip

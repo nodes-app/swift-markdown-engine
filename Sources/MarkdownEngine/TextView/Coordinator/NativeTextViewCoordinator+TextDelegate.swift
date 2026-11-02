@@ -92,7 +92,9 @@ extension NativeTextViewCoordinator {
             guard !tv.hasMarkedText() else { return }
             if tv.string != lastSyncedText {
                 let rawText = tv.string
+                let target = documentId
                 DispatchQueue.main.async {
+                    guard self.bindingFollows(target) else { return }
                     self.lastSyncedText = rawText
                     self.text = rawText
                 }
@@ -102,7 +104,7 @@ extension NativeTextViewCoordinator {
                 bottomTextView.recalcOverscroll(for: scrollView, debugTag: "textDidChange")
                 (scrollView as? ClampedScrollView)?.clampToInsets()
             }
-            if let completedTextMutation {
+            if let completedTextMutation, bindingFollows(documentId) {
                 onTextMutation?(completedTextMutation)
             }
             return
@@ -196,7 +198,9 @@ extension NativeTextViewCoordinator {
             }
 #endif
             if storageState.storage != self.lastSyncedText {
+                let target = documentId
                 DispatchQueue.main.async {
+                    guard self.bindingFollows(target) else { return }
                     self.lastSyncedText = storageState.storage
                     self.text = storageState.storage
                 }
@@ -373,7 +377,7 @@ extension NativeTextViewCoordinator {
             }
         }
         previousActiveTokenIndices = activeTokenIndices
-        if let completedTextMutation {
+        if let completedTextMutation, bindingFollows(documentId) {
             onTextMutation?(completedTextMutation)
         }
         PerfTrace.end()
@@ -978,6 +982,11 @@ extension NativeTextViewCoordinator {
             } else if commandSelector == #selector(NSResponder.insertBacktab(_:)),
                       textView.isEditable,
                       handleBacktab(textView) {
+                return true
+            }
+
+            if let nativeTextView = textView as? NativeTextView,
+               nativeTextView.startLineMoveFromHangingCaret(commandSelector) {
                 return true
             }
         }
