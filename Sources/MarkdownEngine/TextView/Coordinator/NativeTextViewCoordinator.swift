@@ -46,6 +46,7 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var undoContentSnapshots: [String: String] = [:]
     @Binding var text: String
     @Binding var isWikiLinkActive: Bool
+    var isFocused: Binding<Bool>?
     var fontName: String
     var fontSize: CGFloat
     var configuration: MarkdownEditorConfiguration = .default {
@@ -106,15 +107,16 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var lastSyncedText: String
     var isProgrammaticEdit: Bool = false
     var isWritingToolsActive: Bool = false
-    var wtStartDocumentId: String?
     weak var wtChildWindow: NSWindow?
     var wtInitialChildOrigin: CGPoint?
     var wtInitialSelectionRange: NSRange?
     enum WTMode { case unknown, proofread, rewrite }
     var wtDetectedMode: WTMode = .unknown
     var wtUndoObserverTokens: [NSObjectProtocol] = []
-    var wtUndoneDuringSession: Bool = false
     var wtPostUndoSnapshot: String?
+    /// A document switch waiting for a streaming Writing Tools session to settle.
+    var deferredNodeSwitch: (() -> Void)?
+    var deferredNodeSwitchTimer: Timer?
     var lastAppliedInlineReplacementID: UUID?
     var activeTokenIndices: Set<Int> = []
     var previousActiveTokenIndices: Set<Int> = []
@@ -183,6 +185,21 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     /// resetting to `theme.bodyText`, which would stomp it on any SwiftUI pass;
     /// nil = no span, use the theme.
     var resolvedCaretColor: NSColor?
+
+    private var focusReportGeneration = 0
+
+    /// Defer binding writes out of SwiftUI view updates, retaining the binding
+    /// through teardown. A newer responder transition supersedes a queued one.
+    func reportFocusChange(_ focused: Bool) {
+        focusReportGeneration &+= 1
+        let generation = focusReportGeneration
+        guard let isFocused else { return }
+        DispatchQueue.main.async { [self] in
+            guard focusReportGeneration == generation,
+                  isFocused.wrappedValue != focused else { return }
+            isFocused.wrappedValue = focused
+        }
+    }
 
     var cachedCodeBlockTokens: [(index: Int, token: MarkdownToken)] = []
     /// Dedupe key of the last emitted code-block selections — identical
@@ -487,18 +504,11 @@ extension NSTextView {
         let containerOrigin = textContainerOrigin
         boundingRect.origin.x += containerOrigin.x
         boundingRect.origin.y += containerOrigin.y
-        // The text view sits inside a container document view, offset by the header
-        // band (y) and the reading-column centering (x), so its glyph rects
-        // (text-view-local) must be lifted into the document view's space before
-        // subtracting the scroll offset (which is in document-view space).
-        // `convert(.zero, to: doc)` covers both offsets and self-zeroes if this text
-        // view ever IS the document view.
+        // Glyph rects are text-view-local; the header band and the reading column show
+        // through the container's bounds origin, and the scroll offset is in the clip
+        // view's space — convert into it before subtracting the offset.
         if let scrollView = enclosingScrollView {
-            if let doc = scrollView.documentView, doc !== self {
-                let originInDoc = convert(CGPoint.zero, to: doc)
-                boundingRect.origin.x += originInDoc.x
-                boundingRect.origin.y += originInDoc.y
-            }
+            boundingRect = rectInClipView(boundingRect)
             let contentOffset = scrollView.contentView.bounds.origin
             boundingRect.origin.x -= contentOffset.x
             boundingRect.origin.y -= contentOffset.y

@@ -171,6 +171,39 @@ struct FitsContentOverscrollTests {
         // Overscroll must still be zero in .fitsContent.
         #expect(stack.textView.activeBottomOverscroll == 0)
     }
+
+    @Test func recalcOverscrollPreservesContentInsets() {
+        // makeNSView writes safeAreaInsets onto contentInsets, then calls
+        // recalcOverscroll. A leftover bottom reset used to wipe that inset
+        // before the settled-height guard, including on the early return.
+        let stack = HeightBehaviorStack(heightBehavior: .scrolls)
+        stack.scrollView.automaticallyAdjustsContentInsets = false
+        stack.scrollView.contentInsets = NSEdgeInsets(top: 56, left: 8, bottom: 58, right: 8)
+        stack.textView.recalcOverscroll(for: stack.scrollView)
+
+        #expect(stack.scrollView.contentInsets.top == 56)
+        #expect(stack.scrollView.contentInsets.left == 8)
+        #expect(stack.scrollView.contentInsets.bottom == 58)
+        #expect(stack.scrollView.contentInsets.right == 8)
+        #expect(stack.textView.baseContentHeight > 0)
+
+        stack.textView.recalcOverscroll(for: stack.scrollView)
+        #expect(stack.scrollView.contentInsets.bottom == 58)
+
+        let fits = HeightBehaviorStack(heightBehavior: .fitsContent)
+        fits.scrollView.automaticallyAdjustsContentInsets = false
+        fits.scrollView.contentInsets = NSEdgeInsets(top: 56, left: 8, bottom: 58, right: 8)
+        fits.textView.recalcOverscroll(for: fits.scrollView)
+        #expect(fits.scrollView.contentInsets.top == 56)
+        #expect(fits.scrollView.contentInsets.left == 8)
+        #expect(fits.scrollView.contentInsets.bottom == 58)
+        #expect(fits.scrollView.contentInsets.right == 8)
+        #expect(fits.textView.activeBottomOverscroll == 0)
+
+        let zero = HeightBehaviorStack(heightBehavior: .scrolls)
+        zero.textView.recalcOverscroll(for: zero.scrollView)
+        #expect(zero.scrollView.contentInsets.bottom == 0)
+    }
 }
 
 // MARK: - ClampedScrollView intrinsic content size
@@ -390,8 +423,8 @@ struct HeaderFitsContentTests {
         #expect(stack.container.scrollableContentHeight == expectedTotal)
         // Container frame matches exactly (no viewport inflation).
         #expect(stack.container.frame.height == expectedTotal)
-        // Text view sits below the header.
-        #expect(stack.textView.frame.origin.y == 60)
+        // Text view shows below the header.
+        #expect(stack.container.shownTextViewOrigin.y == 60)
     }
 
     @Test func headerChangeReReportsIntrinsicSize() {
