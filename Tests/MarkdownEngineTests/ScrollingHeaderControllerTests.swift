@@ -22,15 +22,19 @@ struct ScrollingHeaderControllerTests {
         let controller: ScrollingHeaderController
     }
 
-    private func makeStack(viewport: NSSize = NSSize(width: 600, height: 800)) -> Stack {
+    private func makeStack(viewport: NSSize = NSSize(width: 600, height: 800),
+                           readingWidth: CGFloat? = nil) -> Stack {
         let scrollView = ClampedScrollView(frame: NSRect(origin: .zero, size: viewport))
         let textView = NativeTextView(frame: .zero)
-        textView.configuration = .default
+        var config = MarkdownEditorConfiguration.default
+        config.readingWidth = readingWidth
+        textView.configuration = config
         textView.autoresizingMask = []
         let container = NativeTextViewContainer(frame: NSRect(origin: .zero, size: viewport))
         container.autoresizingMask = [.width]
         container.textView = textView
-        textView.frame = NSRect(x: 0, y: 0, width: viewport.width, height: 0)
+        let initialWidth = readingWidth != nil ? textView.readingColumnWidth : viewport.width
+        textView.frame = NSRect(x: 0, y: 0, width: initialWidth, height: 0)
         container.addSubview(textView)
         scrollView.documentView = container
         return Stack(
@@ -72,7 +76,7 @@ struct ScrollingHeaderControllerTests {
         #expect(stack.controller.clipView != nil)
         #expect(stack.controller.reservedHeight == 30)
         #expect(stack.container.headerHeight == 30)
-        #expect(stack.textView.frame.origin.y == 30)
+        #expect(stack.container.shownTextViewOrigin.y == 30)
     }
 
     @Test func buildTracksContentHeightWhenExpanded() {
@@ -200,7 +204,38 @@ struct ScrollingHeaderControllerTests {
 
         #expect(stack.controller.clipView == nil)
         #expect(stack.container.headerHeight == 0)
-        #expect(stack.textView.frame.origin.y == 0)
+        #expect(stack.container.shownTextViewOrigin.y == 0)
         #expect(stack.container.subviews.count == 1)   // text view only
+    }
+
+    /// The band sits at the container's visible top-left across its full width, also
+    /// while the bounds origin carries the header band and the column offset (#205),
+    /// and in a right-to-left layout, where a leading constant flips sign.
+    @Test(arguments: [NSUserInterfaceLayoutDirection.leftToRight, .rightToLeft])
+    func headerShowsAtTheTopLeftAcrossTheFullWidth(direction: NSUserInterfaceLayoutDirection) throws {
+        let stack = makeStack(readingWidth: 400)
+        stack.container.userInterfaceLayoutDirection = direction
+        stack.textView.baseContentHeight = 500
+        stack.textView.applyManagedFrameSize(width: 600)
+        stack.textView.centerReadingColumn(forClipWidth: 600)
+
+        stack.controller.reconcile(
+            header: fixedHeightHeader(120), collapsedHeight: 30, expanded: false,
+            container: stack.container
+        )
+        stack.container.layoutSubtreeIfNeeded()
+        let clip = try #require(stack.controller.clipView)
+        let shown = { clip.frame.offsetBy(dx: -stack.container.bounds.origin.x, dy: -stack.container.bounds.origin.y) }
+        #expect(shown() == NSRect(x: 0, y: 0, width: 600, height: 30))
+
+        stack.controller.reconcile(
+            header: fixedHeightHeader(120), collapsedHeight: 30, expanded: true,
+            container: stack.container
+        )
+        spinUntil(stack.container) { nearly(stack.container.headerHeight, 120) }
+        #expect(nearly(shown().height, 120))
+        #expect(shown().origin == .zero)
+        #expect(shown().width == 600)
+        #expect(stack.container.shownTextViewOrigin.y == stack.container.headerHeight)
     }
 }

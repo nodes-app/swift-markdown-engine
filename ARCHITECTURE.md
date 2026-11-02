@@ -21,8 +21,10 @@ Sources/
 │   │   ├── NativeTextView/                  # AppKit subclass + UX extensions (paste, drag-select, …)
 │   │   └── Coordinator/                     # NSTextViewDelegate split by concern (restyling, find, …)
 │   └── MarkdownEngine.docc/                 # DocC catalog
-├── MarkdownEngineCodeBlocks/                # opt-in SPM product — pulls in HighlighterSwift
-│   └── HighlighterSwiftBridge.swift         # SyntaxHighlighter conformance
+├── MarkdownEngineCodeBlocks/                # opt-in SPM product — bundles highlight.js
+│   ├── HighlightJSBridge.swift              # SyntaxHighlighter conformance (JavaScriptCore)
+│   ├── CodeHighlightTheme.swift             # colour per highlight.js scope
+│   └── Resources/highlight.min.js           # highlight.js 11.11.1, all languages
 └── MarkdownEngineLatex/                     # opt-in SPM product — pulls in SwiftMath
     └── SwiftMathBridge.swift                # LatexRenderer conformance
 ```
@@ -239,13 +241,16 @@ The scroll view's `documentView` is **always** `NativeTextViewContainer`, never
 the text view itself. The container stacks up to three kinds of siblings in a
 flipped coordinate space: the optional scroll-away header band at the top (a
 clipped `NSHostingView` managed by `ScrollingHeaderController`, reserved height
-mirrored into `container.headerHeight`), the `NativeTextView` at
-`y = headerHeight` (centered at a fixed width when
-`configuration.readingWidth` is set), and — in reading-column mode — the
-full-width wide-table breakout overlays. Anything that converts between
-text-view-local rects and scroll/document space must lift by the text view's
-origin inside the container (`convert(_:to:)` or `frame.origin`); see
-`viewRect(forCharacterRange:)` and the find-in-document paths for the pattern.
+mirrored into `container.headerHeight`), the `NativeTextView`, and — in
+reading-column mode — the full-width wide-table breakout overlays. The text
+view always sits at the container's origin; it shows below the header band
+(and centered at a fixed width when `configuration.readingWidth` is set)
+because the container's bounds origin is `(-columnOriginX, -headerHeight)`.
+AppKit's Writing Tools overlay assumes text-view and container coordinates are
+the same (#205). Anything that converts text-view-local rects into scroll space
+must go through `convert(_:to:)` / `rectInClipView(_:)`, never
+`textView.frame.origin` (always zero); see `viewRect(forCharacterRange:)` and
+the find-in-document paths for the pattern.
 
 Two sub-folders matter:
 

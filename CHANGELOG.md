@@ -12,7 +12,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   multiline, line-ending-preserving block-formatting commands for embedders.
 
 ### Fixed
+- A space typed at the right edge of a wrapped line shows where the next character will go: the caret is drawn at the start of the next line, or of the new line below a paragraph's last line, and ↑ ↓ ⌘← ⌘→ start from there. TextKit clamped it to the margin, where the clipped text view cut it off, so the space looked like it did nothing.
+- Switching to a document with the same text as the open one (two empty notes) completes. The editor kept the old `documentId` for the rest of its life: a scrolling header snapped instead of animating on every height change, and undo filed the new document's edits under the old one.
+
+## [0.15.0] - 2026-10-22
+
+### Added
+- `NativeTextViewWrapper.isFocused` provides optional two-way first-responder
+  coordination for embedders without changing AppKit-owned focus by default.
+- `CodeBlockButton(onHover:)` reports the pointer over the copy button, so an
+  embedder can route it into `isCursorExcluded` and show the arrow there
+  instead of the text view's I-beam.
+- `HighlightJSBridge` lexes the code highlight.js leaves unscoped — in
+  Python every name, call and operator — the way CodeMirror's modes do:
+  `identifier`, `title.function.invoke`, `property`, `operator` and
+  `punctuation`, in 23 code languages with no per-language rules. Markup,
+  data and shells are left alone, and lexing runs after detection, so
+  `highlightAuto` picks the same language as before. Themes colour the new
+  scopes like any other (the GitHub themes leave names and punctuation at
+  the foreground colour).
+
+### Changed
+- **Breaking:** `MarkdownEngineCodeBlocks` no longer depends on
+  HighlighterSwift. `HighlighterSwiftBridge` is replaced by
+  `HighlightJSBridge`, which runs the same highlight.js 11.11.1 build
+  (bundled, all 192 languages) and colours its token tree from a
+  `CodeHighlightTheme` — a Swift colour per highlight.js scope — instead
+  of a CSS theme. HighlighterSwift's CSS parser dropped compound
+  selectors, so a nested scope took its parent's colour: function names
+  (`title.function`) coloured as `title`, `self`/`this`
+  (`variable.language`) as `variable`. Theme names become
+  `CodeHighlightTheme` values, and the default is now
+  `.githubLight`/`.githubDark` (was atom-one).
+- A fenced block's language is the info string's first word
+  (```` ```python title="x.py" ````), and a half-typed or mislabelled
+  block still highlights (highlight.js's `ignoreIllegals`).
+- Writing Tools use the inline experience again (`writingToolsBehavior =
+  .complete`, was `.limited`): a rewrite or proofread morphs in place instead of
+  landing in the popover. Code, formulas, links, embeds and tables are excluded
+  from rewrites and proofreading. On macOS 27 four AppKit bugs in that experience are
+  worked around in `NativeTextView`, so the rewritten paragraphs no longer go
+  missing and nothing below the edit (text, lists, quotes, code blocks, rules,
+  tables) shows twice while it slides into place, and stepping through a
+  proofread to a suggestion that was off screen puts its explanation under the
+  word instead of beside the text view. Stepping through a proofread no longer
+  crashes ("suggestion … already been invalidated by previous edits") or moves
+  suggestions onto other characters: UIFoundation's edit tracker miscounts when
+  a suggestion is re-applied, in a plain NSTextView too, and the engine replaces
+  that one step (`WritingToolsEditTrackerFix`). Switching documents while
+  Writing Tools are streaming waits for them to settle instead of crashing
+  AppKit, and drops the session's result instead of writing it into the next
+  document. Known: on 15.1–26 the text below a mid-document rewrite still dims
+  for the animation, because AppKit's older path wants the text view directly
+  inside the clip view.
+- The text view always sits at its container's origin (#205): the header band
+  and the reading column's offset are the container's bounds origin, so on
+  macOS 27 a grammar suggestion no longer jumps up and to the left when the
+  layout changes during its animation. Embedders that read
+  `textView.frame.origin` for its on-screen position should convert with
+  `convert(_:to:)` instead.
+
+### Fixed
+- Switching documents drops AppKit's blue autocorrection underline; it stood over the incoming document, and its range moved into the new text.
+- A configured bottom safe-area inset (`safeAreaInsets.bottom`) survives `recalcOverscroll`; it was reset to 0 on every pass, so the gap left for a control above the editor went missing.
 - Smart paste keeps tables, lists and headings that arrive wrapped in elements the converter doesn't know (Gemini's `<response-element>`/`<table-block>` web components, `<section>`, a Google Docs `<b>` wrapper); they used to collapse into one line of text.
+- Writing Tools on macOS 27: switching documents while a proofread's suggestions show, or pressing ⌘Z during a rewrite, no longer crashes when the session ends. AppKit's own end replayed the session's ranges over the next document or the undone text; the engine now ends the session at the switch and at the undo. Until then the next document also took no updates.
+- After a proofread the next keystroke reports its `onTextMutation` again.
 
 ## [0.14.0] - 2026-10-04
 
