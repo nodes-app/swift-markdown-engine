@@ -38,7 +38,7 @@ checkboxes.
 - **Scroll-away header** — host your own SwiftUI view above the document;
   it scrolls with the content and collapses to a pinned top row
 - **TextKit 2** layout for accurate, modern text rendering
-- **Writing Tools** integration on macOS 15.1+
+- **Writing Tools** integration on macOS 15.1+, inline
 - **Comfortable bottom overscroll** so the caret never pins to the viewport
   edge while typing
 - **Drag-select autoscroll boost** for long documents
@@ -69,7 +69,7 @@ The package ships three library products — add only what you need:
 | Product | Use when |
 |---|---|
 | `MarkdownEngine` | You want the editor only. Zero external dependencies. |
-| `MarkdownEngineCodeBlocks` | You want the full visual code-block experience — background fill, monospace font, and syntax highlighting — without writing your own bridge. Pulls in [HighlighterSwift](https://github.com/smittytone/HighlighterSwift) transitively. See [Customization → Code Blocks](#code-blocks). |
+| `MarkdownEngineCodeBlocks` | You want the full visual code-block experience — background fill, monospace font, and syntax highlighting — without writing your own bridge. Bundles [highlight.js](https://highlightjs.org) (192 languages); no package dependencies. See [Customization → Code Blocks](#code-blocks). |
 | `MarkdownEngineLatex` | You want LaTeX formula rendering without writing your own bridge. Pulls in [SwiftMath](https://github.com/mgriebling/SwiftMath) transitively. See [Customization → LaTeX Rendering](#latex-rendering). |
 
 ## Quick Start
@@ -105,7 +105,7 @@ a no-op default so you only implement what you actually need:
 |---|---|---|
 | `WikiLinkResolver` | Resolve a `[[Name]]` to a stable opaque id | (your data model) |
 | `EmbeddedImageProvider` | Look up an `NSImage` for `![[Name]]` | (your asset store) |
-| `SyntaxHighlighter` | Highlight code blocks for a given language | **`HighlighterSwiftBridge`** ([recommended](#code-blocks)) — built on [HighlighterSwift](https://github.com/smittytone/HighlighterSwift) |
+| `SyntaxHighlighter` | Highlight code blocks for a given language | **`HighlightJSBridge`** ([recommended](#code-blocks)) — runs a bundled [highlight.js](https://highlightjs.org) |
 | `LatexRenderer` | Render a LaTeX string to an `NSImage` | **`SwiftMathBridge`** ([recommended](#latex-rendering)) — built on [SwiftMath](https://github.com/mgriebling/SwiftMath) |
 
 Implement what you need and pass it through `MarkdownEditorServices`:
@@ -128,25 +128,34 @@ Each protocol and its no-op default are documented in DocC.
 ### Code Blocks
 
 **Recommended path: depend on the `MarkdownEngineCodeBlocks` product
-and use the bundled `HighlighterSwiftBridge`.** Rolling your own
+and use the bundled `HighlightJSBridge`.** Rolling your own
 `SyntaxHighlighter` has subtle footguns the bridge already handles —
-line-height metrics across light/dark themes, appearance-change
-observation, layout-pass timing, font name extraction from the theme,
-and CSS-theme-derived background colors. Use the bundle unless you
-specifically need a non-HighlighterSwift library.
+appearance-change observation, caching, colours that land on exactly
+the characters highlight.js scoped (UTF-16 offsets, no HTML entities),
+and nested scopes (`title.function` is not `title`). Use the bundle
+unless you specifically need a different highlighting library.
 
 ```swift
 import MarkdownEngineCodeBlocks
 
 var configuration = MarkdownEditorConfiguration.default
 configuration.services = MarkdownEditorServices(
-    syntaxHighlighter: HighlighterSwiftBridge()
+    syntaxHighlighter: HighlightJSBridge()
 )
 ```
 
-The bridge auto-switches between `atom-one-light` and `atom-one-dark`
-with system appearance. Different theme names or a pinned single theme
-are configurable via init params — see DocC.
+The bridge colours with `CodeHighlightTheme.githubLight` and
+`.githubDark` (highlight.js's GitHub themes) and switches with the
+appearance. A `CodeHighlightTheme` is a colour per highlight.js scope
+name, so your own palette is a dictionary, not a CSS file; a pinned
+single theme is an init param — see DocC. In code languages the bridge
+also scopes what highlight.js leaves plain — names (`identifier`), calls,
+members (`property`), operators and punctuation — so a theme can colour
+every name the way CodeMirror-based editors do.
+
+highlight.js is BSD-3-Clause: its licence ships in the product's
+resource bundle (`highlight.js-LICENSE.txt`), and an app distributing a
+binary should reproduce it in its acknowledgements.
 
 Need a different highlighter library entirely? Implement
 `SyntaxHighlighter` yourself (see [Service Protocols](#service-protocols)

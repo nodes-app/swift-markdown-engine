@@ -52,17 +52,25 @@ public struct CodeBlockButton: View {
     public let trailingInset: CGFloat
     /// Closure invoked when the user clicks the button.
     public let onCopy: () -> Void
+    /// Called when the pointer enters (`true`) or leaves (`false`) the button,
+    /// and with `false` when the button goes away.
+    /// The button floats over the text view, whose tracking areas keep setting
+    /// the I-beam through it: route this into
+    /// ``NativeTextViewWrapper``'s `isCursorExcluded` to show the arrow.
+    public let onHover: ((Bool) -> Void)?
 
     public init(
         selection: CodeBlockSelection,
         topInset: CGFloat = 6,
         trailingInset: CGFloat = 8,
-        onCopy: @escaping () -> Void
+        onCopy: @escaping () -> Void,
+        onHover: ((Bool) -> Void)? = nil
     ) {
         self.selection = selection
         self.topInset = topInset
         self.trailingInset = trailingInset
         self.onCopy = onCopy
+        self.onHover = onHover
     }
 
     public var body: some View {
@@ -87,6 +95,9 @@ public struct CodeBlockButton: View {
                     .cornerRadius(6)
                 }
                 .buttonStyle(.plain)
+                .onHover { onHover?($0) }
+                // A block scrolled away under the pointer never reports the exit.
+                .onDisappear { onHover?(false) }
                 .padding(.top, topInset)
                 .padding(.trailing, trailingInset)
             }
