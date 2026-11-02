@@ -373,8 +373,8 @@ extension NativeTextView {
         // layout manager. This editor uses TextKit 2, so the native path is a
         // no-op even in ordinary full-width mode. Resolve the selection through
         // TextKit 2 for every internally scrolling editor. The same geometry also
-        // accounts for a centered reading column because fragment frames are
-        // lifted into the container's coordinate space below.
+        // accounts for a centered reading column because `rectInClipView` below
+        // takes fragment frames into the clip view's space.
         (enclosingScrollView as? ClampedScrollView)?.cancelPendingScrollRestore()
 
         // Explicit reveal: the native implementation cannot locate TextKit 2
