@@ -26,6 +26,7 @@ struct ContentView: View {
     @State private var isReadOnly = false
     @State private var showRawSource = false
     @State private var useReadingColumn = false
+    @State private var editorIsFocused = false
 
     /// Registers/unregisters BOTH opt-in seams at once. The document is written
     /// so that flipping this off is the whole explanation of what is core
@@ -55,6 +56,7 @@ struct ContentView: View {
             configuration: configuration,
             fontSize: fontSize,
             isEditable: !isReadOnly,
+            isFocused: $editorIsFocused,
             allowsTaskCheckboxInteractionWhenReadOnly: true,
             onCaretRectChange: { completionAnchor = $0 },
             onInlinePreviewKey: handleCompletionKey,
@@ -81,6 +83,12 @@ struct ContentView: View {
         .id(useReadingColumn)
         .toolbar {
             ToolbarItemGroup {
+                Button {
+                    editorIsFocused = true
+                } label: {
+                    Label("Focus editor", systemImage: "text.cursor")
+                }
+
                 Toggle(isOn: $isReadOnly) {
                     Label("Read-only", systemImage: isReadOnly ? "lock" : "lock.open")
                 }
@@ -245,7 +253,7 @@ struct ContentView: View {
     /// LaTeX visuals. The base `MarkdownEngine` ships no-op defaults
     /// (plain monospace, raw `$…$`); the optional `MarkdownEngineCodeBlocks`
     /// and `MarkdownEngineLatex` products ship ready-made bridges backed by
-    /// HighlighterSwift and SwiftMath respectively.
+    /// highlight.js and SwiftMath respectively.
     ///
     /// This demo opportunistically plugs in whichever bridges are linked,
     /// so you can see exactly what each one adds.
@@ -254,8 +262,8 @@ struct ContentView: View {
 
         #if canImport(MarkdownEngineCodeBlocks)
         // Syntax highlighting for fenced code blocks. Auto-switches between
-        // `atom-one-light` and `atom-one-dark` with system appearance.
-        config.services.syntaxHighlighter = HighlighterSwiftBridge()
+        // GitHub light and dark with the appearance.
+        config.services.syntaxHighlighter = HighlightJSBridge()
         #endif
 
         #if canImport(MarkdownEngineLatex)
@@ -349,7 +357,7 @@ private let optionalPartHeader = """
 # Part 2 · Optional products
 
 Two visuals live behind separate Swift Package products because they pull in \
-third-party dependencies: `MarkdownEngineCodeBlocks` (HighlighterSwift) and \
+third-party code: `MarkdownEngineCodeBlocks` (highlight.js) and \
 `MarkdownEngineLatex` (SwiftMath). Note what they are and aren't — the markdown \
 is PARSED either way; without the product you get the fallback visual, not \
 literal text. That is what separates Part 2 from Part 3.

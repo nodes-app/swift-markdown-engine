@@ -194,29 +194,15 @@ extension NativeTextView {
         }
     }
 
-    /// Cheap per-frame overlay shift when the container moves the text view
-    /// vertically (header band growing/collapsing). Breakout overlays are
-    /// SIBLINGS in the container whose frames bake in the text view's offset
-    /// at update time; non-breakout overlays are text-view subviews and move
-    /// with it automatically.
-    func shiftWideTableOverlays(byY deltaY: CGFloat) {
-        guard configuration.readingWidth != nil, !wideTableOverlays.isEmpty else { return }
-        for (_, overlay) in wideTableOverlays {
-            var f = overlay.frame
-            f.origin.y += deltaY
-            overlay.frame = f
-        }
-    }
-
     /// Cheap per-frame overlay reposition on width change (no layout) — keeps tables glued to the text during resize.
     func repositionWideTableOverlaysForWidthChange(insetDelta: CGFloat) {
         guard configuration.readingWidth != nil, !wideTableOverlays.isEmpty else { return }
-        // Overlays live in the full-width reading-column container; use its width.
-        let viewWidth = (superview ?? self).bounds.width
+        // Overlays live in the full-width reading-column container; span its visible width.
+        let hostBounds = (superview ?? self).bounds
         for (_, overlay) in wideTableOverlays {
             var f = overlay.frame
-            f.origin.x = 0
-            f.size.width = viewWidth
+            f.origin.x = hostBounds.minX
+            f.size.width = hostBounds.width
             overlay.frame = f
             overlay.leftContentInset = max(0, overlay.leftContentInset + insetDelta)
         }
@@ -241,7 +227,7 @@ extension NativeTextView {
         let breakout = configuration.readingWidth != nil
         // Breakout host: the full-width reading-column container, else the text view itself.
         let host: NSView = breakout ? (superview ?? self) : self
-        let viewWidth = host.bounds.width
+        let hostBounds = host.bounds
 
         let anchorRanges: [NSRange]
         if let knownWideTableAnchorRanges {
@@ -310,13 +296,15 @@ extension NativeTextView {
             guard !anchorRect.isEmpty else { continue }
 
             let totalHeight = (storage.attribute(.scrollableBlockTotalHeight, at: attrRange.location, effectiveRange: nil) as? CGFloat) ?? image.size.height
-            // In breakout the overlay lives in the container, so add the column's X
-            // offset and the text view's Y offset (the scroll-away header band).
-            let columnLeft = (breakout ? frame.origin.x : 0) + textContainerOrigin.x + anchorRect.minX
-            let breakoutTop = frame.origin.y + textContainerOrigin.y + anchorRect.minY
+            // In breakout the overlay lives in the container and spans its visible width,
+            // so the column's left edge is measured from the container's visible left.
+            let anchorTopLeft = NSPoint(x: textContainerOrigin.x + anchorRect.minX,
+                                        y: textContainerOrigin.y + anchorRect.minY)
+            let anchorInHost = convert(anchorTopLeft, to: host)
+            let columnLeft = breakout ? anchorInHost.x - hostBounds.minX : anchorTopLeft.x
             let overlayFrame: NSRect = breakout
-                ? NSRect(x: 0, y: breakoutTop, width: viewWidth, height: totalHeight)
-                : NSRect(x: columnLeft, y: textContainerOrigin.y + anchorRect.minY, width: containerWidth, height: totalHeight)
+                ? NSRect(x: hostBounds.minX, y: anchorInHost.y, width: hostBounds.width, height: totalHeight)
+                : NSRect(x: columnLeft, y: anchorTopLeft.y, width: containerWidth, height: totalHeight)
             // Breakout: table starts at the text column's left edge; the left margin is scrollable space.
             let leftContentInset: CGFloat = breakout ? max(0, columnLeft) : 0
 

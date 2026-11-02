@@ -15,7 +15,7 @@ jobs:
     runs-on: macos-15
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
@@ -29,4 +29,4 @@ jobs:
         run: swift build -v
 
       - name: Test
-        run: swift test --parallel
+        run: swift test --no-parallel
