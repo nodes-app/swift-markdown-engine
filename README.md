@@ -13,11 +13,6 @@
 
 
 
-<video src="https://github.com/user-attachments/assets/b61ed622-0e9a-4e91-9de5-9cd6c53752e5"
-       autoplay loop muted playsinline
-       width="100%">
-</video>
-
 
 A native AppKit Markdown editor for macOS, built on TextKit 2 and bridged to SwiftUI. It is the editor inside **[Nodes](https://apps.apple.com/app/apple-store/id6745401961?pt=127809373&ct=github&mt=8)**, a macOS notes app. Live styling, wiki-link support, fenced code blocks with syntax highlighting, LaTeX rendering, embedded images, and GitHub-style task
 checkboxes.
