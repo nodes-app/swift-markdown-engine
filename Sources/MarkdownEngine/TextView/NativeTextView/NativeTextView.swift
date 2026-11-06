@@ -49,6 +49,17 @@ final class NativeTextView: NSTextView {
 
     // MARK: Editor wiring
     var onPasteImage: ((NSPasteboard) -> String?)?
+    /// Files dropped onto the text (`NativeTextView+FileDrop`). Only whether one is
+    /// set changes the registered drag types.
+    var fileDrop: EditorFileDrop? {
+        didSet {
+            guard (oldValue == nil) != (fileDrop == nil) else { return }
+            updateDragTypeRegistration()
+            (superview as? NativeTextViewContainer)?.updateFileDropRegistration()
+        }
+    }
+    /// The files of the drag in progress, read once per drag (`draggedFiles(for:)`).
+    var draggedFilesCache: (key: String, files: DraggedFiles?)?
     var onFocusChange: ((Bool) -> Void)?
     private var reportedFocus = false
     /// `nil` preserves AppKit-owned focus. A value represents the latest
@@ -67,6 +78,10 @@ final class NativeTextView: NSTextView {
     var caretIndicatorObservation: NSKeyValueObservation?
     weak var observedCaretIndicator: NSView?
     var isApplyingCaretShift: Bool = false
+    /// From a drag entering the text until it leaves, drops or ends. AppKit shows the
+    /// drop point with the caret's own indicator, so the caret workarounds, which place
+    /// it by the SELECTION, stay out: they pinned the drop point to the selection's line.
+    var isTrackingDrag = false
 
     // MARK: Drag-select state
     var dragStartMouseScreenLoc: NSPoint?

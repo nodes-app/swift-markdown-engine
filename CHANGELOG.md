@@ -7,10 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `NativeTextViewWrapper.fileDrop` (`EditorFileDrop`) takes files dragged onto the text. Per drop the embedder decides: insert Markdown where the files land (AppKit's insertion point shows while dragging, and the text lands on lines of its own as one undo step), hand the files off to itself, or refuse. Over an image, a formula or a table the drop goes above or below all of it, by the half the pointer is in, so its source is never cut, however many lines it spans. A file still to be written (a promise from Photos, Mail or a browser, or a browser's bare image data, named after its address) is written to a temporary folder on drop and goes the same way. Over the margins beside the column and over the header band the drag goes to the text too; the header's own views never take it (an editing title's field editor typed a dropped file's path into it). Links go in as `[[Name]]` with their id beside the text (in raw source mode as stored, id and all). Without it the text view keeps AppKit's own drag handling.
+
 ### Fixed
+- An image pasted with ⌘V goes in as `![[Name]]` with its id beside the text, like a link inserted any other way; with its source showing, the `|<id>` used to show.
+- Copied links keep their ids: a copy carries the text as stored (`[[Name|id]]`) in the private flavor, and our paste puts it back in its display form with the id on `.wikiLinkID`. Copied links used to come back name-only (`[[Name]]`) and broke on the next rename. Other apps still get the text as shown.
 - A space typed at the right edge of a wrapped line shows where the next character will go: the caret is drawn at the start of the next line, or of the new line below a paragraph's last line, and ↑ ↓ ⌘← ⌘→ start from there. TextKit clamped it to the margin, where the clipped text view cut it off, so the space looked like it did nothing.
 - Switching to a document with the same text as the open one (two empty notes) completes. The editor kept the old `documentId` for the rest of its life: a scrolling header snapped instead of animating on every height change, and undo filed the new document's edits under the old one.
 - VoiceOver no longer scrolls the text about 75 pt each time its cursor lands on it. The text view now reports only its visible part as its accessibility frame; an element taller than the viewport was scrolled until its top sat near the scroll area's top, past the header band.
+- While dragging onto the text, the insertion point follows the pointer. AppKit draws it with the caret's own indicator, which the caret workarounds placed by the selection: with the caret on an empty last line, it stayed on that line.
 - An image whose source is showing stays on screen while scrolling when it ends the document. TextKit drops the paragraph spacing after the last paragraph, where the image is drawn, so its fragment's frame covered the source line alone and the image vanished with the line.
 
 ## [0.15.0] - 2026-10-22

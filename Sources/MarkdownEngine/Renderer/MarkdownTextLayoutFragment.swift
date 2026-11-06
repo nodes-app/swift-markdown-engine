@@ -41,6 +41,10 @@ extension NSAttributedString.Key {
     static let scrollableBlockTotalHeight = NSAttributedString.Key("ScrollableBlockTotalHeight")
     /// NSValue(range:) — full multi-line range of a rendered table, used to scope width-change restyles.
     static let scrollableBlockFullRange = NSAttributedString.Key("ScrollableBlockFullRange")
+    /// NSValue(range:) — on every character of a block drawn in place of (or below)
+    /// its source: image, formula, table. Its whole source, all lines, which a drop
+    /// must not land inside.
+    static let renderedBlockRange = NSAttributedString.Key("RenderedBlockRange")
 }
 
 public extension NSAttributedString.Key {

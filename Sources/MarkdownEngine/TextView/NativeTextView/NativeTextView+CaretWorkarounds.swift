@@ -21,6 +21,7 @@ extension NativeTextView {
     }
 
     func applyBlockImageCaretPolicy() {
+        guard !isTrackingDrag else { return }
         let indicators = subviews.filter { type(of: $0) == NSTextInsertionIndicator.self }
         guard !indicators.isEmpty else { return }
 
@@ -71,6 +72,7 @@ extension NativeTextView {
 
     /// FB22524198: AppKit drops the trailing-`\n` caret onto the previous line's top — snap it to `lastLineMaxY + paragraphSpacing` instead. (Companion to FB15131180; this one fixes Y, the other fixes height.)
     func fixPhantomTrailingCaret() {
+        guard !isTrackingDrag else { return }
         if let indicator = subviews.first(where: { type(of: $0) == NSTextInsertionIndicator.self }),
            observedCaretIndicator !== indicator {
             caretIndicatorObservation?.invalidate()

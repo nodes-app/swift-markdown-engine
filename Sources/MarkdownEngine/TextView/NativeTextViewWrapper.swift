@@ -83,6 +83,9 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     /// `"![[my-image]]"`) to insert at the caret, or `nil` to fall through
     /// to the system's default plain-text paste.
     public var onPasteImage: ((NSPasteboard) -> String?)?
+    /// Files dragged onto the text. Without it the text view keeps AppKit's own
+    /// drag handling. See `EditorFileDrop`.
+    public var fileDrop: EditorFileDrop?
 
     /// Fires when the user clicks a `[[Name]]` link. The argument is the
     /// resolved opaque identifier (or the display name when no resolver
@@ -168,6 +171,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         isEditable: Bool = true,
         isFocused: Binding<Bool>? = nil,
         onPasteImage: ((NSPasteboard) -> String?)? = nil,
+        fileDrop: EditorFileDrop? = nil,
         onLinkClick: ((String) -> Void)? = nil,
         onCaretRectChange: ((CGRect) -> Void)? = nil,
         onTextMutation: ((MarkdownTextMutation) -> Void)? = nil,
@@ -197,6 +201,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         self.isEditable = isEditable
         self.isFocused = isFocused
         self.onPasteImage = onPasteImage
+        self.fileDrop = fileDrop
         self.onLinkClick = onLinkClick
         self.onCaretRectChange = onCaretRectChange
         self.onTextMutation = onTextMutation
@@ -312,6 +317,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         textView.isAutomaticDataDetectionEnabled = true
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.onPasteImage = onPasteImage
+        textView.fileDrop = fileDrop
         if #available(macOS 15.1, *) {
             // Inline: rewrites morph in place. On 15.1–26 the text below a rewrite dims
             // for the animation: AppKit's older path wants the text view directly in the
@@ -498,6 +504,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         }
 
         textView.onPasteImage = onPasteImage
+        textView.fileDrop = fileDrop
         textView.isCursorExcluded = isCursorExcluded
         textView.setPlaceholder(placeholder)
         // Sync heightBehavior across all three layers (scroll view, text view,
