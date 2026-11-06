@@ -73,6 +73,59 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
     @objc(extraLineFragmentAttributes)
     dynamic var stExtraLineFragmentAttributes: NSDictionary?
 
+    // MARK: - Frame over a block image
+
+    /// TextKit drops the paragraph spacing after a document's LAST paragraph, and
+    /// that spacing is where an image with its source showing is drawn. The frame
+    /// then covered the line alone, and the viewport keeps fragments by frame: once
+    /// the line scrolled out, the image vanished while still on screen. Last
+    /// fragment only: TextKit places the next fragment at this frame's bottom
+    /// (measured), so reaching down anywhere else would push the text below.
+    override var layoutFragmentFrame: CGRect {
+        let frame = super.layoutFragmentFrame
+        guard isLastInDocument, let reach = imageReach, reach > frame.height else { return frame }
+        return CGRect(x: frame.minX, y: frame.minY, width: frame.width, height: reach)
+    }
+
+    private var isLastInDocument: Bool {
+        guard let end = textLayoutManager?.documentRange.endLocation else { return false }
+        return rangeInElement.endLocation.compare(end) != .orderedAscending
+    }
+
+    /// Bottom of the lowest image drawn below its source, fragment-local; nil when
+    /// there is none. Read from the string the lines were laid out with, never the
+    /// text storage or the paragraph (which slices the storage on access): TextKit
+    /// asks for the frame mid-edit, when the storage already holds the new text and
+    /// this fragment still its old range (a document switch threw NSRangeException
+    /// here). Same geometry as `blockImageDrawRect`. Cached until the next layout:
+    /// TextKit reads the frame constantly.
+    private var imageReach: CGFloat? {
+        if let cachedImageReach { return cachedImageReach }
+        let lines = textLineFragments
+        guard state == .layoutAvailable, let paragraph = lines.first?.attributedString else { return nil }
+        var reach: CGFloat?
+        paragraph.enumerateAttribute(.latexBlockOffsetY, in: NSRange(location: 0, length: paragraph.length)) { value, range, _ in
+            guard let offset = value as? CGFloat,
+                  paragraph.attribute(.latexImage, at: range.location, effectiveRange: nil) is NSImage,
+                  paragraph.attribute(.latexIsBlock, at: range.location, effectiveRange: nil) as? Bool == true,
+                  paragraph.attribute(.scrollableBlockNaturalWidth, at: range.location, effectiveRange: nil) == nil,
+                  let bounds = (paragraph.attribute(.latexBounds, at: range.location, effectiveRange: nil) as? NSValue)?.rectValue,
+                  let first = lines.first(where: { NSLocationInRange(range.location, $0.characterRange) })
+            else { return }
+            let last = lines.first(where: { NSLocationInRange(NSMaxRange(range) - 1, $0.characterRange) }) ?? first
+            let top = last.typographicBounds.maxY + offset - first.typographicBounds.height
+            reach = max(reach ?? 0, top + bounds.height)
+        }
+        cachedImageReach = .some(reach)
+        return reach
+    }
+    private var cachedImageReach: CGFloat??
+
+    override func invalidateLayout() {
+        cachedImageReach = nil
+        super.invalidateLayout()
+    }
+
     // MARK: - Rendering surface
 
     /// Extend rendering bounds for code-block backgrounds (full container width)
@@ -143,6 +196,8 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
         let start = tcs.offset(from: tcs.documentRange.location, to: rangeInElement.location)
         let end = tcs.offset(from: tcs.documentRange.location, to: rangeInElement.endLocation)
         guard start != NSNotFound, end != NSNotFound, end > start else { return nil }
+        // Mid-edit TextKit still asks a fragment about its OLD range, past the new text.
+        guard end <= (tcs.textStorage?.length ?? 0) else { return nil }
         return NSRange(location: start, length: end - start)
     }
 
