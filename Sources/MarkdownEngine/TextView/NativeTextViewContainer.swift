@@ -27,7 +27,83 @@ import AppKit
 final class NativeTextViewContainer: NSView {
     /// The body. Sizes its OWN height (content + overscroll); the container only shows
     /// it below the header band and sizes itself to the sum.
-    weak var textView: NativeTextView?
+    weak var textView: NativeTextView? {
+        didSet { updateFileDropRegistration() }
+    }
+
+    // MARK: - File drops beside the text
+
+    /// With an `EditorFileDrop`, the whole document takes file drops: over the margins
+    /// beside the reading column or the header band, the drag goes to the text view,
+    /// which places the insertion point at the nearest text. File drop types only, so a
+    /// drag of text still has the text view alone.
+    func updateFileDropRegistration() {
+        let types = textView?.fileDrop != nil ? NativeTextView.fileDropTypes : []
+        for view in [self, headerDropCatcher].compactMap({ $0 }) {
+            if types.isEmpty { view.unregisterDraggedTypes() } else { view.registerForDraggedTypes(types) }
+        }
+    }
+
+    /// In front of the header band: AppKit gives a drag to the frontmost registered view,
+    /// and the hosted header's own (an editing title's field editor) took a dropped file
+    /// as its path, renaming the node. Clicks go through it (`hitTest` nil).
+    private final class HeaderDropCatcher: NSView {
+        weak var container: NativeTextViewContainer?
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+        override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { container?.draggingEntered(sender) ?? [] }
+        override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation { container?.draggingUpdated(sender) ?? [] }
+        override func draggingExited(_ sender: NSDraggingInfo?) { container?.draggingExited(sender) }
+        override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool { container?.prepareForDragOperation(sender) ?? false }
+        override func performDragOperation(_ sender: NSDraggingInfo) -> Bool { container?.performDragOperation(sender) ?? false }
+        override func concludeDragOperation(_ sender: NSDraggingInfo?) { container?.concludeDragOperation(sender) }
+        override func draggingEnded(_ sender: NSDraggingInfo) { container?.draggingEnded(sender) }
+    }
+
+    private var headerDropCatcher: HeaderDropCatcher?
+
+    private func installHeaderDropCatcher(over clip: NSView) {
+        headerDropCatcher?.removeFromSuperview()
+        let catcher = HeaderDropCatcher()
+        catcher.container = self
+        catcher.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(catcher, positioned: .above, relativeTo: clip)
+        NSLayoutConstraint.activate([
+            catcher.topAnchor.constraint(equalTo: clip.topAnchor),
+            catcher.bottomAnchor.constraint(equalTo: clip.bottomAnchor),
+            catcher.leadingAnchor.constraint(equalTo: clip.leadingAnchor),
+            catcher.trailingAnchor.constraint(equalTo: clip.trailingAnchor),
+        ])
+        headerDropCatcher = catcher
+        updateFileDropRegistration()
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        textView?.draggingEntered(sender) ?? []
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        textView?.draggingUpdated(sender) ?? []
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        textView?.draggingExited(sender)
+    }
+
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        textView?.prepareForDragOperation(sender) ?? false
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        textView?.performDragOperation(sender) ?? false
+    }
+
+    override func concludeDragOperation(_ sender: NSDraggingInfo?) {
+        textView?.concludeDragOperation(sender)
+    }
+
+    override func draggingEnded(_ sender: NSDraggingInfo) {
+        textView?.draggingEnded(sender)
+    }
 
     /// Reserved header band height (mirrors the clip's resolved height). Sole driver of
     /// the vertical stack: the text view shows at `y = headerHeight`.
@@ -64,11 +140,14 @@ final class NativeTextViewContainer: NSView {
         headerClip = clip
         headerPins = (top, left, right)
         applyBoundsOrigin()
+        installHeaderDropCatcher(over: clip)
     }
 
     func unpinHeader() {
         headerClip = nil
         headerPins = nil
+        headerDropCatcher?.removeFromSuperview()
+        headerDropCatcher = nil
     }
 
     func setColumnOriginX(_ x: CGFloat) {

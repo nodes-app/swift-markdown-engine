@@ -369,6 +369,7 @@ extension MarkdownStyler {
         attrs: inout [StyledRange]
     ) -> Bool {
         guard let paraRange = token.standaloneParagraphRange(in: ctx.nsText) else { return false }
+        attrs.append((paraRange, [.renderedBlockRange: NSValue(range: paraRange)]))
 
         let para = NSMutableParagraphStyle()
         let baseLineHeight = layoutBridgeDefaultLineHeight(for: ctx.baseFont, using: ctx.layoutBridge)
