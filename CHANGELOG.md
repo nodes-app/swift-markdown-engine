@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A space typed at the right edge of a wrapped line shows where the next character will go: the caret is drawn at the start of the next line, or of the new line below a paragraph's last line, and ↑ ↓ ⌘← ⌘→ start from there. TextKit clamped it to the margin, where the clipped text view cut it off, so the space looked like it did nothing.
 - Switching to a document with the same text as the open one (two empty notes) completes. The editor kept the old `documentId` for the rest of its life: a scrolling header snapped instead of animating on every height change, and undo filed the new document's edits under the old one.
 - VoiceOver no longer scrolls the text about 75 pt each time its cursor lands on it. The text view now reports only its visible part as its accessibility frame; an element taller than the viewport was scrolled until its top sat near the scroll area's top, past the header band.
+- An image whose source is showing stays on screen while scrolling when it ends the document. TextKit drops the paragraph spacing after the last paragraph, where the image is drawn, so its fragment's frame covered the source line alone and the image vanished with the line.
 
 ## [0.15.0] - 2026-10-22
 
