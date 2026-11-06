@@ -33,7 +33,7 @@ extension NativeTextView {
         if let ownMarkdown = pasteboard.string(forType: MarkdownPasteboardWriter.markdownType) {
             let sanitized = sanitizePastedText(ownMarkdown)
             if !sanitized.isEmpty {
-                insertPreservingBlockquote(sanitized)
+                insertPreservingBlockquote(sanitized, storageForm: true)
                 return
             }
         }
@@ -87,13 +87,20 @@ extension NativeTextView {
     /// Insert pasted text, extending the `>` prefix to every line when the
     /// caret sits on a blockquote line — so a multi-line paste stays quoted
     /// instead of only its first line landing after the existing marker.
-    private func insertPreservingBlockquote(_ text: String) {
+    /// `storageForm`: our own copy, whose links carry their ids (`storageMarkdown`).
+    private func insertPreservingBlockquote(_ text: String, storageForm: Bool = false) {
         let sel = selectedRange()
         var prepared = MarkdownLists.blockquoteContinuedPaste(text, at: sel.location, in: string)
         // A paste ENDING in a table row would park the caret inside the table,
         // keeping its raw pipe source on screen. Add a line break so the caret
         // lands on a fresh line below and the table renders immediately.
         if endsInTableRow(prepared) { prepared += "\n" }
+        if storageForm, prepared.contains("[["),
+           let inserted = insertStorageMarkdown(prepared, replacing: sel, actionName: "Paste") {
+            setSelectedRange(NSRange(location: NSMaxRange(inserted), length: 0))
+            scrollRangeToVisible(selectedRange())
+            return
+        }
         insertPasted(prepared, replacementRange: sel)
     }
 
@@ -106,7 +113,9 @@ extension NativeTextView {
         return t.count >= 3 && t.hasPrefix("|") && t.hasSuffix("|")
     }
 
-    private func insertBlockEmbed(_ embed: String) {
+    /// Inserts `embed` (storage form: `[[Name|id]]`, `![[Name|id]]`) at the selection
+    /// on lines of its own, as one undo step (`insertStorageMarkdown`).
+    func insertBlockEmbed(_ embed: String, actionName: String = "Paste") {
         let sel = selectedRange()
         let nsText = string as NSString
         var prefix = ""
@@ -118,7 +127,52 @@ extension NativeTextView {
         if afterLocation < nsText.length, nsText.character(at: afterLocation) != 0x0A {
             suffix = "\n"
         }
-        insertPasted(prefix + embed + suffix, replacementRange: sel)
+        guard let inserted = insertStorageMarkdown(prefix + embed + suffix, replacing: sel,
+                                                   actionName: actionName) else { return }
+        setSelectedRange(NSRange(location: NSMaxRange(inserted), length: 0))
+        scrollRangeToVisible(selectedRange())
+    }
+
+    /// Puts `storage` (Markdown as the document stores it, links with their ids) in
+    /// place of `range` as one undo step, and returns where it went. Links go in as
+    /// their DISPLAY form with the id on `.wikiLinkID`, as every other link insertion
+    /// does (`applyInlineReplacement`): inserted raw, the `|id` showed in the text.
+    /// Raw source mode shows the stored text itself, ids included.
+    @discardableResult
+    func insertStorageMarkdown(_ storage: String, replacing range: NSRange, actionName: String) -> NSRange? {
+        let raw = configuration.rawSourceMode
+        let state = WikiLinkService.makeDisplayState(from: storage)
+        let text = raw ? storage : state.display
+        let display = text as NSString
+
+        let coordinator = delegate as? NativeTextViewCoordinator
+        breakUndoCoalescing()
+        coordinator?.isProgrammaticEdit = true
+        defer { coordinator?.isProgrammaticEdit = false }
+        guard shouldChangeText(in: range, replacementString: text) else { return nil }
+        textStorage?.replaceCharacters(in: range, with: text)
+        for (key, link) in raw ? [:] : state.metadata {
+            guard let id = link.id, !id.isEmpty else { continue }
+            let open = display.character(at: key.location) == 0x21 ? 3 : 2   // `![[` or `[[`
+            let length = key.length - open - 2
+            guard length > 0 else { continue }
+            textStorage?.addAttribute(.wikiLinkID, value: id,
+                                      range: NSRange(location: range.location + key.location + open, length: length))
+        }
+        didChangeText()
+        undoManager?.setActionName(actionName)
+        breakUndoCoalescing()
+        return NSRange(location: range.location, length: display.length)
+    }
+
+    /// `range` as the document stores it: its links carry their ids again (`[[Name|id]]`),
+    /// read off `.wikiLinkID`. Copy carries this, so pasted links stay links to the same node.
+    func storageMarkdown(in range: NSRange) -> String {
+        guard let ts = textStorage, range.length > 0, NSMaxRange(range) <= ts.length else { return "" }
+        let piece = ts.attributedSubstring(from: range)
+        guard !configuration.rawSourceMode else { return piece.string }
+        return WikiLinkService.makeStorageState(from: piece.string, existingMetadata: [:],
+                                                textStorage: NSTextStorage(attributedString: piece)).storage
     }
 
     /// Reads the textual content of a pasted markdown/text file URL — the
