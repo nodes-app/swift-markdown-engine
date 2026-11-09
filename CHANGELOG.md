@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `NativeTextViewWrapper(parkingKey:)` keeps the editor when the embedder removes it from the hierarchy (routing to another screen) and hands the same text view, undo stacks and scroll position to the next editor created with that key, whatever document it opens. AppKit's undo actions belong to the text view instance, so this is what keeps ⌘Z across a route away and back. One editor per key; the text and link bindings are reconnected to the new view. Off by default.
 - `NativeTextViewWrapper.fileDrop` (`EditorFileDrop`) takes files dragged onto the text. Per drop the embedder decides: insert Markdown where the files land (AppKit's insertion point shows while dragging, and the text lands on lines of its own as one undo step), hand the files off to itself, or refuse. Over an image, a formula or a table the drop goes above or below all of it, by the half the pointer is in, so its source is never cut, however many lines it spans. A file still to be written (a promise from Photos, Mail or a browser, or a browser's bare image data, named after its address) is written to a temporary folder on drop and goes the same way. Over the margins beside the column and over the header band the drag goes to the text too; the header's own views never take it (an editing title's field editor typed a dropped file's path into it). Links go in as `[[Name]]` with their id beside the text (in raw source mode as stored, id and all). Without it the text view keeps AppKit's own drag handling.
 
 ### Fixed
@@ -24,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - After a Writing Tools panel result, Return continues lists again and the cursor reveals syntax again. AppKit keeps the panel's session open, and the editor treated every keystroke as a Writing Tools edit until the next document switch.
 - ⌘Z works again after switching a tab to another file and back. Undo stacks were pruned with `retainedScrollDocumentIds`, the embedder's open documents, and a file whose tab switches away is no longer among them. They are now kept for the ten most recently shown documents, whatever the tabs hold.
 - ⌘Z survives a document switch whose text arrives one update after its `documentId` (Nodes loads the file after the switch). Since a switch completes on its first update, the rewritten-while-away check compared the document's snapshot with the outgoing document's text and cleared its undo stack on every switch back. The check now waits for the document's own text.
+- ⌘Z never replays a stack over text replaced from outside since it was recorded (a reload from the binding, a file rewritten while switched away or parked). The text it was recorded on is kept at the replacement and checked before the stack is used again: ⌘Z, ⇧⌘Z or the next edit. A mismatch clears the stack instead of corrupting the text.
 
 ## [0.15.0] - 2026-10-22
 
