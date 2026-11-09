@@ -638,6 +638,11 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             && !fontChanged {
             return
         }
+        // The text a switch was waiting for (see the switch branch below).
+        if !isNodeSwitch, context.coordinator.pendingUndoCheck == documentId {
+            context.coordinator.pendingUndoCheck = nil
+            context.coordinator.invalidateUndoIfContentDiverged(for: documentId, incomingText: text)
+        }
         if fontChanged {
             context.coordinator.didInitialFormatting = false
         }
@@ -669,8 +674,16 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             context.coordinator.retainUndo(for: documentId)
             context.coordinator.armScrollRestore(for: documentId)
             // Drop the incoming document's undo stack if its text changed while
-            // switched away — its recorded ranges are now stale.
-            context.coordinator.invalidateUndoIfContentDiverged(for: documentId, incomingText: text)
+            // switched away — its recorded ranges are now stale. SwiftUI can hand
+            // over the new documentId one pass before the new text (Nodes loads the
+            // file after the switch): text equal to the outgoing document's is that
+            // pass, or two identical documents, so the check waits for the text.
+            if text == context.coordinator.lastSyncedText {
+                context.coordinator.pendingUndoCheck = documentId
+            } else {
+                context.coordinator.pendingUndoCheck = nil
+                context.coordinator.invalidateUndoIfContentDiverged(for: documentId, incomingText: text)
+            }
             context.coordinator.didInitialFormatting = false
             context.coordinator.didEnsureLayoutForCurrentDocument = false
             context.coordinator.resetImageEmbedState()
