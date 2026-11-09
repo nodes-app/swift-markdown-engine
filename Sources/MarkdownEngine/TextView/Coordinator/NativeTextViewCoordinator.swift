@@ -38,12 +38,32 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     /// all open documents, so its built-in (view-wide) undo manager would mix
     /// files together. Keying a manager on the current document gives each file
     /// its own undo stack that survives switching away and back. Vended through
-    /// the `undoManager(for:)` delegate method; pruned alongside `scrollOffsets`.
+    /// the `undoManager(for:)` delegate method; kept for the most recent documents
+    /// (`retainUndo(for:)`).
     var undoManagers: [String: UndoManager] = [:]
     /// Per-`documentId` content snapshot (storage form) taken on switch-away. On
     /// switch-back a mismatch means the file was rewritten while backgrounded, so
-    /// the now-stale undo stack is dropped. Pruned alongside `undoManagers`.
+    /// the now-stale undo stack is dropped. Kept and dropped with `undoManagers`.
     var undoContentSnapshots: [String: String] = [:]
+    /// Documents whose undo stacks are kept, most recent last.
+    var undoRecency: [String] = []
+    /// How many documents keep their undo stacks. By recency, never by the
+    /// embedder's open tabs: a tab that switches to another file left the first
+    /// file's stack behind, and ⌘Z did nothing on the way back.
+    static let undoRetainedDocumentCount = 10
+    /// Marks `documentId`'s undo stack as just used and drops the least recent
+    /// stacks past `undoRetainedDocumentCount`.
+    func retainUndo(for documentId: String) {
+        undoRecency.removeAll { $0 == documentId }
+        undoRecency.append(documentId)
+        while undoRecency.count > Self.undoRetainedDocumentCount {
+            let evicted = undoRecency.removeFirst()
+            undoManagers[evicted]?.removeAllActions()
+            undoManagers.removeValue(forKey: evicted)
+            undoContentSnapshots.removeValue(forKey: evicted)
+        }
+    }
+
     @Binding var text: String
     @Binding var isWikiLinkActive: Bool
     var isFocused: Binding<Bool>?

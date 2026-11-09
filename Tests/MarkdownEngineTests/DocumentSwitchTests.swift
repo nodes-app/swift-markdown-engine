@@ -20,6 +20,7 @@ struct DocumentSwitchTests {
     private final class Document: ObservableObject {
         @Published var id: String
         @Published var text: String
+        @Published var openDocuments: Set<String>?
         init(id: String, text: String) {
             self.id = id
             self.text = text
@@ -32,7 +33,8 @@ struct DocumentSwitchTests {
             NativeTextViewWrapper(
                 text: $document.text,
                 documentId: document.id,
-                header: AnyView(Color.gray.frame(height: 60))
+                header: AnyView(Color.gray.frame(height: 60)),
+                retainedScrollDocumentIds: document.openDocuments
             )
         }
     }
@@ -89,5 +91,38 @@ struct DocumentSwitchTests {
         await Self.spin(0.1)
         #expect(coordinator.undoManagers["B"]?.canUndo == true)
         #expect(coordinator.undoManagers["A"]?.canUndo != true)
+    }
+
+    /// Nodes' tabs replace their file in place, so the file left behind is no
+    /// longer among the embedder's open documents. Its undo stack used to be
+    /// pruned with that set, and ⌘Z did nothing on the way back.
+    @Test("undo survives a tab switching to another file and back")
+    func undoSurvivesReplacedTab() async throws {
+        let document = Document(id: "A", text: "Alpha")
+        document.openDocuments = ["A"]
+        let (tv, coordinator) = try await Self.stage(document)
+
+        tv.insertText(" typed", replacementRange: NSRange(location: 5, length: 0))
+        await Self.spin(0.3)
+        #expect(coordinator.undoManagers["A"]?.canUndo == true)
+        #expect(document.text == "Alpha typed")
+
+        // The tab shows B now; A is open nowhere.
+        document.openDocuments = ["B"]
+        document.id = "B"
+        document.text = "Beta"
+        await Self.spin(0.3)
+        #expect(coordinator.documentId == "B")
+
+        // Back to A, its file as it was saved.
+        document.openDocuments = ["A"]
+        document.id = "A"
+        document.text = "Alpha typed"
+        await Self.spin(0.3)
+        let undo = try #require(coordinator.undoManagers["A"])
+        #expect(undo.canUndo)
+        undo.undo()
+        await Self.spin(0.2)
+        #expect(tv.string == "Alpha")
     }
 }
