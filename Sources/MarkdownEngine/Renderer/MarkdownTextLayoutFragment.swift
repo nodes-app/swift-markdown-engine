@@ -175,7 +175,7 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
         drawLatexImages(at: point, in: context)
 
         // 3. Normal text
-        super.draw(at: point, in: context)
+        drawText(at: point, in: context)
 
         // 4. Task checkboxes (on top of hidden [ ]/[x] markers)
         drawTaskCheckboxes(at: point, in: context)
@@ -412,30 +412,95 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
         ts.enumerateAttribute(.markdownBlockBackground, in: range, options: []) { value, attrRange, _ in
             guard let color = value as? NSColor else { return }
             let local = NSRange(location: attrRange.location - range.location, length: attrRange.length)
-            for lineFragment in textLineFragments {
-                let lineRange = lineFragment.characterRange
-                let hit = NSIntersectionRange(lineRange, local)
-                guard hit.length > 0 else { continue }
-                let tb = lineFragment.typographicBounds
-                let startX = lineFragment.locationForCharacter(at: hit.location).x
-                // A run reaching the line's end fills to the line's own width:
-                // the index one past the line belongs to the next fragment, and
-                // asking this one for it is undefined.
-                let reachesEnd = hit.location + hit.length >= lineRange.location + lineRange.length
-                let endX = reachesEnd
-                    ? tb.width
-                    : lineFragment.locationForCharacter(at: hit.location + hit.length).x
-                guard endX > startX else { continue }
-                fills.append((
-                    rect: CGRect(x: point.x + tb.origin.x + startX,
-                                 y: point.y + tb.origin.y,
-                                 width: endX - startX,
-                                 height: tb.height),
-                    color: color
-                ))
-            }
+            fills += lineBoxRects(for: local, at: point).map { (rect: $0, color: color) }
         }
         return fills
+    }
+
+    /// The line box under `local` (fragment-relative characters) on each line
+    /// it touches, relative to `point`.
+    private func lineBoxRects(for local: NSRange, at point: CGPoint) -> [CGRect] {
+        var rects: [CGRect] = []
+        for lineFragment in textLineFragments {
+            let lineRange = lineFragment.characterRange
+            let hit = NSIntersectionRange(lineRange, local)
+            guard hit.length > 0 else { continue }
+            let tb = lineFragment.typographicBounds
+            let startX = lineFragment.locationForCharacter(at: hit.location).x
+            // A run reaching the line's end fills to the line's own width:
+            // the index one past the line belongs to the next fragment, and
+            // asking this one for it is undefined.
+            let reachesEnd = hit.location + hit.length >= lineRange.location + lineRange.length
+            let endX = reachesEnd
+                ? tb.width
+                : lineFragment.locationForCharacter(at: hit.location + hit.length).x
+            guard endX > startX else { continue }
+            rects.append(CGRect(x: point.x + tb.origin.x + startX,
+                                y: point.y + tb.origin.y,
+                                width: endX - startX,
+                                height: tb.height))
+        }
+        return rects
+    }
+
+    // MARK: - Selected Text on Opaque Fills
+
+    /// AppKit repaints selected glyphs in `selectedTextColor` (white in Dark
+    /// Mode) to stand out against the selection highlight. An opaque fill is
+    /// painted over that highlight, so where a selection meets one the text is
+    /// drawn a second time, clipped to it, in its own colours (#215): white ink
+    /// on a white block vanished. A translucent fill lets the highlight through
+    /// and keeps AppKit's colour.
+    private func drawText(at point: CGPoint, in context: CGContext) {
+        let ownColors = selectedRectsOnOpaqueFills(at: point)
+        guard !ownColors.isEmpty,
+              let textView = textLayoutManager?.textContainer?.textView as? NativeTextView else {
+            super.draw(at: point, in: context)
+            return
+        }
+
+        context.saveGState()
+        let elsewhere = CGMutablePath()
+        elsewhere.addRect(context.boundingBoxOfClipPath)
+        elsewhere.addRects(ownColors)
+        context.addPath(elsewhere)
+        context.clip(using: .evenOdd)
+        super.draw(at: point, in: context)
+        context.restoreGState()
+
+        context.saveGState()
+        context.clip(to: ownColors)
+        textView.drawsSelectedTextInOwnColors = true
+        defer {
+            textView.drawsSelectedTextInOwnColors = false
+            context.restoreGState()
+        }
+        super.draw(at: point, in: context)
+    }
+
+    /// Where a selection meets an opaque line-box fill, one rect per line.
+    /// Disjoint: selections never overlap, and neither do attribute runs.
+    private func selectedRectsOnOpaqueFills(at point: CGPoint) -> [CGRect] {
+        guard let ts = textStorage, let range = fragmentNSRange, range.length > 0,
+              let textView = textLayoutManager?.textContainer?.textView else { return [] }
+        let selections = textView.selectedRanges.map(\.rangeValue)
+            .filter { NSIntersectionRange($0, range).length > 0 }
+        guard !selections.isEmpty else { return [] }
+
+        var rects: [CGRect] = []
+        ts.enumerateAttribute(.markdownBlockBackground, in: range, options: []) { value, attrRange, _ in
+            // Resolved under the drawing appearance: a dynamic colour may be
+            // opaque in one appearance only.
+            guard let color = value as? NSColor,
+                  (color.usingColorSpace(.sRGB) ?? color).alphaComponent >= 1 else { return }
+            for selection in selections {
+                let hit = NSIntersectionRange(attrRange, selection)
+                guard hit.length > 0 else { continue }
+                rects += lineBoxRects(for: NSRange(location: hit.location - range.location, length: hit.length),
+                                      at: point)
+            }
+        }
+        return rects
     }
 
     private func drawBlockBackgrounds(at point: CGPoint, in context: CGContext) {

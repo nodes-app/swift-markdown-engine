@@ -110,6 +110,21 @@ final class NativeTextView: NSTextView {
     /// relative to it (a proofread's context is one paragraph, a rewrite's the document).
     var writingToolsContextStarts: [UUID: Int] = [:]
 
+    /// Set by a layout fragment while it draws selected text that sits on an
+    /// opaque fill: the fill hides the selection highlight, so the glyphs keep
+    /// their own colour instead of `selectedTextColor` (#215). TextKit reads the
+    /// getter below while it draws.
+    var drawsSelectedTextInOwnColors = false
+
+    override var selectedTextAttributes: [NSAttributedString.Key: Any] {
+        get {
+            var attributes = super.selectedTextAttributes
+            if drawsSelectedTextInOwnColors { attributes[.foregroundColor] = nil }
+            return attributes
+        }
+        set { super.selectedTextAttributes = newValue }
+    }
+
     override func viewWillMove(toWindow newWindow: NSWindow?) {
         if let window, window !== newWindow {
             NotificationCenter.default.removeObserver(self, name: NSWindow.willCloseNotification, object: window)
