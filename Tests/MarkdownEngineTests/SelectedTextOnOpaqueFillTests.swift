@@ -75,7 +75,9 @@ struct SelectedTextOnOpaqueFillTests {
             for y in 0..<rep.pixelsHigh {
                 for x in 0..<rep.pixelsWide {
                     guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
-                    out += [c.redComponent, c.greenComponent, c.blueComponent].map { UInt8(($0 * 255).rounded()) }
+                    for component in [c.redComponent, c.greenComponent, c.blueComponent] {
+                        out.append(UInt8((component * 255).rounded()))
+                    }
                 }
             }
             return out
@@ -86,7 +88,12 @@ struct SelectedTextOnOpaqueFillTests {
 
     /// Pixels darker than mid-grey: black ink, on a white block or anywhere.
     private static func darkPixels(_ rgb: [UInt8]) -> Int {
-        stride(from: 0, to: rgb.count - 2, by: 3).filter { Int(rgb[$0]) + Int(rgb[$0 + 1]) + Int(rgb[$0 + 2]) < 3 * 100 }.count
+        var count = 0
+        for i in stride(from: 0, to: rgb.count - 2, by: 3) {
+            let sum: Int = Int(rgb[i]) + Int(rgb[i + 1]) + Int(rgb[i + 2])
+            if sum < 300 { count += 1 }
+        }
+        return count
     }
 
     private static var all: NSRange { NSRange(location: 0, length: (text as NSString).length) }
