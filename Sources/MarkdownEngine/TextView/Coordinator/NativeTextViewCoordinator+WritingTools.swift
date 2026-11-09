@@ -5,8 +5,9 @@
 //  Created by Luca Chen on 16.03.26.
 //
 //  Writing Tools sessions: styling pauses while one runs, its result reaches the
-//  binding at the end, and ⌘Z or a document switch ends it, because AppKit's own end
-//  replays the session's ranges over whatever text is there by then.
+//  binding at the end (a panel result as soon as it lands), and ⌘Z or a document
+//  switch ends it, because AppKit's own end replays the session's ranges over
+//  whatever text is there by then.
 //
 
 import AppKit
@@ -52,6 +53,40 @@ extension NativeTextViewCoordinator {
         let target = documentId
         DispatchQueue.main.async { [self] in
             guard bindingFollows(target) else { return }
+            text = storage
+        }
+    }
+
+    /// Whether an edit made during a session is final. Inline results stream in
+    /// with the coordinator interactive and reach the binding at the session's end.
+    /// A result from the Writing Tools panel (Summary, Key Points, List, Table:
+    /// Replace) lands in one edit with the coordinator inactive, and the end may
+    /// never come: measured on 27, the user typed on and a node switch dropped
+    /// the summary unsaved.
+    func writingToolsEditIsFinal(_ textView: NSTextView) -> Bool {
+        guard #available(macOS 15.2, *), let writingTools = textView.writingToolsCoordinator else { return false }
+        switch writingTools.state {
+        case .interactiveResting, .interactiveStreaming: return false
+        default: return true
+        }
+    }
+
+    /// The binding takes a final edit now, as stored text, rebuilt in full: the
+    /// incremental wiki splice trusts a storage the held inline edits never updated.
+    func syncBindingDuringWritingTools(_ textView: NSTextView) {
+        let storageState = WikiLinkService.makeStorageState(
+            from: textView.string,
+            existingMetadata: wikiLinkMetadata,
+            textStorage: textView.textStorage
+        )
+        wikiLinkMetadata = storageState.metadata
+        lastComputedStorage = storageState.storage
+        let storage = storageState.storage
+        guard storage != lastSyncedText else { return }
+        let target = documentId
+        DispatchQueue.main.async { [self] in
+            guard bindingFollows(target) else { return }
+            lastSyncedText = storage
             text = storage
         }
     }

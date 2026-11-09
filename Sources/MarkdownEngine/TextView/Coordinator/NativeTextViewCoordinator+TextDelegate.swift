@@ -119,6 +119,9 @@ extension NativeTextViewCoordinator {
                 wtDetectedMode = .rewrite
             }
         }
+        if wtActive, writingToolsEditIsFinal(tv) {
+            syncBindingDuringWritingTools(tv)
+        }
         if wtActive && wtDetectedMode == .proofread { return }
 
 
