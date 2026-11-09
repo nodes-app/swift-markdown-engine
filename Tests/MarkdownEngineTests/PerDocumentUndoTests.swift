@@ -58,6 +58,28 @@ struct PerDocumentUndoTests {
         #expect(!m.canUndo) // diverged → dropped
     }
 
+    @Test("The most recent documents keep their stacks; the least recent goes first")
+    func keepsMostRecentStacks() {
+        let c = makeCoordinator()
+        let limit = NativeTextViewCoordinator.undoRetainedDocumentCount
+        let managers = (0...limit).map { _ in populatedManager() }
+        for (i, manager) in managers.enumerated() {
+            c.undoManagers["doc\(i)"] = manager
+            c.undoContentSnapshots["doc\(i)"] = "text \(i)"
+        }
+        for i in 0..<limit { c.retainUndo(for: "doc\(i)") }
+        c.retainUndo(for: "doc0")          // back to the first: now the most recent
+        c.retainUndo(for: "doc\(limit)")   // one too many: doc1 is the least recent
+
+        #expect(c.undoManagers["doc0"] === managers[0])
+        #expect(managers[0].canUndo)
+        #expect(c.undoContentSnapshots["doc0"] == "text 0")
+        #expect(c.undoManagers["doc1"] == nil)
+        #expect(c.undoContentSnapshots["doc1"] == nil)
+        #expect(!managers[1].canUndo, "an evicted stack is cleared, not just forgotten")
+        #expect(c.undoRecency.count == limit)
+    }
+
     @Test("No snapshot (first visit) never clears")
     func noSnapshotNeverClears() {
         let c = makeCoordinator()

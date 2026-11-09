@@ -41,6 +41,10 @@ extension NSAttributedString.Key {
     static let scrollableBlockTotalHeight = NSAttributedString.Key("ScrollableBlockTotalHeight")
     /// NSValue(range:) — full multi-line range of a rendered table, used to scope width-change restyles.
     static let scrollableBlockFullRange = NSAttributedString.Key("ScrollableBlockFullRange")
+    /// NSValue(range:) — on every character of a block drawn in place of (or below)
+    /// its source: image, formula, table. Its whole source, all lines, which a drop
+    /// must not land inside.
+    static let renderedBlockRange = NSAttributedString.Key("RenderedBlockRange")
 }
 
 public extension NSAttributedString.Key {
@@ -72,6 +76,59 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
     /// Maps to TextKit-2's private `extraLineFragmentAttributes` selector so we can pin the trailing extra-line metrics to body font; otherwise a trailing heading paragraph inflates `usageBoundsForTextContainer` by ~30pt when the caret enters it. Pattern from STTextView.
     @objc(extraLineFragmentAttributes)
     dynamic var stExtraLineFragmentAttributes: NSDictionary?
+
+    // MARK: - Frame over a block image
+
+    /// TextKit drops the paragraph spacing after a document's LAST paragraph, and
+    /// that spacing is where an image with its source showing is drawn. The frame
+    /// then covered the line alone, and the viewport keeps fragments by frame: once
+    /// the line scrolled out, the image vanished while still on screen. Last
+    /// fragment only: TextKit places the next fragment at this frame's bottom
+    /// (measured), so reaching down anywhere else would push the text below.
+    override var layoutFragmentFrame: CGRect {
+        let frame = super.layoutFragmentFrame
+        guard isLastInDocument, let reach = imageReach, reach > frame.height else { return frame }
+        return CGRect(x: frame.minX, y: frame.minY, width: frame.width, height: reach)
+    }
+
+    private var isLastInDocument: Bool {
+        guard let end = textLayoutManager?.documentRange.endLocation else { return false }
+        return rangeInElement.endLocation.compare(end) != .orderedAscending
+    }
+
+    /// Bottom of the lowest image drawn below its source, fragment-local; nil when
+    /// there is none. Read from the string the lines were laid out with, never the
+    /// text storage or the paragraph (which slices the storage on access): TextKit
+    /// asks for the frame mid-edit, when the storage already holds the new text and
+    /// this fragment still its old range (a document switch threw NSRangeException
+    /// here). Same geometry as `blockImageDrawRect`. Cached until the next layout:
+    /// TextKit reads the frame constantly.
+    private var imageReach: CGFloat? {
+        if let cachedImageReach { return cachedImageReach }
+        let lines = textLineFragments
+        guard state == .layoutAvailable, let paragraph = lines.first?.attributedString else { return nil }
+        var reach: CGFloat?
+        paragraph.enumerateAttribute(.latexBlockOffsetY, in: NSRange(location: 0, length: paragraph.length)) { value, range, _ in
+            guard let offset = value as? CGFloat,
+                  paragraph.attribute(.latexImage, at: range.location, effectiveRange: nil) is NSImage,
+                  paragraph.attribute(.latexIsBlock, at: range.location, effectiveRange: nil) as? Bool == true,
+                  paragraph.attribute(.scrollableBlockNaturalWidth, at: range.location, effectiveRange: nil) == nil,
+                  let bounds = (paragraph.attribute(.latexBounds, at: range.location, effectiveRange: nil) as? NSValue)?.rectValue,
+                  let first = lines.first(where: { NSLocationInRange(range.location, $0.characterRange) })
+            else { return }
+            let last = lines.first(where: { NSLocationInRange(NSMaxRange(range) - 1, $0.characterRange) }) ?? first
+            let top = last.typographicBounds.maxY + offset - first.typographicBounds.height
+            reach = max(reach ?? 0, top + bounds.height)
+        }
+        cachedImageReach = .some(reach)
+        return reach
+    }
+    private var cachedImageReach: CGFloat??
+
+    override func invalidateLayout() {
+        cachedImageReach = nil
+        super.invalidateLayout()
+    }
 
     // MARK: - Rendering surface
 
@@ -118,7 +175,7 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
         drawLatexImages(at: point, in: context)
 
         // 3. Normal text
-        super.draw(at: point, in: context)
+        drawText(at: point, in: context)
 
         // 4. Task checkboxes (on top of hidden [ ]/[x] markers)
         drawTaskCheckboxes(at: point, in: context)
@@ -143,6 +200,8 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
         let start = tcs.offset(from: tcs.documentRange.location, to: rangeInElement.location)
         let end = tcs.offset(from: tcs.documentRange.location, to: rangeInElement.endLocation)
         guard start != NSNotFound, end != NSNotFound, end > start else { return nil }
+        // Mid-edit TextKit still asks a fragment about its OLD range, past the new text.
+        guard end <= (tcs.textStorage?.length ?? 0) else { return nil }
         return NSRange(location: start, length: end - start)
     }
 
@@ -353,30 +412,95 @@ final class MarkdownTextLayoutFragment: NSTextLayoutFragment {
         ts.enumerateAttribute(.markdownBlockBackground, in: range, options: []) { value, attrRange, _ in
             guard let color = value as? NSColor else { return }
             let local = NSRange(location: attrRange.location - range.location, length: attrRange.length)
-            for lineFragment in textLineFragments {
-                let lineRange = lineFragment.characterRange
-                let hit = NSIntersectionRange(lineRange, local)
-                guard hit.length > 0 else { continue }
-                let tb = lineFragment.typographicBounds
-                let startX = lineFragment.locationForCharacter(at: hit.location).x
-                // A run reaching the line's end fills to the line's own width:
-                // the index one past the line belongs to the next fragment, and
-                // asking this one for it is undefined.
-                let reachesEnd = hit.location + hit.length >= lineRange.location + lineRange.length
-                let endX = reachesEnd
-                    ? tb.width
-                    : lineFragment.locationForCharacter(at: hit.location + hit.length).x
-                guard endX > startX else { continue }
-                fills.append((
-                    rect: CGRect(x: point.x + tb.origin.x + startX,
-                                 y: point.y + tb.origin.y,
-                                 width: endX - startX,
-                                 height: tb.height),
-                    color: color
-                ))
-            }
+            fills += lineBoxRects(for: local, at: point).map { (rect: $0, color: color) }
         }
         return fills
+    }
+
+    /// The line box under `local` (fragment-relative characters) on each line
+    /// it touches, relative to `point`.
+    private func lineBoxRects(for local: NSRange, at point: CGPoint) -> [CGRect] {
+        var rects: [CGRect] = []
+        for lineFragment in textLineFragments {
+            let lineRange = lineFragment.characterRange
+            let hit = NSIntersectionRange(lineRange, local)
+            guard hit.length > 0 else { continue }
+            let tb = lineFragment.typographicBounds
+            let startX = lineFragment.locationForCharacter(at: hit.location).x
+            // A run reaching the line's end fills to the line's own width:
+            // the index one past the line belongs to the next fragment, and
+            // asking this one for it is undefined.
+            let reachesEnd = hit.location + hit.length >= lineRange.location + lineRange.length
+            let endX = reachesEnd
+                ? tb.width
+                : lineFragment.locationForCharacter(at: hit.location + hit.length).x
+            guard endX > startX else { continue }
+            rects.append(CGRect(x: point.x + tb.origin.x + startX,
+                                y: point.y + tb.origin.y,
+                                width: endX - startX,
+                                height: tb.height))
+        }
+        return rects
+    }
+
+    // MARK: - Selected Text on Opaque Fills
+
+    /// AppKit repaints selected glyphs in `selectedTextColor` (white in Dark
+    /// Mode) to stand out against the selection highlight. An opaque fill is
+    /// painted over that highlight, so where a selection meets one the text is
+    /// drawn a second time, clipped to it, in its own colours (#215): white ink
+    /// on a white block vanished. A translucent fill lets the highlight through
+    /// and keeps AppKit's colour.
+    private func drawText(at point: CGPoint, in context: CGContext) {
+        let ownColors = selectedRectsOnOpaqueFills(at: point)
+        guard !ownColors.isEmpty,
+              let textView = textLayoutManager?.textContainer?.textView as? NativeTextView else {
+            super.draw(at: point, in: context)
+            return
+        }
+
+        context.saveGState()
+        let elsewhere = CGMutablePath()
+        elsewhere.addRect(context.boundingBoxOfClipPath)
+        elsewhere.addRects(ownColors)
+        context.addPath(elsewhere)
+        context.clip(using: .evenOdd)
+        super.draw(at: point, in: context)
+        context.restoreGState()
+
+        context.saveGState()
+        context.clip(to: ownColors)
+        textView.drawsSelectedTextInOwnColors = true
+        defer {
+            textView.drawsSelectedTextInOwnColors = false
+            context.restoreGState()
+        }
+        super.draw(at: point, in: context)
+    }
+
+    /// Where a selection meets an opaque line-box fill, one rect per line.
+    /// Disjoint: selections never overlap, and neither do attribute runs.
+    private func selectedRectsOnOpaqueFills(at point: CGPoint) -> [CGRect] {
+        guard let ts = textStorage, let range = fragmentNSRange, range.length > 0,
+              let textView = textLayoutManager?.textContainer?.textView else { return [] }
+        let selections = textView.selectedRanges.map(\.rangeValue)
+            .filter { NSIntersectionRange($0, range).length > 0 }
+        guard !selections.isEmpty else { return [] }
+
+        var rects: [CGRect] = []
+        ts.enumerateAttribute(.markdownBlockBackground, in: range, options: []) { value, attrRange, _ in
+            // Resolved under the drawing appearance: a dynamic colour may be
+            // opaque in one appearance only.
+            guard let color = value as? NSColor,
+                  (color.usingColorSpace(.sRGB) ?? color).alphaComponent >= 1 else { return }
+            for selection in selections {
+                let hit = NSIntersectionRange(attrRange, selection)
+                guard hit.length > 0 else { continue }
+                rects += lineBoxRects(for: NSRange(location: hit.location - range.location, length: hit.length),
+                                      at: point)
+            }
+        }
+        return rects
     }
 
     private func drawBlockBackgrounds(at point: CGPoint, in context: CGContext) {

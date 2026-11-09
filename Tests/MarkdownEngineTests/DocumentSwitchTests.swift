@@ -20,6 +20,7 @@ struct DocumentSwitchTests {
     private final class Document: ObservableObject {
         @Published var id: String
         @Published var text: String
+        @Published var openDocuments: Set<String>?
         init(id: String, text: String) {
             self.id = id
             self.text = text
@@ -32,7 +33,8 @@ struct DocumentSwitchTests {
             NativeTextViewWrapper(
                 text: $document.text,
                 documentId: document.id,
-                header: AnyView(Color.gray.frame(height: 60))
+                header: AnyView(Color.gray.frame(height: 60)),
+                retainedScrollDocumentIds: document.openDocuments
             )
         }
     }
@@ -90,4 +92,84 @@ struct DocumentSwitchTests {
         #expect(coordinator.undoManagers["B"]?.canUndo == true)
         #expect(coordinator.undoManagers["A"]?.canUndo != true)
     }
+
+    /// Nodes' tabs replace their file in place, so the file left behind is no
+    /// longer among the embedder's open documents. Its undo stack used to be
+    /// pruned with that set, and ⌘Z did nothing on the way back.
+    @Test("undo survives a tab switching to another file and back")
+    func undoSurvivesReplacedTab() async throws {
+        let document = Document(id: "A", text: "Alpha")
+        document.openDocuments = ["A"]
+        let (tv, coordinator) = try await Self.stage(document)
+
+        tv.insertText(" typed", replacementRange: NSRange(location: 5, length: 0))
+        await Self.spin(0.3)
+        #expect(coordinator.undoManagers["A"]?.canUndo == true)
+        #expect(document.text == "Alpha typed")
+
+        // The tab shows B now; A is open nowhere.
+        document.openDocuments = ["B"]
+        document.id = "B"
+        document.text = "Beta"
+        await Self.spin(0.3)
+        #expect(coordinator.documentId == "B")
+
+        // Back to A, its file as it was saved.
+        document.openDocuments = ["A"]
+        document.id = "A"
+        document.text = "Alpha typed"
+        await Self.spin(0.3)
+        let undo = try #require(coordinator.undoManagers["A"])
+        #expect(undo.canUndo)
+        undo.undo()
+        await Self.spin(0.2)
+        #expect(tv.string == "Alpha")
+    }
+
+    /// Nodes switches in two passes: the new documentId first, still with the
+    /// outgoing text, the new file's text one pass later.
+    private static func switchInTwoPasses(_ document: Document, to id: String, text: String) async {
+        document.id = id
+        await spin(0.3)
+        document.text = text
+        await spin(0.3)
+    }
+
+    /// Since a switch completes on its first pass (#212), the divergence check ran on
+    /// the pass that still carried the outgoing document's text, saw a "rewritten"
+    /// file and cleared the stack on every switch back.
+    @Test("undo survives a switch whose text arrives one pass after its id")
+    func undoSurvivesTwoPassSwitch() async throws {
+        let document = Document(id: "A", text: "Alpha")
+        let (tv, coordinator) = try await Self.stage(document)
+        tv.insertText(" typed", replacementRange: NSRange(location: 5, length: 0))
+        await Self.spin(0.3)
+        #expect(document.text == "Alpha typed")
+
+        await Self.switchInTwoPasses(document, to: "B", text: "Beta")
+        #expect(tv.string == "Beta")
+        await Self.switchInTwoPasses(document, to: "A", text: "Alpha typed")
+        #expect(tv.string == "Alpha typed")
+
+        let undo = try #require(coordinator.undoManagers["A"])
+        #expect(undo.canUndo)
+        undo.undo()
+        await Self.spin(0.2)
+        #expect(tv.string == "Alpha")
+    }
+
+    @Test("a file rewritten while switched away still drops its stack, two passes or not")
+    func rewriteStillDropsStack() async throws {
+        let document = Document(id: "A", text: "Alpha")
+        let (tv, coordinator) = try await Self.stage(document)
+        tv.insertText(" typed", replacementRange: NSRange(location: 5, length: 0))
+        await Self.spin(0.3)
+
+        await Self.switchInTwoPasses(document, to: "B", text: "Beta")
+        await Self.switchInTwoPasses(document, to: "A", text: "Alpha rewritten elsewhere")
+        #expect(tv.string == "Alpha rewritten elsewhere")
+        #expect(coordinator.undoManagers["A"]?.canUndo != true,
+                "stale ranges would replay over text they were not recorded on")
+    }
 }
+

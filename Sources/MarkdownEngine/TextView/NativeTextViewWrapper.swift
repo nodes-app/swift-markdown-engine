@@ -69,6 +69,13 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     /// dropped only if the document's text changes while it is switched away. Set a
     /// stable, unique value per document so undo/replacements stay scoped.
     public var documentId: String
+    /// Keeps the editor across a removal from the view hierarchy. With a key, the
+    /// removed editor is parked under it — text view, undo stacks, scroll position —
+    /// and the next editor created with the same key takes it back, whatever
+    /// document it opens. AppKit's undo actions belong to the text view instance,
+    /// so this is what keeps ⌘Z when the embedder routes away from the editor and
+    /// back. One editor per key; nil (the default) builds a new one every time.
+    public var parkingKey: String?
     /// When `false` the editor renders read-only with no caret.
     public var isEditable: Bool
     /// Optional two-way focus state. Changes to the binding request or release
@@ -83,6 +90,9 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     /// `"![[my-image]]"`) to insert at the caret, or `nil` to fall through
     /// to the system's default plain-text paste.
     public var onPasteImage: ((NSPasteboard) -> String?)?
+    /// Files dragged onto the text. Without it the text view keeps AppKit's own
+    /// drag handling. See `EditorFileDrop`.
+    public var fileDrop: EditorFileDrop?
 
     /// Fires when the user clicks a `[[Name]]` link. The argument is the
     /// resolved opaque identifier (or the display name when no resolver
@@ -165,9 +175,11 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         fontName: String = "SF Pro",
         fontSize: CGFloat = 16,
         documentId: String = "default",
+        parkingKey: String? = nil,
         isEditable: Bool = true,
         isFocused: Binding<Bool>? = nil,
         onPasteImage: ((NSPasteboard) -> String?)? = nil,
+        fileDrop: EditorFileDrop? = nil,
         onLinkClick: ((String) -> Void)? = nil,
         onCaretRectChange: ((CGRect) -> Void)? = nil,
         onTextMutation: ((MarkdownTextMutation) -> Void)? = nil,
@@ -194,9 +206,11 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         self.fontName = fontName
         self.fontSize = fontSize
         self.documentId = documentId
+        self.parkingKey = parkingKey
         self.isEditable = isEditable
         self.isFocused = isFocused
         self.onPasteImage = onPasteImage
+        self.fileDrop = fileDrop
         self.onLinkClick = onLinkClick
         self.onCaretRectChange = onCaretRectChange
         self.onTextMutation = onTextMutation
@@ -239,6 +253,16 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     }
 
     public func makeNSView(context: Context) -> NSScrollView {
+        if let parkingKey {
+            EditorParking.mounted[parkingKey, default: 0] += 1
+            // `makeCoordinator` already handed this view the parked coordinator; the
+            // first update pass brings text, configuration and document up to date.
+            if let parked = EditorParking.parked[parkingKey], parked.coordinator === context.coordinator {
+                EditorParking.parked[parkingKey] = nil
+                parked.scrollView.removeFromSuperview()
+                return parked.scrollView
+            }
+        }
         let scrollView = ClampedScrollView()
         scrollView.fitsContent = configuration.heightBehavior == .fitsContent
         scrollView.borderType = .noBorder
@@ -312,6 +336,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         textView.isAutomaticDataDetectionEnabled = true
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.onPasteImage = onPasteImage
+        textView.fileDrop = fileDrop
         if #available(macOS 15.1, *) {
             // Inline: rewrites morph in place. On 15.1–26 the text below a rewrite dims
             // for the animation: AppKit's older path wants the text view directly in the
@@ -449,18 +474,8 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
                     $0.key == documentId || retained.contains($0.key)
                 }
             }
-            // Evict undo stacks + content snapshots for documents no longer
-            // retained (keep the current one); clear actions before dropping.
-            let staleUndoKeys = Set(context.coordinator.undoManagers.keys)
-                .union(context.coordinator.undoContentSnapshots.keys)
-                .filter { key in
-                    key != documentId && key != "__default__" && !retained.contains(key)
-                }
-            for key in staleUndoKeys {
-                context.coordinator.undoManagers[key]?.removeAllActions()
-                context.coordinator.undoManagers.removeValue(forKey: key)
-                context.coordinator.undoContentSnapshots.removeValue(forKey: key)
-            }
+            // Undo stacks are not pruned here: they follow recency (`retainUndo`),
+            // since a file leaves the open tabs whenever its tab switches away.
         }
 
         let wtActive: Bool = {
@@ -498,6 +513,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         }
 
         textView.onPasteImage = onPasteImage
+        textView.fileDrop = fileDrop
         textView.isCursorExcluded = isCursorExcluded
         textView.setPlaceholder(placeholder)
         // Sync heightBehavior across all three layers (scroll view, text view,
@@ -641,6 +657,11 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             && !fontChanged {
             return
         }
+        // The text a switch was waiting for (see the switch branch below).
+        if !isNodeSwitch, context.coordinator.pendingUndoCheck == documentId {
+            context.coordinator.pendingUndoCheck = nil
+            context.coordinator.invalidateUndoIfContentDiverged(for: documentId, incomingText: text)
+        }
         if fontChanged {
             context.coordinator.didInitialFormatting = false
         }
@@ -668,11 +689,21 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             // no longer clear undo here — that `removeAllActions()` is what killed Cmd+Z
             // across a file switch.
             textView.breakUndoCoalescing()
+            context.coordinator.noteUndoBaseline(for: context.coordinator.documentId, text: textView.string)
             context.coordinator.documentId = documentId
+            context.coordinator.retainUndo(for: documentId)
             context.coordinator.armScrollRestore(for: documentId)
             // Drop the incoming document's undo stack if its text changed while
-            // switched away — its recorded ranges are now stale.
-            context.coordinator.invalidateUndoIfContentDiverged(for: documentId, incomingText: text)
+            // switched away — its recorded ranges are now stale. SwiftUI can hand
+            // over the new documentId one pass before the new text (Nodes loads the
+            // file after the switch): text equal to the outgoing document's is that
+            // pass, or two identical documents, so the check waits for the text.
+            if text == context.coordinator.lastSyncedText {
+                context.coordinator.pendingUndoCheck = documentId
+            } else {
+                context.coordinator.pendingUndoCheck = nil
+                context.coordinator.invalidateUndoIfContentDiverged(for: documentId, incomingText: text)
+            }
             context.coordinator.didInitialFormatting = false
             context.coordinator.didEnsureLayoutForCurrentDocument = false
             context.coordinator.resetImageEmbedState()
@@ -704,6 +735,11 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         // reads the current values from the View struct.
         context.coordinator.fontName = fontName
         context.coordinator.fontSize = fontSize
+        // The binding replaces this document's text from outside (a reload, a
+        // remount's empty first pass): the stack was recorded on what is shown now.
+        if !isNodeSwitch {
+            context.coordinator.noteUndoBaseline(for: documentId, text: textView.string)
+        }
         context.coordinator.rebuildTextStorageAndStyle(
             textView,
             from: text,
@@ -769,6 +805,14 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
     }
 
     public func makeCoordinator() -> Coordinator {
+        if let parkingKey, let parked = EditorParking.parked[parkingKey] {
+            let coordinator = parked.coordinator
+            coordinator.rebind(text: $text, isWikiLinkActive: $isWikiLinkActive)
+            // Set at creation only; everything else refreshes on every update pass.
+            coordinator.onLinkClick = onLinkClick
+            coordinator.onSpellCheckingPolicyChanged = onSpellCheckingPolicyChanged
+            return coordinator
+        }
         let coordinator = NativeTextViewCoordinator(
             text: $text,
             fontName: fontName,
@@ -778,6 +822,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             onInlineSelectionChange: onInlineSelectionChange
         )
         coordinator.documentId = documentId
+        coordinator.retainUndo(for: documentId)
         coordinator.onPersistScrollOffset = onPersistScrollOffset
         coordinator.onTextMutation = onTextMutation
         coordinator.restoreScrollOffset = restoreScrollOffset
@@ -795,6 +840,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         coordinator.userPrefersAutomaticSpellingCorrection = configuration.spellChecking.automaticSpellingCorrection
         coordinator.userPrefersAutomaticQuoteSubstitution = configuration.spellChecking.automaticQuoteSubstitution
         coordinator.onSpellCheckingPolicyChanged = onSpellCheckingPolicyChanged
+        coordinator.parkingKey = parkingKey
         return coordinator
     }
 
@@ -805,10 +851,39 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         // A restore still pending means the reader was never put back where they
         // were — recording the current offset would overwrite the good one with
         // the mid-load position.
-        guard let documentId = coordinator.documentId,
-              coordinator.pendingScrollRestoreDocumentId == nil else { return }
-        coordinator.onPersistScrollOffset?(documentId, nsView.contentView.bounds.origin.y)
+        if let documentId = coordinator.documentId,
+           coordinator.pendingScrollRestoreDocumentId == nil {
+            coordinator.onPersistScrollOffset?(documentId, nsView.contentView.bounds.origin.y)
+        }
+        park(nsView, coordinator: coordinator)
     }
+
+    /// Keeps a removed editor for the next one with its `parkingKey`.
+    private static func park(_ scrollView: NSScrollView, coordinator: Coordinator) {
+        guard let key = coordinator.parkingKey else { return }
+        let stillMounted = max(0, (EditorParking.mounted[key] ?? 1) - 1)
+        EditorParking.mounted[key] = stillMounted
+        // Another editor with this key is up already: it is the current one, and
+        // this one would come back with older state.
+        guard stillMounted == 0, let textView = scrollView.nativeTextView else { return }
+        // Nothing may keep running into a view that is off screen.
+        coordinator.cancelDeferredNodeSwitch()
+        coordinator.resetWritingToolsSession()
+        if #available(macOS 15.2, *) { textView.writingToolsCoordinator?.stopWritingTools() }
+        textView.endWritingToolsHide()
+        textView.breakUndoCoalescing()
+        // The embedder may rewrite the file while the editor is away.
+        coordinator.noteUndoBaseline(for: coordinator.documentId, text: textView.string)
+        EditorParking.parked[key] = (scrollView, coordinator)
+    }
+}
+
+/// Editors kept across a removal, by `NativeTextViewWrapper.parkingKey`.
+@MainActor
+enum EditorParking {
+    static var parked: [String: (scrollView: NSScrollView, coordinator: NativeTextViewCoordinator)] = [:]
+    /// Mounted editors per key: while one is up, a removed one is not kept.
+    static var mounted: [String: Int] = [:]
 }
 // MARK: - Scrolling header view
 

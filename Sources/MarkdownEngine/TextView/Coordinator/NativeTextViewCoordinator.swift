@@ -38,12 +38,65 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     /// all open documents, so its built-in (view-wide) undo manager would mix
     /// files together. Keying a manager on the current document gives each file
     /// its own undo stack that survives switching away and back. Vended through
-    /// the `undoManager(for:)` delegate method; pruned alongside `scrollOffsets`.
+    /// the `undoManager(for:)` delegate method; kept for the most recent documents
+    /// (`retainUndo(for:)`).
     var undoManagers: [String: UndoManager] = [:]
     /// Per-`documentId` content snapshot (storage form) taken on switch-away. On
     /// switch-back a mismatch means the file was rewritten while backgrounded, so
-    /// the now-stale undo stack is dropped. Pruned alongside `undoManagers`.
+    /// the now-stale undo stack is dropped. Kept and dropped with `undoManagers`.
     var undoContentSnapshots: [String: String] = [:]
+    /// Documents whose undo stacks are kept, most recent last.
+    var undoRecency: [String] = []
+    /// The document whose switch-back divergence check waits for its own text:
+    /// the switch arrived with the outgoing document's text.
+    var pendingUndoCheck: String?
+    /// The text each document's undo stack was recorded on, from the moment the
+    /// engine replaces the view's text from outside (a switch, a rebuild from the
+    /// binding, parking) until the stack is used again (`validateUndoBaseline`).
+    var undoBaselines: [String: String] = [:]
+    /// The key this editor parks under (`NativeTextViewWrapper.parkingKey`).
+    var parkingKey: String?
+    /// How many documents keep their undo stacks. By recency, never by the
+    /// embedder's open tabs: a tab that switches to another file left the first
+    /// file's stack behind, and ⌘Z did nothing on the way back.
+    static let undoRetainedDocumentCount = 10
+    /// Marks `documentId`'s undo stack as just used and drops the least recent
+    /// stacks past `undoRetainedDocumentCount`.
+    func retainUndo(for documentId: String) {
+        undoRecency.removeAll { $0 == documentId }
+        undoRecency.append(documentId)
+        while undoRecency.count > Self.undoRetainedDocumentCount {
+            let evicted = undoRecency.removeFirst()
+            undoManagers[evicted]?.removeAllActions()
+            undoManagers.removeValue(forKey: evicted)
+            undoContentSnapshots.removeValue(forKey: evicted)
+            undoBaselines.removeValue(forKey: evicted)
+        }
+    }
+
+    /// A parked editor comes back under a new SwiftUI view: its bindings still
+    /// belong to the view that was removed, and text written there is lost.
+    func rebind(text: Binding<String>, isWikiLinkActive: Binding<Bool>) {
+        _text = text
+        _isWikiLinkActive = isWikiLinkActive
+    }
+
+    /// Records the text `documentId`'s undo stack was recorded on. The first
+    /// replacement after the last edit counts; later ones keep it.
+    func noteUndoBaseline(for documentId: String?, text: String) {
+        let key = documentId ?? "__default__"
+        if undoBaselines[key] == nil { undoBaselines[key] = text }
+    }
+
+    /// Before the stack is used again (⌘Z, ⇧⌘Z, the next edit): drop it if the
+    /// text was replaced from outside since it was recorded. AppKit's undo
+    /// replays ranges, and over other text they corrupt it.
+    func validateUndoBaseline(_ textView: NSTextView) {
+        let key = documentId ?? "__default__"
+        guard let baseline = undoBaselines.removeValue(forKey: key) else { return }
+        if textView.string != baseline { undoManagers[key]?.removeAllActions() }
+    }
+
     @Binding var text: String
     @Binding var isWikiLinkActive: Bool
     var isFocused: Binding<Bool>?
