@@ -47,6 +47,9 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var undoContentSnapshots: [String: String] = [:]
     /// Documents whose undo stacks are kept, most recent last.
     var undoRecency: [String] = []
+    /// The document whose switch-back divergence check waits for its own text:
+    /// the switch arrived with the outgoing document's text.
+    var pendingUndoCheck: String?
     /// How many documents keep their undo stacks. By recency, never by the
     /// embedder's open tabs: a tab that switches to another file left the first
     /// file's stack behind, and ⌘Z did nothing on the way back.
