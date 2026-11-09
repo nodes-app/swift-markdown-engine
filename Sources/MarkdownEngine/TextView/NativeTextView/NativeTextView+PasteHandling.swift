@@ -202,6 +202,7 @@ extension NativeTextView {
     }
 
     override func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+        if let undoState = validateUndoItem(item) { return undoState }
         if item.action == #selector(paste(_:)) {
             let pasteboard = NSPasteboard.general
             if PasteboardImageReader.canPasteImage(from: pasteboard) { return true }
