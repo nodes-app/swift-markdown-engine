@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - An image whose source is showing stays on screen while scrolling when it ends the document. TextKit drops the paragraph spacing after the last paragraph, where the image is drawn, so its fragment's frame covered the source line alone and the image vanished with the line.
 - Selected text on an opaque `.markdownBlockBackground` fill keeps its own colour. AppKit turns selected glyphs white in Dark Mode, but the fill is painted over the selection highlight, so black ink on a white block (an inverted `==highlight==`) went white on white. A translucent fill lets the highlight through and keeps AppKit's colour.
 - A Writing Tools result taken from its panel (Summary, Key Points, List, Table: Replace) reaches the binding as soon as it lands. The editor held it for the end of the session, which AppKit does not report while the panel's session lingers: the text showed but was never saved, and switching documents dropped it along with anything typed after it.
+- A Key Points or List result from the Writing Tools panel arrives as Markdown list items (`- `, or `1. ` for a numbered list, a tab per level). Writing Tools hand lists over as `NSParagraphStyle.textLists`, which hold no characters, and the styler replaced the paragraph style, so the bullets vanished and the note had no list. The conversion is its own undo step.
+- After a Writing Tools panel result, Return continues lists again and the cursor reveals syntax again. AppKit keeps the panel's session open, and the editor treated every keystroke as a Writing Tools edit until the next document switch.
 
 ## [0.15.0] - 2026-10-22
 
