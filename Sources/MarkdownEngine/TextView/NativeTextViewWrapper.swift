@@ -455,18 +455,8 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
                     $0.key == documentId || retained.contains($0.key)
                 }
             }
-            // Evict undo stacks + content snapshots for documents no longer
-            // retained (keep the current one); clear actions before dropping.
-            let staleUndoKeys = Set(context.coordinator.undoManagers.keys)
-                .union(context.coordinator.undoContentSnapshots.keys)
-                .filter { key in
-                    key != documentId && key != "__default__" && !retained.contains(key)
-                }
-            for key in staleUndoKeys {
-                context.coordinator.undoManagers[key]?.removeAllActions()
-                context.coordinator.undoManagers.removeValue(forKey: key)
-                context.coordinator.undoContentSnapshots.removeValue(forKey: key)
-            }
+            // Undo stacks are not pruned here: they follow recency (`retainUndo`),
+            // since a file leaves the open tabs whenever its tab switches away.
         }
 
         let wtActive: Bool = {
@@ -676,6 +666,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             // across a file switch.
             textView.breakUndoCoalescing()
             context.coordinator.documentId = documentId
+            context.coordinator.retainUndo(for: documentId)
             context.coordinator.armScrollRestore(for: documentId)
             // Drop the incoming document's undo stack if its text changed while
             // switched away — its recorded ranges are now stale.
@@ -785,6 +776,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             onInlineSelectionChange: onInlineSelectionChange
         )
         coordinator.documentId = documentId
+        coordinator.retainUndo(for: documentId)
         coordinator.onPersistScrollOffset = onPersistScrollOffset
         coordinator.onTextMutation = onTextMutation
         coordinator.restoreScrollOffset = restoreScrollOffset

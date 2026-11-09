@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A Writing Tools result taken from its panel (Summary, Key Points, List, Table: Replace) reaches the binding as soon as it lands. The editor held it for the end of the session, which AppKit does not report while the panel's session lingers: the text showed but was never saved, and switching documents dropped it along with anything typed after it.
 - A Key Points or List result from the Writing Tools panel arrives as Markdown list items (`- `, or `1. ` for a numbered list, a tab per level). Writing Tools hand lists over as `NSParagraphStyle.textLists`, which hold no characters, and the styler replaced the paragraph style, so the bullets vanished and the note had no list. The conversion is its own undo step.
 - After a Writing Tools panel result, Return continues lists again and the cursor reveals syntax again. AppKit keeps the panel's session open, and the editor treated every keystroke as a Writing Tools edit until the next document switch.
+- ⌘Z works again after switching a tab to another file and back. Undo stacks were pruned with `retainedScrollDocumentIds`, the embedder's open documents, and a file whose tab switches away is no longer among them. They are now kept for the ten most recently shown documents, whatever the tabs hold.
 
 ## [0.15.0] - 2026-10-22
 
