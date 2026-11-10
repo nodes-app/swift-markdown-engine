@@ -260,6 +260,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             if let parked = EditorParking.parked[parkingKey], parked.coordinator === context.coordinator {
                 EditorParking.parked[parkingKey] = nil
                 parked.scrollView.removeFromSuperview()
+                parked.scrollView.nativeTextView?.returnsFocusAfterParking = true
                 return parked.scrollView
             }
         }
@@ -454,6 +455,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         reconcileHeader(textView: textView, context: context)
 
         let isNodeSwitch = context.coordinator.documentId != documentId
+        context.coordinator.dropStaleScrollRestore()
 
         // Refreshed here, not with the other callbacks at the bottom — teardown has
         // to reach the CURRENT closures even when the pass below returns early.
@@ -657,14 +659,13 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             && !fontChanged {
             return
         }
-        // The text a switch was waiting for (see the switch branch below).
-        if !isNodeSwitch, context.coordinator.pendingUndoCheck == documentId {
-            context.coordinator.pendingUndoCheck = nil
-            context.coordinator.invalidateUndoIfContentDiverged(for: documentId, incomingText: text)
-        }
         if fontChanged {
             context.coordinator.didInitialFormatting = false
         }
+        // SwiftUI can hand over the new documentId one pass before its text (Nodes
+        // loads the file after the switch): this pass then still carries the
+        // outgoing document's. Read before the rebuild moves `lastSyncedText`.
+        let carriesOutgoingText = isNodeSwitch && text == context.coordinator.lastSyncedText
         if isNodeSwitch {
             // Save the outgoing document's scroll position — unless it just left
             // the retained set, in which case let it reset to top next time.
@@ -677,12 +678,6 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
                 // so it can see what the snapshot above was taken too early to know.
                 onPersistScrollOffset?(outgoingId, offsetY)
             }
-            // Snapshot the outgoing document's content (storage form) so a later
-            // switch-back can detect a file rewritten while it was backgrounded.
-            // `lastSyncedText` still holds the outgoing content here.
-            if let outgoingId = context.coordinator.documentId {
-                context.coordinator.undoContentSnapshots[outgoingId] = context.coordinator.lastSyncedText
-            }
             // Per-document undo: close the OUTGOING document's open coalescing group
             // (while its manager is still active), then switch the active documentId so
             // `undoManager(for:)` starts vending the INCOMING document's own manager. We
@@ -690,20 +685,13 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             // across a file switch.
             textView.breakUndoCoalescing()
             context.coordinator.noteUndoBaseline(for: context.coordinator.documentId, text: textView.string)
+            context.coordinator.noteSelection(for: context.coordinator.documentId, in: textView)
             context.coordinator.documentId = documentId
             context.coordinator.retainUndo(for: documentId)
             context.coordinator.armScrollRestore(for: documentId)
-            // Drop the incoming document's undo stack if its text changed while
-            // switched away — its recorded ranges are now stale. SwiftUI can hand
-            // over the new documentId one pass before the new text (Nodes loads the
-            // file after the switch): text equal to the outgoing document's is that
-            // pass, or two identical documents, so the check waits for the text.
-            if text == context.coordinator.lastSyncedText {
-                context.coordinator.pendingUndoCheck = documentId
-            } else {
-                context.coordinator.pendingUndoCheck = nil
-                context.coordinator.invalidateUndoIfContentDiverged(for: documentId, incomingText: text)
-            }
+            // A stack gone stale while switched away is not judged here: this pass
+            // can carry another document's text or a remount's empty buffer. The
+            // baseline noted above is checked when the stack is used.
             context.coordinator.didInitialFormatting = false
             context.coordinator.didEnsureLayoutForCurrentDocument = false
             context.coordinator.resetImageEmbedState()
@@ -743,7 +731,8 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         context.coordinator.rebuildTextStorageAndStyle(
             textView,
             from: text,
-            invalidateLayout: isNodeSwitch || rawSourceModeChanged
+            invalidateLayout: isNodeSwitch || rawSourceModeChanged,
+            restoring: context.coordinator.selectionToRestore(for: documentId, text: text)
         )
         textView.recalcOverscroll(for: nsView)
         (nsView as? ClampedScrollView)?.clampToInsets()
@@ -773,6 +762,10 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
                 // reload — scroll the reader away from wherever they went.
                 // The "content has arrived" give-up needs the same proof: a non-empty
                 // buffer laid out into nothing has not had its chance either.
+                // The outgoing document's text is not this document's chance either:
+                // clamped against a shorter one, the offset landed short and the
+                // latch was gone when the document itself arrived.
+                let contentHadItsChance = !text.isEmpty && !carriesOutgoingText
                 if !measured {
                     // No geometry on this tick: hand it to the scroll view, which applies
                     // it from its own layout. Retiring the latch here is safe because the
@@ -781,8 +774,12 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
                     // the latch left armed forever and teardown refusing to save).
                     (nsView as? ClampedScrollView)?.armScrollRestore(to: savedY)
                     context.coordinator.pendingScrollRestoreDocumentId = nil
-                } else if landed || !text.isEmpty || context.coordinator.pendingScrollRestoreAttempts <= 0 {
+                } else if landed || contentHadItsChance || context.coordinator.pendingScrollRestoreAttempts <= 0 {
                     context.coordinator.pendingScrollRestoreDocumentId = nil
+                } else {
+                    // Kept for the pass that brings the document, but not for longer:
+                    // two documents with the same text never send that pass.
+                    context.coordinator.pendingScrollRestoreDeadline = Date(timeIntervalSinceNow: 1)
                 }
             } else {
                 context.coordinator.pendingScrollRestoreDocumentId = nil
@@ -811,6 +808,9 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             // Set at creation only; everything else refreshes on every update pass.
             coordinator.onLinkClick = onLinkClick
             coordinator.onSpellCheckingPolicyChanged = onSpellCheckingPolicyChanged
+            // Back on the parked document is not a switch, so nothing else arms this:
+            // the remount's empty first pass clamps the reader to the top.
+            coordinator.armScrollRestore(for: documentId)
             return coordinator
         }
         let coordinator = NativeTextViewCoordinator(
@@ -851,6 +851,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         // A restore still pending means the reader was never put back where they
         // were — recording the current offset would overwrite the good one with
         // the mid-load position.
+        coordinator.dropStaleScrollRestore()
         if let documentId = coordinator.documentId,
            coordinator.pendingScrollRestoreDocumentId == nil {
             coordinator.onPersistScrollOffset?(documentId, nsView.contentView.bounds.origin.y)
@@ -874,6 +875,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         textView.breakUndoCoalescing()
         // The embedder may rewrite the file while the editor is away.
         coordinator.noteUndoBaseline(for: coordinator.documentId, text: textView.string)
+        coordinator.noteSelection(for: coordinator.documentId, in: textView)
         EditorParking.parked[key] = (scrollView, coordinator)
     }
 }

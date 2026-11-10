@@ -125,8 +125,16 @@ final class NativeTextView: NSTextView {
         set { super.selectedTextAttributes = newValue }
     }
 
+    /// Whether the view held the keyboard when it last left a window.
+    private var heldFocusOnRemoval = false
+    /// Set when a parked editor is handed out again (`parkingKey`): the view
+    /// takes the keyboard back if it had it, or ⌘Z after the way back goes to
+    /// the window and does nothing.
+    var returnsFocusAfterParking = false
+
     override func viewWillMove(toWindow newWindow: NSWindow?) {
         if let window, window !== newWindow {
+            heldFocusOnRemoval = window.firstResponder === self
             NotificationCenter.default.removeObserver(self, name: NSWindow.willCloseNotification, object: window)
             reportFocusLossOnRemoval()
         }
@@ -142,6 +150,17 @@ final class NativeTextView: NSTextView {
             )
         }
         reconcileRequestedFocus()
+        if window != nil, returnsFocusAfterParking {
+            returnsFocusAfterParking = false
+            guard heldFocusOnRemoval else { return }
+            // One turn later, and only if nothing else is being typed into (a new
+            // note's title field). Not "the window holds it": a SwiftUI screen that
+            // took focus leaves it on the hosting view when it goes.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let window = self.window, !(window.firstResponder is NSText) else { return }
+                window.makeFirstResponder(self)
+            }
+        }
     }
 
     @objc private func focusWindowWillClose(_ notification: Notification) {
