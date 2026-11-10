@@ -34,6 +34,9 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     /// budget bounds it: a document that really got shorter must not keep yanking.
     var pendingScrollRestoreDocumentId: String?
     var pendingScrollRestoreAttempts = 0
+    /// Set when a pass keeps the restore for the next one: how long it may still
+    /// fire. The pass budget is not a time bound, passes only tick when one happens.
+    var pendingScrollRestoreDeadline: Date?
     /// Per-`documentId` undo manager. AppKit reuses a single `NSTextView` across
     /// all open documents, so its built-in (view-wide) undo manager would mix
     /// files together. Keying a manager on the current document gives each file
@@ -41,19 +44,17 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     /// the `undoManager(for:)` delegate method; kept for the most recent documents
     /// (`retainUndo(for:)`).
     var undoManagers: [String: UndoManager] = [:]
-    /// Per-`documentId` content snapshot (storage form) taken on switch-away. On
-    /// switch-back a mismatch means the file was rewritten while backgrounded, so
-    /// the now-stale undo stack is dropped. Kept and dropped with `undoManagers`.
-    var undoContentSnapshots: [String: String] = [:]
     /// Documents whose undo stacks are kept, most recent last.
     var undoRecency: [String] = []
-    /// The document whose switch-back divergence check waits for its own text:
-    /// the switch arrived with the outgoing document's text.
-    var pendingUndoCheck: String?
     /// The text each document's undo stack was recorded on, from the moment the
     /// engine replaces the view's text from outside (a switch, a rebuild from the
     /// binding, parking) until the stack is used again (`validateUndoBaseline`).
     var undoBaselines: [String: String] = [:]
+    /// Where the selection was when a document was last left (a switch away,
+    /// parking), with the text it was in. Put back when that text is shown again:
+    /// a rebuild leaves the caret at the end, and the next keystroke went there.
+    /// Kept and dropped with the undo stacks.
+    var leftSelections: [String: (range: NSRange, text: String)] = [:]
     /// The key this editor parks under (`NativeTextViewWrapper.parkingKey`).
     var parkingKey: String?
     /// How many documents keep their undo stacks. By recency, never by the
@@ -69,9 +70,25 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
             let evicted = undoRecency.removeFirst()
             undoManagers[evicted]?.removeAllActions()
             undoManagers.removeValue(forKey: evicted)
-            undoContentSnapshots.removeValue(forKey: evicted)
             undoBaselines.removeValue(forKey: evicted)
+            leftSelections.removeValue(forKey: evicted)
         }
+    }
+
+    /// Remembers the selection of the document being left. `lastSyncedText` is
+    /// still its text here.
+    func noteSelection(for documentId: String?, in textView: NSTextView) {
+        guard let documentId else { return }
+        leftSelections[documentId] = (textView.selectedRange(), lastSyncedText)
+    }
+
+    /// The selection to put back while `documentId` is rebuilt from `text`: only
+    /// into the text it was left with. A switch's first pass can carry another
+    /// document's text and a remount's an empty buffer; those keep it for later.
+    func selectionToRestore(for documentId: String, text: String) -> NSRange? {
+        guard let left = leftSelections[documentId], left.text == text else { return nil }
+        leftSelections[documentId] = nil
+        return left.range
     }
 
     /// A parked editor comes back under a new SwiftUI view: its bindings still
@@ -509,6 +526,16 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     func armScrollRestore(for documentId: String) {
         pendingScrollRestoreDocumentId = documentId
         pendingScrollRestoreAttempts = 4
+        pendingScrollRestoreDeadline = nil
+    }
+
+    /// Drops a restore that was kept for a later pass which never came. Without
+    /// it a much later, unrelated pass would scroll the reader away, and teardown
+    /// would keep refusing to save their position.
+    func dropStaleScrollRestore() {
+        guard let deadline = pendingScrollRestoreDeadline, Date() > deadline else { return }
+        pendingScrollRestoreDocumentId = nil
+        pendingScrollRestoreDeadline = nil
     }
 
     func wikiLinkID(for range: NSRange) -> String? {

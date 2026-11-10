@@ -29,6 +29,7 @@ struct EditorParkingTests {
     /// What the embedder shows: the editor for `document`, or another screen.
     private final class Route: ObservableObject {
         @Published var showsEditor = true
+        var otherScreenTakesFocus = false
         @Published var document: Document
         init(_ document: Document) { self.document = document }
     }
@@ -47,9 +48,22 @@ struct EditorParkingTests {
         var body: some View {
             if route.showsEditor {
                 EditorHost(document: route.document, parkingKey: parkingKey)
+            } else if route.otherScreenTakesFocus {
+                FocusTaker()
             } else {
                 Color.gray
             }
+        }
+    }
+
+    /// Nodes' empty tab: a screen that takes the keyboard when it appears.
+    private struct FocusTaker: View {
+        @FocusState private var focused: Bool
+        var body: some View {
+            Color.gray
+                .focusable()
+                .focused($focused)
+                .onAppear { focused = true }
         }
     }
 
@@ -211,5 +225,122 @@ struct EditorParkingTests {
         tv.undo(nil)
         await Self.spin(0.3)
         #expect(tv.string == "Alpha")
+    }
+
+    @Test("back from a removal straight onto a document left earlier: its undo is kept")
+    func comeBackOnADocumentLeftEarlier() async throws {
+        let route = Route(Document(id: "B", text: "Alpha"))
+        let window = await Self.stage(Host(route: route, parkingKey: Self.key()))
+        let before = try await Self.typeIntoAlpha(window)
+
+        // Leave B for A in two passes, then remove the editor while A is shown.
+        route.document.id = "A"
+        await Self.spin(0.3)
+        route.document.text = "Other"
+        await Self.spin(0.3)
+        route.showsEditor = false
+        await Self.spin(0.3)
+
+        // The remount's first pass carries B's id and an empty buffer.
+        _ = await Self.returnToEditor(route, id: "B", fileText: "Alpha typed")
+        let tv = try #require(Self.findTextView(window.contentView!))
+        #expect(tv === before)
+        #expect(tv.string == "Alpha typed")
+
+        tv.undo(nil)
+        await Self.spin(0.3)
+        #expect(tv.string == "Alpha")
+    }
+
+    @Test("the editor takes the keyboard back if it had it", arguments: [true, false])
+    func keyboardComesBack(hadFocus: Bool) async throws {
+        let route = Route(Document(id: "A", text: "Alpha"))
+        let window = await Self.stage(Host(route: route, parkingKey: Self.key()))
+        let tv = try await Self.typeIntoAlpha(window)
+        window.makeFirstResponder(hadFocus ? tv : nil)
+
+        route.showsEditor = false
+        await Self.spin(0.3)
+        #expect(window.firstResponder !== tv)
+        _ = await Self.returnToEditor(route, id: "A", fileText: "Alpha typed")
+
+        #expect((window.firstResponder === tv) == hadFocus)
+    }
+
+    @Test("the keyboard comes back from a screen that took it for itself")
+    func keyboardComesBackFromAFocusedScreen() async throws {
+        let route = Route(Document(id: "A", text: "Alpha"))
+        route.otherScreenTakesFocus = true
+        let window = await Self.stage(Host(route: route, parkingKey: Self.key()))
+        let tv = try await Self.typeIntoAlpha(window)
+        window.makeFirstResponder(tv)
+
+        route.showsEditor = false
+        await Self.spin(0.5)
+        _ = await Self.returnToEditor(route, id: "A", fileText: "Alpha typed")
+
+        #expect(window.firstResponder === tv)
+    }
+
+    /// Nodes' editor view in miniature: a buffer that starts empty and is filled when
+    /// the view appears, and scroll offsets the embedder keeps.
+    private final class Library: ObservableObject {
+        var files: [String: String] = [:]
+        var offsets: [String: CGFloat] = [:]
+        @Published var shown: String?
+    }
+
+    private struct LibraryEditor: View {
+        let id: String
+        let library: Library
+        let parkingKey: String?
+        @State private var buffer = ""
+        var body: some View {
+            NativeTextViewWrapper(
+                text: $buffer, documentId: id, parkingKey: parkingKey,
+                onPersistScrollOffset: { [library] id, y in library.offsets[id] = y },
+                restoreScrollOffset: { [library] id in library.offsets[id] }
+            )
+            .onAppear { buffer = library.files[id] ?? "" }
+        }
+    }
+
+    private struct LibraryHost: View {
+        @ObservedObject var library: Library
+        let parkingKey: String?
+        var body: some View {
+            if let shown = library.shown {
+                LibraryEditor(id: shown, library: library, parkingKey: parkingKey)
+            } else {
+                Color.gray
+            }
+        }
+    }
+
+    /// Back on the parked document is not a switch, and the remount's empty first
+    /// pass clamps to the top: without arming the restore the reader landed there.
+    @Test("back on the parked document, the reader and the caret are where they were")
+    func scrollAndCaretComeBack() async throws {
+        let library = Library()
+        library.files["A"] = (1...200).map { "Line \($0) of a long document." }.joined(separator: "\n\n")
+        library.shown = "A"
+        let window = await Self.stage(LibraryHost(library: library, parkingKey: Self.key()))
+        let textView = try #require(Self.findTextView(window.contentView!))
+        let scrollView = try #require(textView.enclosingScrollView)
+        textView.setSelectedRange(NSRange(location: 3000, length: 0))
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: 1500))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+        await Self.spin(0.3)
+
+        library.shown = nil
+        await Self.spin(0.3)
+        library.shown = "A"
+        await Self.spin(0.8)
+
+        let back = try #require(Self.findTextView(window.contentView!)?.enclosingScrollView)
+        #expect(back === scrollView)
+        #expect(abs(back.contentView.bounds.origin.y - 1500) < 1)
+        // And the caret, which a rebuild leaves at the end of the text.
+        #expect(textView.selectedRange() == NSRange(location: 3000, length: 0))
     }
 }

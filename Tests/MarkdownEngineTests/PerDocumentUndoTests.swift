@@ -3,8 +3,8 @@
 //  MarkdownEngineTests
 //
 //  Per-`documentId` undo: a stable manager per document (Cmd+Z survives file
-//  switches) and dropping a stale stack when the document's text was rewritten
-//  while it was switched away. Headless.
+//  switches) and dropping a stale stack when the document's text was replaced
+//  from outside since it was recorded. Headless.
 //
 
 import AppKit
@@ -46,15 +46,20 @@ struct PerDocumentUndoTests {
         #expect(c.undoManager(for: tv) === a)
     }
 
-    @Test("Undo stack dropped only when the reloaded text diverged from the snapshot")
+    @Test("Undo stack dropped only when the text differs from the one it was recorded on")
     func invalidatesOnlyOnDivergedContent() {
         let c = makeCoordinator()
+        let tv = NativeTextView(frame: .zero)
         let m = populatedManager()
+        c.documentId = "A"
         c.undoManagers["A"] = m
-        c.undoContentSnapshots["A"] = "hello"
-        #expect(c.invalidateUndoIfContentDiverged(for: "A", incomingText: "hello") == false)
+        tv.string = "hello"
+        c.noteUndoBaseline(for: "A", text: "hello")
+        c.validateUndoBaseline(tv)
         #expect(m.canUndo) // unchanged → kept
-        #expect(c.invalidateUndoIfContentDiverged(for: "A", incomingText: "hello world") == true)
+        c.noteUndoBaseline(for: "A", text: "hello")
+        tv.string = "hello world"
+        c.validateUndoBaseline(tv)
         #expect(!m.canUndo) // diverged → dropped
     }
 
@@ -65,7 +70,7 @@ struct PerDocumentUndoTests {
         let managers = (0...limit).map { _ in populatedManager() }
         for (i, manager) in managers.enumerated() {
             c.undoManagers["doc\(i)"] = manager
-            c.undoContentSnapshots["doc\(i)"] = "text \(i)"
+            c.undoBaselines["doc\(i)"] = "text \(i)"
         }
         for i in 0..<limit { c.retainUndo(for: "doc\(i)") }
         c.retainUndo(for: "doc0")          // back to the first: now the most recent
@@ -73,17 +78,22 @@ struct PerDocumentUndoTests {
 
         #expect(c.undoManagers["doc0"] === managers[0])
         #expect(managers[0].canUndo)
-        #expect(c.undoContentSnapshots["doc0"] == "text 0")
+        #expect(c.undoBaselines["doc0"] == "text 0")
         #expect(c.undoManagers["doc1"] == nil)
-        #expect(c.undoContentSnapshots["doc1"] == nil)
+        #expect(c.undoBaselines["doc1"] == nil)
         #expect(!managers[1].canUndo, "an evicted stack is cleared, not just forgotten")
         #expect(c.undoRecency.count == limit)
     }
 
-    @Test("No snapshot (first visit) never clears")
-    func noSnapshotNeverClears() {
+    @Test("No baseline (nothing replaced the text) never clears")
+    func noBaselineNeverClears() {
         let c = makeCoordinator()
-        c.undoManagers["A"] = populatedManager()
-        #expect(c.invalidateUndoIfContentDiverged(for: "A", incomingText: "x") == false)
+        let tv = NativeTextView(frame: .zero)
+        let m = populatedManager()
+        c.documentId = "A"
+        c.undoManagers["A"] = m
+        tv.string = "x"
+        c.validateUndoBaseline(tv)
+        #expect(m.canUndo)
     }
 }

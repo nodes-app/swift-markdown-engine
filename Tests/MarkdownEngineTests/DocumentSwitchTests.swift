@@ -135,9 +135,9 @@ struct DocumentSwitchTests {
         await spin(0.3)
     }
 
-    /// Since a switch completes on its first pass (#212), the divergence check ran on
-    /// the pass that still carried the outgoing document's text, saw a "rewritten"
-    /// file and cleared the stack on every switch back.
+    /// A switch completes on its first pass (#212), which still carries the outgoing
+    /// document's text: a staleness check there saw a "rewritten" file and cleared
+    /// the stack on every switch back. Staleness is judged when the stack is used.
     @Test("undo survives a switch whose text arrives one pass after its id")
     func undoSurvivesTwoPassSwitch() async throws {
         let document = Document(id: "A", text: "Alpha")
@@ -168,8 +168,61 @@ struct DocumentSwitchTests {
         await Self.switchInTwoPasses(document, to: "B", text: "Beta")
         await Self.switchInTwoPasses(document, to: "A", text: "Alpha rewritten elsewhere")
         #expect(tv.string == "Alpha rewritten elsewhere")
-        #expect(coordinator.undoManagers["A"]?.canUndo != true,
+        // Judged when the stack is used, not at the switch (whose first pass can
+        // carry any text).
+        tv.undo(nil)
+        await Self.spin(0.2)
+        #expect(tv.string == "Alpha rewritten elsewhere",
                 "stale ranges would replay over text they were not recorded on")
+        #expect(coordinator.undoManagers["A"]?.canUndo != true)
+    }
+
+    /// A rebuild leaves the caret at the end of the text, so a switch back used to
+    /// put the next keystroke there, far from where the reader had been typing.
+    @Test("the caret comes back with its document")
+    func caretComesBack() async throws {
+        let document = Document(id: "A", text: "Alpha, a line long enough to hold a caret somewhere in the middle.")
+        let (tv, _) = try await Self.stage(document)
+        tv.setSelectedRange(NSRange(location: 12, length: 4))
+        await Self.spin(0.2)
+
+        await Self.switchInTwoPasses(document, to: "B", text: "Beta")
+        await Self.switchInTwoPasses(document, to: "A", text: "Alpha, a line long enough to hold a caret somewhere in the middle.")
+
+        #expect(tv.selectedRange() == NSRange(location: 12, length: 4))
+    }
+
+    @Test("a document rewritten while switched away gets no caret from the old text")
+    func caretIsNotPutIntoOtherText() async throws {
+        let document = Document(id: "A", text: "Alpha, a line long enough to hold a caret somewhere in the middle.")
+        let (tv, _) = try await Self.stage(document)
+        tv.setSelectedRange(NSRange(location: 12, length: 4))
+        await Self.spin(0.2)
+
+        await Self.switchInTwoPasses(document, to: "B", text: "Beta")
+        await Self.switchInTwoPasses(document, to: "A", text: "Rewritten elsewhere, and long enough that the old range would still fit in it.")
+
+        #expect(tv.selectedRange() != NSRange(location: 12, length: 4))
+    }
+
+    /// The switch's first pass carries the new id with the previous document's
+    /// text. The restore was clamped against THAT text and then gave up because
+    /// "the text is not empty", so nothing was armed when the document arrived
+    /// (measured in Nodes: want 5504, the other note allowed 1559, stayed there).
+    @Test("back from a shorter document, the reader is where they were")
+    func scrollComesBackFromAShorterDocument() async throws {
+        let long = (1...200).map { "Line \($0) of a long document." }.joined(separator: "\n\n")
+        let document = Document(id: "A", text: long)
+        let (tv, coordinator) = try await Self.stage(document)
+        let scrollView = try #require(tv.enclosingScrollView)
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: 3000))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+        await Self.spin(0.3)
+
+        await Self.switchInTwoPasses(document, to: "B", text: "Beta, a short note.")
+        await Self.switchInTwoPasses(document, to: "A", text: long)
+
+        #expect(abs(scrollView.contentView.bounds.origin.y - 3000) < 1)
+        #expect(coordinator.pendingScrollRestoreDocumentId == nil, "nothing stays armed once it landed")
     }
 }
-
