@@ -4,7 +4,8 @@
 //
 //  Created by Luca Chen on 16.03.26.
 //
-//  Caret-indicator workarounds: block-image hide/resize + trailing-`\n` Y-snap (FB22524198).
+//  Caret-indicator workarounds: block-image hide/resize + trailing-`\n` Y-snap (FB22524198)
+//  + a caret in whitespace past the right margin (NativeTextView+HangingCaret).
 //
 
 import AppKit
@@ -13,10 +14,14 @@ extension NativeTextView {
     override func updateInsertionPointStateAndRestartTimer(_ restartFlag: Bool) {
         super.updateInsertionPointStateAndRestartTimer(restartFlag)
         applyBlockImageCaretPolicy()
-        DispatchQueue.main.async { [weak self] in self?.fixPhantomTrailingCaret() }
+        DispatchQueue.main.async { [weak self] in
+            self?.fixPhantomTrailingCaret()
+            self?.placeCaretPastMargin()
+        }
     }
 
     func applyBlockImageCaretPolicy() {
+        guard !isTrackingDrag else { return }
         let indicators = subviews.filter { type(of: $0) == NSTextInsertionIndicator.self }
         guard !indicators.isEmpty else { return }
 
@@ -67,6 +72,7 @@ extension NativeTextView {
 
     /// FB22524198: AppKit drops the trailing-`\n` caret onto the previous line's top — snap it to `lastLineMaxY + paragraphSpacing` instead. (Companion to FB15131180; this one fixes Y, the other fixes height.)
     func fixPhantomTrailingCaret() {
+        guard !isTrackingDrag else { return }
         if let indicator = subviews.first(where: { type(of: $0) == NSTextInsertionIndicator.self }),
            observedCaretIndicator !== indicator {
             caretIndicatorObservation?.invalidate()
@@ -75,6 +81,7 @@ extension NativeTextView {
                 guard let self, !self.isApplyingCaretShift else { return }
                 self.applyBlockImageCaretPolicy()
                 self.fixPhantomTrailingCaret()
+                self.placeCaretPastMargin()
             }
         }
         guard let ts = textStorage, let indicator = observedCaretIndicator,
