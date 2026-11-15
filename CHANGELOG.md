@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `NativeTextViewWrapper(parkingKey:)` keeps the editor when the embedder removes it from the hierarchy (routing to another screen) and hands the same text view, undo stacks and scroll position to the next editor created with that key, whatever document it opens. AppKit's undo actions belong to the text view instance, so this is what keeps ⌘Z across a route away and back. One editor per key; the text and link bindings are reconnected to the new view. Off by default.
 - `NativeTextViewWrapper.fileDrop` (`EditorFileDrop`) takes files dragged onto the text. Per drop the embedder decides: insert Markdown where the files land (AppKit's insertion point shows while dragging, and the text lands on lines of its own as one undo step), hand the files off to itself, or refuse. Over an image, a formula or a table the drop goes above or below all of it, by the half the pointer is in, so its source is never cut, however many lines it spans. A file still to be written (a promise from Photos, Mail or a browser, or a browser's bare image data, named after its address) is written to a temporary folder on drop and goes the same way. Over the margins beside the column and over the header band the drag goes to the text too; the header's own views never take it (an editing title's field editor typed a dropped file's path into it). Links go in as `[[Name]]` with their id beside the text (in raw source mode as stored, id and all). Without it the text view keeps AppKit's own drag handling.
 
+### Changed
+- The extension and directive seams' syntax types (`InlineSyntax`, `BlockSyntax`,
+  `DirectiveSyntax` and its values) and `MarkdownToken`'s attribute keys are in
+  their own files, apart from styling (#208). No API or behaviour change.
+
 ### Fixed
 - An image pasted with ⌘V goes in as `![[Name]]` with its id beside the text, like a link inserted any other way; with its source showing, the `|<id>` used to show.
 - Copied links keep their ids: a copy carries the text as stored (`[[Name|id]]`) in the private flavor, and our paste puts it back in its display form with the id on `.wikiLinkID`. Copied links used to come back name-only (`[[Name]]`) and broke on the next rename. Other apps still get the text as shown.
