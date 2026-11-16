@@ -24,7 +24,7 @@ A native AppKit Markdown editor for macOS, built on TextKit 2 and bridged to Swi
 
 MarkdownEngine is the editor inside **[Nodes](https://nodes-web.com)**, a macOS app for writing, linking and exploring notes, made by a small team in Munich and Zurich. This is not a side project we open-sourced and walked away from — it is the editor our own users type in every day, and every fix here ships in a real app first.
 
-<a href="https://nodes-web.com"><img alt="Nodes at nodes-web.com" src="https://img.shields.io/badge/Nodes-nodes--web.com-2B2828" /></a>
+<a href="https://apps.apple.com/app/apple-store/id6745401961?pt=127809373&ct=github&mt=8"><img alt="Nodes on the Mac App Store" src="https://img.shields.io/badge/Nodes-Mac%20App%20Store-2B2828" /></a>
 <a href="https://www.instagram.com/nodes.app"><img alt="@nodes.app on Instagram" src="https://img.shields.io/badge/Instagram-%40nodes.app-E4405F?logo=instagram&logoColor=white" /></a>
 
 We share what we are building day to day on Instagram. If the engine is useful to you, telling someone about it is all we would ask for.
