@@ -10,17 +10,24 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-yellow.svg" alt="License: Apache 2.0" /></a>
   <a href="https://github.com/nodes-app/swift-markdown-engine/actions/workflows/ci.yml"><img src="https://github.com/nodes-app/swift-markdown-engine/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
 </p>
-<p align="center">
-  <a href="https://nodes-web.com"><img alt="Nodes at nodes-web.com" src="https://img.shields.io/badge/Nodes-nodes--web.com-2B2828" /></a>
-  <a href="https://www.instagram.com/nodes.app"><img alt="@nodes.app on Instagram" src="https://img.shields.io/badge/Instagram-%40nodes.app-E4405F?logo=instagram&logoColor=white" /></a>
-</p>
 
 
 
 
 A native AppKit Markdown editor for macOS, built on TextKit 2 and bridged to SwiftUI. Live styling, wiki-link support, fenced code blocks with syntax highlighting, LaTeX rendering, embedded images, and GitHub-style task checkboxes.
 
-It is the editor inside **[Nodes](https://nodes-web.com)**, a macOS app for writing, linking and exploring notes, made by a small team in Munich and Zurich. This is not a side project we open-sourced and walked away from — it is the editor our own users type in every day, and every fix here ships in a real app first.
+## Who makes it
+
+<a href="https://nodes-web.com">
+  <img align="right" width="96" alt="Nodes" src="media/nodes-app-icon.png" />
+</a>
+
+MarkdownEngine is the editor inside **[Nodes](https://nodes-web.com)**, a macOS app for writing, linking and exploring notes, made by a small team in Munich and Zurich. This is not a side project we open-sourced and walked away from — it is the editor our own users type in every day, and every fix here ships in a real app first.
+
+<a href="https://nodes-web.com"><img alt="Nodes at nodes-web.com" src="https://img.shields.io/badge/Nodes-nodes--web.com-2B2828" /></a>
+<a href="https://www.instagram.com/nodes.app"><img alt="@nodes.app on Instagram" src="https://img.shields.io/badge/Instagram-%40nodes.app-E4405F?logo=instagram&logoColor=white" /></a>
+
+We share what we are building day to day on Instagram. If the engine is useful to you, telling someone about it is all we would ask for.
 
 ## Features
 
@@ -418,8 +425,7 @@ version (`0.x.y`) in your `Package.swift`.
 
 ## Contributing
 
-Bug reports, ideas, and pull requests are welcome. If the engine is useful to
-you, telling someone about it is all we would ask for.
+Bug reports, ideas, and pull requests are welcome.
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — codemap and pipeline guide for
   contributors
