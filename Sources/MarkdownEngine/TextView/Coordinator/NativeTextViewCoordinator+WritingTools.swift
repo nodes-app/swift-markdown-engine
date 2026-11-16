@@ -5,8 +5,10 @@
 //  Created by Luca Chen on 16.03.26.
 //
 //  Writing Tools sessions: styling pauses while one runs, its result reaches the
-//  binding at the end, and ⌘Z or a document switch ends it, because AppKit's own end
-//  replays the session's ranges over whatever text is there by then.
+//  binding at the end (a panel result as soon as it lands, its lists as Markdown),
+//  and ⌘Z or a document switch ends it, because AppKit's own end replays the
+//  session's ranges over whatever text is there by then. A panel session lingers
+//  after its result: it holds nothing, so editing goes on as usual.
 //
 
 import AppKit
@@ -53,6 +55,75 @@ extension NativeTextViewCoordinator {
         DispatchQueue.main.async { [self] in
             guard bindingFollows(target) else { return }
             text = storage
+        }
+    }
+
+    /// Whether an edit made during a session is final. Inline results stream in
+    /// with the coordinator interactive and reach the binding at the session's end.
+    /// A result from the Writing Tools panel (Summary, Key Points, List, Table:
+    /// Replace) lands in one edit with the coordinator inactive, and the end may
+    /// never come: measured on 27, the user typed on and a node switch dropped
+    /// the summary unsaved.
+    func writingToolsEditIsFinal(_ textView: NSTextView) -> Bool {
+        guard #available(macOS 15.2, *), let writingTools = textView.writingToolsCoordinator else { return false }
+        switch writingTools.state {
+        case .interactiveResting, .interactiveStreaming: return false
+        default: return true
+        }
+    }
+
+    /// The binding takes a final edit now, as stored text, rebuilt in full: the
+    /// incremental wiki splice trusts a storage the held inline edits never updated.
+    func syncBindingDuringWritingTools(_ textView: NSTextView) {
+        let storageState = WikiLinkService.makeStorageState(
+            from: textView.string,
+            existingMetadata: wikiLinkMetadata,
+            textStorage: textView.textStorage
+        )
+        wikiLinkMetadata = storageState.metadata
+        lastComputedStorage = storageState.storage
+        let storage = storageState.storage
+        guard storage != lastSyncedText else { return }
+        let target = documentId
+        DispatchQueue.main.async { [self] in
+            guard bindingFollows(target) else { return }
+            lastSyncedText = storage
+            text = storage
+        }
+    }
+
+    /// A panel result's AppKit list becomes Markdown (`TextListMarkdown`), as its own
+    /// undo step right after the insert: inside this pass the edit is still AppKit's.
+    func convertWritingToolsLists(_ textView: NSTextView, editedRange: NSRange?) {
+        guard let editedRange, let storage = textView.textStorage,
+              let conversion = TextListMarkdown.conversion(of: storage, in: editedRange) else { return }
+        let target = documentId
+        DispatchQueue.main.async { [weak self, weak textView] in
+            guard let self, let textView, bindingFollows(target), let storage = textView.textStorage else { return }
+            let text = storage.string as NSString
+            guard NSMaxRange(conversion.range) <= text.length,
+                  text.substring(with: conversion.range) == conversion.original else { return }
+            // The list's paragraph style would come back with the first character's
+            // attributes; the styler sets everything else.
+            var attributes = storage.attributes(at: conversion.range.location, effectiveRange: nil)
+            if let style = attributes[.paragraphStyle] as? NSParagraphStyle,
+               let plain = style.mutableCopy() as? NSMutableParagraphStyle {
+                plain.textLists = []
+                attributes[.paragraphStyle] = plain
+            }
+            let selection = textView.selectedRange()
+            isProgrammaticEdit = true
+            defer { isProgrammaticEdit = false }
+            textView.breakUndoCoalescing()
+            guard textView.shouldChangeText(in: conversion.range, replacementString: conversion.markdown) else { return }
+            storage.replaceCharacters(in: conversion.range, with: NSAttributedString(string: conversion.markdown, attributes: attributes))
+            textView.didChangeText()
+            textView.breakUndoCoalescing()
+            // The caret AppKit left after the result stays after it.
+            if selection.location >= NSMaxRange(conversion.range) {
+                let delta = (conversion.markdown as NSString).length - conversion.range.length
+                textView.setSelectedRange(NSRange(location: selection.location + delta, length: selection.length))
+            }
         }
     }
 
