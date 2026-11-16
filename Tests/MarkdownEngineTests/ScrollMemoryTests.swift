@@ -100,4 +100,22 @@ struct ScrollMemoryTests {
 
         #expect(coordinator.pendingScrollRestoreDocumentId == nil)
     }
+
+    /// A restore kept for the pass that brings the document must not outlive it:
+    /// passes only tick when one happens, so the budget alone is not a bound.
+    @Test("A kept restore whose document never arrives is dropped")
+    func keptRestoreExpires() {
+        let coordinator = makeCoordinator(documentId: "note-a")
+        coordinator.armScrollRestore(for: "note-a")
+        coordinator.dropStaleScrollRestore()
+        #expect(coordinator.pendingScrollRestoreDocumentId == "note-a", "no deadline until a pass keeps it")
+
+        coordinator.pendingScrollRestoreDeadline = Date(timeIntervalSinceNow: -0.1)
+        coordinator.dropStaleScrollRestore()
+        #expect(coordinator.pendingScrollRestoreDocumentId == nil)
+
+        coordinator.armScrollRestore(for: "note-b")
+        coordinator.dropStaleScrollRestore()
+        #expect(coordinator.pendingScrollRestoreDocumentId == "note-b", "arming starts without a deadline")
+    }
 }
