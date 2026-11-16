@@ -24,7 +24,7 @@ import Foundation
 /// single override is enough to retheme the entire editor. The defaults
 /// reproduce a system-native macOS look using `NSColor` dynamic system
 /// colors, so light/dark-mode switching keeps working without extra code.
-public struct MarkdownEditorTheme: Sendable {
+public struct MarkdownEditorTheme: Sendable, Equatable {
 
     // MARK: Text colors
 
