@@ -14,8 +14,20 @@
 
 
 
-A native AppKit Markdown editor for macOS, built on TextKit 2 and bridged to SwiftUI. It is the editor inside **[Nodes](https://apps.apple.com/app/apple-store/id6745401961?pt=127809373&ct=github&mt=8)**, a macOS notes app. Live styling, wiki-link support, fenced code blocks with syntax highlighting, LaTeX rendering, embedded images, and GitHub-style task
-checkboxes.
+A native AppKit Markdown editor for macOS, built on TextKit 2 and bridged to SwiftUI. Live styling, wiki-link support, fenced code blocks with syntax highlighting, LaTeX rendering, embedded images, and GitHub-style task checkboxes.
+
+## Who makes it
+
+<a href="https://nodes-web.com">
+  <img align="right" width="96" alt="Nodes" src="media/nodes-app-icon.png" />
+</a>
+
+MarkdownEngine is the editor inside **[Nodes](https://nodes-web.com)**, a macOS app for writing, linking and exploring notes, made by a small team in Munich and Zurich. This is not a side project we open-sourced and walked away from — it is the editor our own users type in every day, and every fix here ships in a real app first.
+
+<a href="https://nodes-web.com"><img alt="Nodes at nodes-web.com" src="https://img.shields.io/badge/Nodes-nodes--web.com-2B2828" /></a>
+<a href="https://www.instagram.com/nodes.app"><img alt="@nodes.app on Instagram" src="https://img.shields.io/badge/Instagram-%40nodes.app-E4405F?logo=instagram&logoColor=white" /></a>
+
+We share what we are building day to day on Instagram. If the engine is useful to you, telling someone about it is all we would ask for.
 
 ## Features
 
@@ -411,19 +423,6 @@ MarkdownEngine is currently **pre-1.0**. The public API may change between
 minor releases as it stabilizes. Production use is fine — pin a specific
 version (`0.x.y`) in your `Package.swift`.
 
-## Who makes it
-
-<a href="https://apps.apple.com/app/apple-store/id6745401961?pt=127809373&ct=github&mt=8">
-  <img align="right" width="96" alt="Nodes" src="media/nodes-app-icon.png" />
-</a>
-
-MarkdownEngine is the editor inside **[Nodes](https://apps.apple.com/app/apple-store/id6745401961?pt=127809373&ct=github&mt=8)**,
-a macOS app for writing, linking and exploring notes. This is not a side project
-we open-sourced and walked away from — it is the editor our own users type in
-every day, and every fix here ships in a real app first.
-
-If it is useful to you, telling someone about it is all we would ask for.
-
 ## Contributing
 
 Bug reports, ideas, and pull requests are welcome.
@@ -437,6 +436,3 @@ Bug reports, ideas, and pull requests are welcome.
 
 MarkdownEngine is released under the Apache 2.0 License. See [LICENSE](LICENSE)
 for the full text.
-
----
-Built by a small team in Munich and Zurich. Day-to-day on [Instagram](https://www.instagram.com/nodes.app).
