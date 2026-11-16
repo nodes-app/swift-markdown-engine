@@ -32,6 +32,10 @@ extension NativeTextViewCoordinator {
         didMarkdownHeading(item)
     }
 
+    @objc func handleParagraphNotification(_ notification: Notification) {
+        didMarkdownParagraph(nil)
+    }
+
     @objc func handleStrikethroughNotification(_ notification: Notification) {
         didMarkdownStrikethrough(nil)
     }
@@ -50,6 +54,10 @@ extension NativeTextViewCoordinator {
 
     @objc func handleOrderedListNotification(_ notification: Notification) {
         didMarkdownOrderedList(nil)
+    }
+
+    @objc func handleTaskListNotification(_ notification: Notification) {
+        didMarkdownTaskList(nil)
     }
 
     @objc func handleLinkNotification(_ notification: Notification) {
