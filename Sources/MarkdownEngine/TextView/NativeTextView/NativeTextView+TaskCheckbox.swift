@@ -45,8 +45,7 @@ extension NativeTextView {
     }
 
     func toggleTaskCheckboxIfHit(event: NSEvent) -> Bool? {
-        guard let bridge = layoutBridge,
-              let storage = textStorage else { return nil }
+        guard layoutBridge != nil, let storage = textStorage else { return nil }
         let localPoint = convert(event.locationInWindow, from: nil)
         let containerPoint = CGPoint(
             x: localPoint.x - textContainerOrigin.x,
@@ -59,17 +58,62 @@ extension NativeTextView {
         let checkboxText = nsText.substring(with: effectiveRange)
         guard checkboxText.range(of: #"\[[ xX]\]"#, options: .regularExpression) != nil else { return nil }
 
-        let replacement = hitIsChecked ? "[ ]" : "[x]"
-        if shouldChangeText(in: effectiveRange, replacementString: replacement) {
-            storage.replaceCharacters(in: effectiveRange, with: replacement)
-            storage.addAttribute(.taskCheckbox, value: !hitIsChecked, range: effectiveRange)
-            storage.addAttribute(.foregroundColor, value: NSColor.clear, range: effectiveRange)
-            didChangeText()
-            bridge.invalidateDisplay(forCharacterRange: effectiveRange)
-            if let coord = delegate as? NativeTextViewCoordinator {
-                let paragraph = (storage.string as NSString).paragraphRange(for: effectiveRange)
-                coord.restyleParagraphs([paragraph], in: self)
+        _ = applyTaskCheckboxState(!hitIsChecked, in: effectiveRange)
+        return true
+    }
+
+    @discardableResult
+    private func applyTaskCheckboxState(_ isChecked: Bool, in range: NSRange) -> Bool {
+        guard let bridge = layoutBridge,
+              let storage = textStorage,
+              NSMaxRange(range) <= storage.length else { return false }
+        let checkboxText = (storage.string as NSString).substring(with: range)
+        let checkedPattern = #"\[[xX]\]"#
+        let previousIsChecked = checkboxText.range(of: checkedPattern, options: .regularExpression) != nil
+        guard previousIsChecked != isChecked else { return false }
+
+        let replacement = isChecked ? "[x]" : "[ ]"
+        let isReadOnlyOptIn = !isEditable && allowsTaskCheckboxInteractionWhenReadOnly
+        let shouldToggle: Bool
+        if isEditable {
+            shouldToggle = shouldChangeText(in: range, replacementString: replacement)
+        } else if isReadOnlyOptIn {
+            // NSTextView rejects shouldChangeText while read-only. Consult the
+            // coordinator directly so its exact-edit bookkeeping and binding
+            // synchronization still run, without briefly enabling text input.
+            if let coordinator = delegate as? NativeTextViewCoordinator {
+                coordinator.isProgrammaticEdit = true
+                defer { coordinator.isProgrammaticEdit = false }
+                shouldToggle = coordinator.textView(
+                    self,
+                    shouldChangeTextIn: range,
+                    replacementString: replacement
+                )
+            } else {
+                shouldToggle = true
             }
+        } else {
+            shouldToggle = false
+        }
+        guard shouldToggle else { return false }
+
+        if isReadOnlyOptIn,
+           let readOnlyUndoManager = (delegate as? NativeTextViewCoordinator)?.undoManager(for: self)
+                ?? undoManager {
+            readOnlyUndoManager.registerUndo(withTarget: self) { textView in
+                textView.applyTaskCheckboxState(previousIsChecked, in: range)
+            }
+            readOnlyUndoManager.setActionName("Toggle Task Checkbox")
+        }
+
+        storage.replaceCharacters(in: range, with: replacement)
+        storage.addAttribute(.taskCheckbox, value: isChecked, range: range)
+        storage.addAttribute(.foregroundColor, value: NSColor.clear, range: range)
+        didChangeText()
+        bridge.invalidateDisplay(forCharacterRange: range)
+        if let coord = delegate as? NativeTextViewCoordinator {
+            let paragraph = (storage.string as NSString).paragraphRange(for: range)
+            coord.restyleParagraphs([paragraph], in: self)
         }
         return true
     }
