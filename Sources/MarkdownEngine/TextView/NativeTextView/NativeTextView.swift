@@ -49,6 +49,17 @@ final class NativeTextView: NSTextView {
 
     // MARK: Editor wiring
     var onPasteImage: ((NSPasteboard) -> String?)?
+    /// Files dropped onto the text (`NativeTextView+FileDrop`). Only whether one is
+    /// set changes the registered drag types.
+    var fileDrop: EditorFileDrop? {
+        didSet {
+            guard (oldValue == nil) != (fileDrop == nil) else { return }
+            updateDragTypeRegistration()
+            (superview as? NativeTextViewContainer)?.updateFileDropRegistration()
+        }
+    }
+    /// The files of the drag in progress, read once per drag (`draggedFiles(for:)`).
+    var draggedFilesCache: (key: String, files: DraggedFiles?)?
     var onFocusChange: ((Bool) -> Void)?
     private var reportedFocus = false
     /// `nil` preserves AppKit-owned focus. A value represents the latest
@@ -67,6 +78,10 @@ final class NativeTextView: NSTextView {
     var caretIndicatorObservation: NSKeyValueObservation?
     weak var observedCaretIndicator: NSView?
     var isApplyingCaretShift: Bool = false
+    /// From a drag entering the text until it leaves, drops or ends. AppKit shows the
+    /// drop point with the caret's own indicator, so the caret workarounds, which place
+    /// it by the SELECTION, stay out: they pinned the drop point to the selection's line.
+    var isTrackingDrag = false
 
     // MARK: Drag-select state
     var dragStartMouseScreenLoc: NSPoint?
@@ -95,8 +110,31 @@ final class NativeTextView: NSTextView {
     /// relative to it (a proofread's context is one paragraph, a rewrite's the document).
     var writingToolsContextStarts: [UUID: Int] = [:]
 
+    /// Set by a layout fragment while it draws selected text that sits on an
+    /// opaque fill: the fill hides the selection highlight, so the glyphs keep
+    /// their own colour instead of `selectedTextColor` (#215). TextKit reads the
+    /// getter below while it draws.
+    var drawsSelectedTextInOwnColors = false
+
+    override var selectedTextAttributes: [NSAttributedString.Key: Any] {
+        get {
+            var attributes = super.selectedTextAttributes
+            if drawsSelectedTextInOwnColors { attributes[.foregroundColor] = nil }
+            return attributes
+        }
+        set { super.selectedTextAttributes = newValue }
+    }
+
+    /// Whether the view held the keyboard when it last left a window.
+    private var heldFocusOnRemoval = false
+    /// Set when a parked editor is handed out again (`parkingKey`): the view
+    /// takes the keyboard back if it had it, or ⌘Z after the way back goes to
+    /// the window and does nothing.
+    var returnsFocusAfterParking = false
+
     override func viewWillMove(toWindow newWindow: NSWindow?) {
         if let window, window !== newWindow {
+            heldFocusOnRemoval = window.firstResponder === self
             NotificationCenter.default.removeObserver(self, name: NSWindow.willCloseNotification, object: window)
             reportFocusLossOnRemoval()
         }
@@ -112,6 +150,17 @@ final class NativeTextView: NSTextView {
             )
         }
         reconcileRequestedFocus()
+        if window != nil, returnsFocusAfterParking {
+            returnsFocusAfterParking = false
+            guard heldFocusOnRemoval else { return }
+            // One turn later, and only if nothing else is being typed into (a new
+            // note's title field). Not "the window holds it": a SwiftUI screen that
+            // took focus leaves it on the hosting view when it goes.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let window = self.window, !(window.firstResponder is NSText) else { return }
+                window.makeFirstResponder(self)
+            }
+        }
     }
 
     @objc private func focusWindowWillClose(_ notification: Notification) {

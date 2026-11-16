@@ -40,19 +40,6 @@ extension NativeTextViewCoordinator {
         return manager
     }
 
-    /// Drops `documentId`'s undo stack when its switch-away snapshot no longer
-    /// matches the text now being loaded (the file was rewritten while switched
-    /// away). AppKit's range-based text undo would otherwise corrupt the reloaded
-    /// content. Returns `true` if a stack was cleared.
-    @discardableResult
-    func invalidateUndoIfContentDiverged(for documentId: String, incomingText: String) -> Bool {
-        guard let snapshot = undoContentSnapshots[documentId], snapshot != incomingText else {
-            return false
-        }
-        undoManagers[documentId]?.removeAllActions()
-        return true
-    }
-
     /// Force base typingAttributes on every change so AppKit's auto-inheritance
     /// can't bleed a heading paragraphStyle into the trailing extra-line
     /// fragment's metrics.
@@ -109,7 +96,10 @@ extension NativeTextViewCoordinator {
             }
             return
         }
-        let wtActive = isWritingToolsActive
+        // A session holds the text only while Writing Tools work in it. One whose
+        // panel result has landed lingers with nothing to hold: that is editing.
+        let wtSession = isWritingToolsActive
+        let wtActive = wtSession && !writingToolsEditIsFinal(tv)
         if wtActive, wtDetectedMode == .unknown {
             let firstEditLen = tv.textStorage?.editedRange.length ?? 0
             if let sel = wtInitialSelectionRange, sel.length > 0 {
@@ -118,6 +108,10 @@ extension NativeTextViewCoordinator {
             } else {
                 wtDetectedMode = .rewrite
             }
+        }
+        if wtSession, !wtActive {
+            convertWritingToolsLists(tv, editedRange: pendingEditedRange ?? tv.textStorage?.editedRange)
+            syncBindingDuringWritingTools(tv)
         }
         if wtActive && wtDetectedMode == .proofread { return }
 
@@ -166,7 +160,7 @@ extension NativeTextViewCoordinator {
             parseGeneration &+= 1
         }
 
-        if !wtActive {
+        if !wtSession {
             let storageState = PerfTrace.measure("wiki") {
                 WikiLinkService.updatedStorageState(
                     displayText: docString,
@@ -387,7 +381,7 @@ extension NativeTextViewCoordinator {
         guard let tv = notification.object as? NSTextView else { return }
         // Raw mode: plain source — no reveal, snap-back, or inline previews.
         if configuration.rawSourceMode { return }
-        if isWritingToolsActive { return }
+        if isWritingToolsActive, !writingToolsEditIsFinal(tv) { return }
         PerfTrace.checkpoint("selIn")
         defer { PerfTrace.checkpoint("selOut") }
         // Assigning `textView.string` during a document rebuild re-enters here
@@ -833,10 +827,16 @@ extension NativeTextViewCoordinator {
     }
 
     public func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool {
+        // Before this edit lands on the stack.
+        validateUndoBaseline(textView)
         // ONE bridge of the pre-edit text — every `textView.string` read is an
         // O(doc) copy of the mutable backing store; this function used to take
         // four of them per keystroke.
         let preText = textView.string
+        // Writing Tools' own edits go in as they come; once the session holds nothing
+        // (a panel result landed), the user's keystrokes get smart input again.
+        let writingToolsOwnsEdit = isWritingToolsActive
+            && !(writingToolsEditIsFinal(textView) && NSApplication.shared.currentEvent?.type == .keyDown)
         let preNS = preText as NSString
         // Open the keystroke's PERF frame HERE: the pre-edit parse and the
         // smart-input interceptors below used to run before the frame existed
@@ -851,7 +851,7 @@ extension NativeTextViewCoordinator {
             || affectedCharRange.location + affectedCharRange.length > preNS.length
         let isUndoRedo = textView.undoManager?.isUndoing == true
             || textView.undoManager?.isRedoing == true
-        let interactive = !isProgrammaticEdit && !isWritingToolsActive
+        let interactive = !isProgrammaticEdit && !writingToolsOwnsEdit
             && !configuration.rawSourceMode && !outOfBounds && !isUndoRedo
         let preEditParsed = interactive
             ? PerfTrace.measure("preParse") { parsedDocument(for: preText) }
@@ -902,7 +902,7 @@ extension NativeTextViewCoordinator {
             pendingListStructureEdit = true
         }
         if isProgrammaticEdit { return true }
-        if isWritingToolsActive { return true }
+        if writingToolsOwnsEdit { return true }
         // Raw mode: plain-text editing — no smart Markdown input.
         if configuration.rawSourceMode { return true }
         if outOfBounds {
