@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Keep the caret visible during keyboard navigation in full-width internally scrolling editors.
+
 ## [0.16.0] - 2026-11-15
 
 ### Added
