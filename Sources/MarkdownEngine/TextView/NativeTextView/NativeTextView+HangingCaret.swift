@@ -125,6 +125,7 @@ extension NativeTextView {
     /// Moves the indicator of a caret in hanging whitespace to where the next
     /// glyph lands, and keeps a caret at the clipped right edge inside it.
     func placeCaretPastMargin() {
+        guard !isTrackingDrag else { return }
         guard let indicator = observedCaretIndicator, !indicator.isHidden, !hasMarkedText() else { return }
         let selection = selectedRange()
         guard selection.length == 0 else { return }
