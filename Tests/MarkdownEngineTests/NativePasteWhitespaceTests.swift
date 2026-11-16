@@ -45,15 +45,20 @@ struct NativePasteWhitespaceTests {
         }
     }
 
-    @Test func privateMarkdownWinsOverLossyHTMLWithoutNormalization() {
+    @Test(arguments: [false, true])
+    func privateMarkdownWinsOverLossyHTMLWithoutNormalization(rawSource: Bool) {
         withPasteboard { board in
             let paste = "\n\n• literal glyph\n[[Example|record-id]]  \n\n\n"
             board.setString(paste, forType: MarkdownPasteboardWriter.markdownType)
             board.setString("<ul><li>lossy HTML</li></ul>", forType: .html)
             board.setString("lossy plain text", forType: .string)
             let view = editor("Before")
+            view.configuration.rawSourceMode = rawSource
             view.paste(nil)
-            #expect(view.string == "Before" + paste)
+            let displayed = rawSource ? paste : paste.replacingOccurrences(of: "|record-id", with: "")
+            #expect(view.string == "Before" + displayed)
+            let wholeDocument = NSRange(location: 0, length: (view.string as NSString).length)
+            #expect(view.storageMarkdown(in: wholeDocument) == "Before" + paste)
         }
     }
 
