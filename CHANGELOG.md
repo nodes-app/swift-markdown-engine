@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Pasting Markdown preserves paragraph boundaries, code indentation and hard-break whitespace; the private Markdown pasteboard flavor is inserted without lossy normalization.
+
 ## [0.16.0] - 2026-11-15
 
 ### Added
