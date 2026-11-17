@@ -907,21 +907,30 @@ enum MarkdownASTStyler {
         children: [InlineNode], font: NSFont, ctx: Ctx, into attrs: inout [StyledRange]
     ) {
         attrs.append((range, [.spellingState: 0]))
-        var urlString = ctx.ns.substring(with: urlRange)
+        let rawTarget = ctx.ns.substring(with: urlRange)
+        var urlString = rawTarget
         if !urlString.contains("://") { urlString = "https://\(urlString)" }
-        let isActive = ctx.isActive(range)
+        // Keep syntactically valid inline links clickable even when Foundation
+        // cannot form the legacy URL value (for example, a bracketed
+        // destination containing spaces). The delegate reparses the token
+        // before routing, so this string is only a hit-test value.
+        let linkValue: Any
         if let url = URL(string: urlString) {
-            if isActive {
-                attrs.append((textRange, [
-                    .foregroundColor: ctx.theme.link.withAlphaComponent(ctx.config.link.activeLinkAlpha),
-                ]))
-            } else {
-                attrs.append((textRange, [
-                    .link: url,
-                    .underlineStyle: NSUnderlineStyle.single.rawValue,
-                    .foregroundColor: ctx.theme.link,
-                ]))
-            }
+            linkValue = url
+        } else {
+            linkValue = rawTarget
+        }
+        let isActive = ctx.isActive(range)
+        if isActive {
+            attrs.append((textRange, [
+                .foregroundColor: ctx.theme.link.withAlphaComponent(ctx.config.link.activeLinkAlpha),
+            ]))
+        } else {
+            attrs.append((textRange, [
+                .link: linkValue,
+                .underlineStyle: NSUnderlineStyle.single.rawValue,
+                .foregroundColor: ctx.theme.link,
+            ]))
         }
         for marker in markers { attrs.append((marker, [.foregroundColor: ctx.theme.mutedText])) }
         // The target is syntax, revealed with its brackets and muted like them —

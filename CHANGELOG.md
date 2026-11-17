@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `onLinkActivation` lets hosts handle link destinations and source ranges before default navigation.
+
+### Fixed
+- Inline links retain escaped brackets in their labels, including their full destination and UTF-16 source range.
+
 ## [0.16.0] - 2026-11-15
 
 ### Added

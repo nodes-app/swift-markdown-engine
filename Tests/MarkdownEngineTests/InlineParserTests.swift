@@ -200,6 +200,34 @@ struct InlineParserTests {
         ])
     }
 
+    @Test("link labels retain escaped brackets", arguments: [
+        #"[Notes \[draft\]](#section)"#,
+        #"[A \] B](../My%20file.md)"#,
+        #"[a \[b\] c](u)"#,
+        #"[ends in \\](u)"#,
+        "[code `[`](u)",
+    ])
+    func linkLabelBrackets(source: String) throws {
+        let ns = source as NSString
+        let nodes = InlineParser.parse(source)
+        #expect(nodes.count == 1)
+        let node = try #require(nodes.first)
+        guard case .link(let range, let label, let url, _, _) = node else {
+            Issue.record("Expected one complete link")
+            return
+        }
+        #expect(range == NSRange(location: 0, length: ns.length))
+        #expect(label.location == 1)
+        #expect(ns.substring(with: url) == (source.contains("section")
+            ? "#section" : source.contains("My%20file") ? "../My%20file.md" : "u"))
+    }
+
+    @Test("an escaped closing bracket alone does not terminate a link label")
+    func escapedClosingBracketWithoutLabelEndIsLiteral() {
+        let nodes = InlineParser.parse(#"[a \](u)"#)
+        #expect(!nodes.contains { if case .link = $0 { true } else { false } })
+    }
+
     @Test("markdown-looking text inside code remains inert")
     func codeContainingLinkStaysOpaque() {
         #expect(InlineParser.parse("`[a](b)`") == [
