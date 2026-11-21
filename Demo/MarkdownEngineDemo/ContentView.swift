@@ -27,6 +27,7 @@ struct ContentView: View {
     @State private var showRawSource = false
     @State private var useReadingColumn = false
     @State private var editorIsFocused = false
+    @State private var lastHostCommand = "None"
 
     /// Registers/unregisters BOTH opt-in seams at once. The document is written
     /// so that flipping this off is the whole explanation of what is core
@@ -64,6 +65,14 @@ struct ContentView: View {
                 completionIndex = 0
             },
             pendingDirectiveCompletion: $pendingCompletion,
+            onUnhandledCommand: { command in
+                switch command {
+                case .escape: lastHostCommand = "Escape"
+                case .tab: lastHostCommand = "Tab"
+                case .backtab: lastHostCommand = "Shift-Tab"
+                }
+                return command == .escape
+            },
             placeholder: NSAttributedString(
                 string: "Empty document — start typing, markdown styles live…",
                 attributes: [
@@ -87,6 +96,7 @@ struct ContentView: View {
                 } label: {
                     Label("Focus editor", systemImage: "text.cursor")
                 }
+                Text("Host command: \(lastHostCommand)")
 
                 Toggle(isOn: $isReadOnly) {
                     Label("Read-only", systemImage: isReadOnly ? "lock" : "lock.open")
@@ -612,4 +622,3 @@ private let markdownFooter = """
 ---
 
 """
-
