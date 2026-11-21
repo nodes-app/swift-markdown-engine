@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `MarkdownEditorBus.applyParagraphRequest` and `applyTaskListRequest` add
+  multiline, line-ending-preserving block-formatting commands for embedders.
+
 ## [0.16.0] - 2026-11-15
 
 ### Added
