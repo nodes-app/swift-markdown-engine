@@ -15,6 +15,7 @@
 import Foundation
 import Testing
 @testable import MarkdownEngine
+@testable import MarkdownEngineSyntax
 
 struct GoldenEntry {
     let name: String

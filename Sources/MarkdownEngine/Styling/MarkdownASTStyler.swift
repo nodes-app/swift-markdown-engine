@@ -19,6 +19,7 @@
 
 import AppKit
 import Foundation
+import MarkdownEngineSyntax
 
 enum MarkdownASTStyler {
 

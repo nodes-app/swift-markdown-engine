@@ -39,7 +39,7 @@
 
 import Foundation
 
-enum EmphasisKind: Equatable { case italic, bold, boldItalic }
+package enum EmphasisKind: Equatable { case italic, bold, boldItalic }
 
 /// What the claimed-range and containment scans did during one parse.
 ///
@@ -47,7 +47,7 @@ enum EmphasisKind: Equatable { case italic, bold, boldItalic }
 /// walk, and both are a pure function of the input — which is the point. The
 /// span-density tests assert on these instead of on elapsed time, so they mean
 /// the same thing on a laptop and on a loaded CI runner.
-struct InlineParseCost: Equatable {
+package struct InlineParseCost: Equatable {
     /// Claimed ranges inspected by `ClaimedIndex` across every pass.
     var claimedProbes = 0
     /// Span-in-region containment tests performed while building the tree.
@@ -55,7 +55,7 @@ struct InlineParseCost: Equatable {
 }
 
 /// A node in the inline AST.
-indirect enum InlineNode: Equatable {
+package indirect enum InlineNode: Equatable {
     case text(NSRange)
     /// `` `code` `` — opaque; `range` covers the backticks, `content` strips single-space padding.
     case code(range: NSRange, content: NSRange)
@@ -81,15 +81,15 @@ indirect enum InlineNode: Equatable {
 
 /// An extension-contributed inline span. `children` is empty for opaque
 /// (non-`parsesContent`) spans.
-struct ExtensionInlineNode: Equatable {
-    let extensionID: String
-    let range: NSRange
-    let contentRange: NSRange
-    let markers: [NSRange]   // [open, close]
-    let children: [InlineNode]
+package struct ExtensionInlineNode: Equatable {
+    package let extensionID: String
+    package let range: NSRange
+    package let contentRange: NSRange
+    package let markers: [NSRange]   // [open, close]
+    package let children: [InlineNode]
 }
 
-enum InlineParser {
+package enum InlineParser {
 
     private static let backtick: unichar = 0x60
     private static let asterisk: unichar = 0x2A
@@ -106,7 +106,7 @@ enum InlineParser {
 
     // MARK: - Entry point
 
-    static func parse(_ text: String, registry: ExtensionRegistry = .empty) -> [InlineNode] {
+    package static func parse(_ text: String, registry: ExtensionRegistry = .empty) -> [InlineNode] {
         var cost = InlineParseCost()
         return parse(text, registry: registry, cost: &cost)
     }
@@ -119,7 +119,7 @@ enum InlineParser {
     /// is above the pre-rewrite floor, so no threshold separates them. These
     /// counts are a pure function of the input: identical everywhere, and
     /// quadratic vs. linear differ by orders of magnitude rather than by 1.4x.
-    static func parse(_ text: String, registry: ExtensionRegistry = .empty,
+    package static func parse(_ text: String, registry: ExtensionRegistry = .empty,
                       cost: inout InlineParseCost) -> [InlineNode] {
         let ns = text as NSString
         let len = ns.length
@@ -142,7 +142,7 @@ enum InlineParser {
     }
 
     /// Parse the inline content of `range` within `ns`, returning nodes in absolute document coordinates.
-    static func parse(_ ns: NSString, range: NSRange, registry: ExtensionRegistry = .empty) -> [InlineNode] {
+    package static func parse(_ ns: NSString, range: NSRange, registry: ExtensionRegistry = .empty) -> [InlineNode] {
         offsetNodes(parse(ns.substring(with: range), registry: registry), by: range.location)
     }
 

@@ -10,6 +10,7 @@
 
 import AppKit
 import CoreText
+import MarkdownEngineSyntax
 
 // MARK: - Custom attribute keys for rendering overlays
 

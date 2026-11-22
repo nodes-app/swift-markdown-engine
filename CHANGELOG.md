@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `MarkdownEngineSyntax`, a Foundation-only target and library product holding the grammar: `Parser/`, the extension and directive seams' syntax and `PerfTrace`. `MarkdownEngine` depends on it and re-exports it, and its public syntax types keep their `MarkdownEngine` names, so embedders' code compiles unchanged. What the editor uses from it is `package`; the product's public API is the seam types that were already public (#208).
+
+### Changed
+- `ExtensionRegistry` and `DirectiveRegistry` are built from syntax values (each extension's id and `InlineSyntax`/`BlockSyntax`, each directive's id and `DirectiveSyntax`); the initialisers that take `MarkdownExtension`s and `MarkdownDirective`s stay, beside the protocols. `ExtensionRegistry` moves to `ExtensionSyntax.swift`. Fingerprints are unchanged (#208). No API or behaviour change.
+
 ## [0.16.0] - 2026-11-15
 
 ### Added

@@ -15,6 +15,7 @@
 
 import AppKit
 import Foundation
+import MarkdownEngineSyntax
 
 // MARK: - Top-level Configuration
 

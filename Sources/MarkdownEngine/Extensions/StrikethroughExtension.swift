@@ -17,6 +17,7 @@
 
 import AppKit
 import Foundation
+import MarkdownEngineSyntax
 
 public struct StrikethroughExtension: MarkdownExtension {
 

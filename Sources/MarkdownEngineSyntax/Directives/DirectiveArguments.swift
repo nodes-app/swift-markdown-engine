@@ -79,7 +79,7 @@ extension DirectiveArguments {
     /// Parse and coerce the argument list at `range` against `schema`.
     /// A nil or empty range still applies defaults and reports missing
     /// required parameters, so `@font` and `@font()` behave identically.
-    init(parsing range: NSRange?, in ns: NSString, schema: [DirectiveParameter]) {
+    package init(parsing range: NSRange?, in ns: NSString, schema: [DirectiveParameter]) {
         let anchor = range ?? NSRange(location: 0, length: 0)
         guard let range, range.length > 0 else {
             self = Self.applyingDefaults(labeled: [:], positional: [], diagnostics: [],

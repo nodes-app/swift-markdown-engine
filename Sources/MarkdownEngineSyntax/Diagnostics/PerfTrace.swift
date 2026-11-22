@@ -16,17 +16,17 @@
 
 import Foundation
 
-enum PerfTrace {
+package enum PerfTrace {
 #if DEBUG
     static var enabled = ProcessInfo.processInfo.environment["MD_PERF"] != "0"
     /// Opt-in for the sampled full-rebuild verifier asserts (wiki splice,
     /// backtick census, parse buffer). They run 3× O(doc) work synchronously
     /// on every 64th keystroke — periodic spikes that pollute the PERF
     /// numbers — so they stay off unless explicitly requested.
-    static let verifyEnabled = ProcessInfo.processInfo.environment["MD_PERF_VERIFY"] == "1"
+    package static let verifyEnabled = ProcessInfo.processInfo.environment["MD_PERF_VERIFY"] == "1"
 #else
     static let enabled = false
-    static let verifyEnabled = false
+    package static let verifyEnabled = false
 #endif
 
     // All call sites run on the main thread (the coordinator + text view are
@@ -52,7 +52,7 @@ enum PerfTrace {
     /// frame and were invisible), the mid-edit selection change and
     /// textDidChange attach to it. A frame left open by an edit that never
     /// reached textDidChange is considered stale after 1s and reset.
-    static func begin(docLength len: Int) {
+    package static func begin(docLength len: Int) {
         guard enabled else { return }
         let now = DispatchTime.now().uptimeNanoseconds
         docLength = len
@@ -69,7 +69,7 @@ enum PerfTrace {
     /// (caret reveal, spell-checker callbacks) that can fire several times
     /// per keystroke and would otherwise stay invisible in the frame.
     @discardableResult
-    static func accumulate<T>(_ label: String, _ body: () -> T) -> T {
+    package static func accumulate<T>(_ label: String, _ body: () -> T) -> T {
         guard enabled, active else { return body() }
         let t0 = nowMs()
         let result = body()
@@ -85,7 +85,7 @@ enum PerfTrace {
 
     /// Time one sequential top-level phase of the current frame.
     @discardableResult
-    static func measure<T>(_ label: String, _ body: () -> T) -> T {
+    package static func measure<T>(_ label: String, _ body: () -> T) -> T {
         guard enabled, active else { return body() }
         let t0 = nowMs()
         let result = body()
@@ -95,7 +95,7 @@ enum PerfTrace {
 
     /// Attach a free-form detail line (e.g. how many tables were re-rendered).
     /// The closure only runs when tracing is active, so it costs nothing when off.
-    static func note(_ make: () -> String) {
+    package static func note(_ make: () -> String) {
         guard enabled, active else { return }
         notes.append(make())
     }
@@ -104,7 +104,7 @@ enum PerfTrace {
     /// breakdown, printed as `@label=12.34`. The gaps BETWEEN checkpoints and
     /// the measured spans locate work the spans don't cover (AppKit edit
     /// application, layout, notification dispatch between our callbacks).
-    static func checkpoint(_ label: String) {
+    package static func checkpoint(_ label: String) {
         guard enabled, active else { return }
         phases.append(("@" + label, Double(DispatchTime.now().uptimeNanoseconds - frameStart) / 1_000_000))
     }
@@ -112,7 +112,7 @@ enum PerfTrace {
     /// Close the frame and print total + per-phase breakdown + notes.
     /// `other` = total − Σ(phases + accumulated): time inside the frame that
     /// no span covers (AppKit edit processing, layout, unmeasured code).
-    static func end() {
+    package static func end() {
         guard enabled, active else { return }
         active = false
         let total = Double(DispatchTime.now().uptimeNanoseconds - frameStart) / 1_000_000
@@ -128,7 +128,7 @@ enum PerfTrace {
 
     /// Standalone timing print for a cost that runs *outside* the keystroke frame
     /// (e.g. the async wide-table overlay reconcile fired after the edit settles).
-    static func stamp(_ label: String, _ ms: Double, _ detail: @autoclosure () -> String = "") {
+    package static func stamp(_ label: String, _ ms: Double, _ detail: @autoclosure () -> String = "") {
         guard enabled else { return }
         print(String(format: "⏱️ PERF %@ %.2fms %@", label, ms, detail()))
     }

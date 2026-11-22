@@ -16,6 +16,7 @@
 
 import AppKit
 import Foundation
+import MarkdownEngineSyntax
 
 extension NativeTextViewCoordinator {
 

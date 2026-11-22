@@ -13,11 +13,11 @@
 import Foundation
 
 // MARK: - Tokenizer
-enum MarkdownTokenizer {
+package enum MarkdownTokenizer {
 
     // MARK: - Code Block Helpers
 
-    static func extractLanguage(from token: MarkdownToken, in text: String) -> String? {
+    package static func extractLanguage(from token: MarkdownToken, in text: String) -> String? {
         guard token.kind == .codeBlock,
               let openingMarker = token.markerRanges.first,
               openingMarker.length > 4 else { return nil }

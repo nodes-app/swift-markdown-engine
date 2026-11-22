@@ -13,6 +13,7 @@
 //
 
 import Foundation
+import MarkdownEngineSyntax
 
 public enum MarkdownHTMLRenderer {
 

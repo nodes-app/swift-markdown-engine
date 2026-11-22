@@ -31,6 +31,7 @@ import AppKit
 import Foundation
 import Testing
 @testable import MarkdownEngine
+@testable import MarkdownEngineSyntax
 
 /// Timed assertions are opt-in; the structural one always runs.
 private let directivePerfEnabled = ProcessInfo.processInfo.environment["MDE_PERF"] != nil

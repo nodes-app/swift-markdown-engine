@@ -8,6 +8,7 @@
 //
 
 import AppKit
+import MarkdownEngineSyntax
 
 // MARK: - Faint scroller
 

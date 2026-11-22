@@ -14,11 +14,16 @@ import PackageDescription
 // products, which ship pre-built bridges backed by a bundled highlight.js
 // and SwiftMath respectively. Both products are opt-in: the core
 // `MarkdownEngine` library stays free of them at link time.
+//
+// The grammar is its own Foundation-only target, `MarkdownEngineSyntax`,
+// which `MarkdownEngine` depends on and re-exports. It is also a library
+// product, for an app that reads documents without the editor.
 let package = Package(
     name: "MarkdownEngine",
     platforms: [.macOS(.v14)],
     products: [
         .library(name: "MarkdownEngine", targets: ["MarkdownEngine"]),
+        .library(name: "MarkdownEngineSyntax", targets: ["MarkdownEngineSyntax"]),
         .library(name: "MarkdownEngineCodeBlocks", targets: ["MarkdownEngineCodeBlocks"]),
         .library(name: "MarkdownEngineLatex", targets: ["MarkdownEngineLatex"]),
     ],
@@ -26,7 +31,8 @@ let package = Package(
         .package(url: "https://github.com/mgriebling/SwiftMath", from: "1.7.0"),
     ],
     targets: [
-        .target(name: "MarkdownEngine"),
+        .target(name: "MarkdownEngineSyntax"),
+        .target(name: "MarkdownEngine", dependencies: ["MarkdownEngineSyntax"]),
         .target(
             name: "MarkdownEngineCodeBlocks",
             dependencies: ["MarkdownEngine"],
@@ -44,7 +50,7 @@ let package = Package(
         ),
         .testTarget(
             name: "MarkdownEngineTests",
-            dependencies: ["MarkdownEngine"]
+            dependencies: ["MarkdownEngine", "MarkdownEngineSyntax"]
         ),
         .testTarget(
             name: "MarkdownEngineCodeBlocksTests",

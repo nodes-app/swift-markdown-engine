@@ -10,6 +10,7 @@
 //
 
 import AppKit
+import MarkdownEngineSyntax
 
 extension NativeTextView {
     override func setSpellingState(_ value: Int, range charRange: NSRange) {
