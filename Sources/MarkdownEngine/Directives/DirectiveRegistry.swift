@@ -96,7 +96,8 @@ struct DirectiveRegistry {
         self.fingerprint = fingerprint
     }
 
-    init(directives: [any MarkdownDirective], settings: DirectiveRegistrySettings = .default) {
+    /// Built from each directive's id and syntax, so the parser needs no `MarkdownDirective`.
+    init(syntax directives: [(id: String, syntax: DirectiveSyntax)], settings: DirectiveRegistrySettings = .default) {
         guard !directives.isEmpty else {
             self = .empty
             return
@@ -147,23 +148,5 @@ struct DirectiveRegistry {
     private static func unichar(for character: Character) -> unichar {
         let units = Array(String(character).utf16)
         return units.count == 1 ? units[0] : 0
-    }
-}
-
-// MARK: - Configuration bridge
-
-public extension MarkdownEditorConfiguration {
-    /// Styler-facing lookup: directive behaviour by id.
-    var directivesByID: [String: any MarkdownDirective] {
-        var out: [String: any MarkdownDirective] = [:]
-        for directive in directives { out[directive.id] = directive }
-        return out
-    }
-}
-
-extension MarkdownEditorConfiguration {
-    /// The parser-facing directive registry derived from `directives`.
-    var directiveRegistry: DirectiveRegistry {
-        DirectiveRegistry(directives: directives, settings: directiveSettings)
     }
 }
