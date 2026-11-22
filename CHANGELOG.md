@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `ExtensionRegistry` and `DirectiveRegistry` are built from syntax values (each extension's id and `InlineSyntax`/`BlockSyntax`, each directive's id and `DirectiveSyntax`); the initialisers that take `MarkdownExtension`s and `MarkdownDirective`s stay, beside the protocols. `ExtensionRegistry` moves to `ExtensionSyntax.swift`. Fingerprints are unchanged (#208). No API or behaviour change.
+
 ## [0.16.0] - 2026-11-15
 
 ### Added
