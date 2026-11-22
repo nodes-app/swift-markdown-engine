@@ -13,7 +13,6 @@
 
 import Foundation
 import Testing
-@testable import MarkdownEngine
 @testable import MarkdownEngineSyntax
 
 @Suite("Fence-interior incremental parse")

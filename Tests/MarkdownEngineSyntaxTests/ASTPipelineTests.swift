@@ -1,6 +1,6 @@
 //
 //  ASTPipelineTests.swift
-//  MarkdownEngineTests
+//  MarkdownEngineSyntaxTests
 //
 //  Phase 2.5 — end-to-end checks that the full AST pipeline (BlockParser +
 //  InlineParser + adapter) fixes the bugs the characterization latch pinned.
@@ -8,7 +8,7 @@
 
 import Foundation
 import Testing
-@testable import MarkdownEngine
+@testable import MarkdownEngineSyntax
 
 @Suite("Phase 2.5 — AST pipeline end-to-end")
 struct ASTPipelineTests {

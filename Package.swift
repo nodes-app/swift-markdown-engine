@@ -49,6 +49,10 @@ let package = Package(
             ]
         ),
         .testTarget(
+            name: "MarkdownEngineSyntaxTests",
+            dependencies: ["MarkdownEngineSyntax"]
+        ),
+        .testTarget(
             name: "MarkdownEngineTests",
             dependencies: ["MarkdownEngine", "MarkdownEngineSyntax"]
         ),

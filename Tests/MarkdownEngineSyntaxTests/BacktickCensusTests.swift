@@ -7,7 +7,7 @@
 
 import Foundation
 import Testing
-@testable import MarkdownEngine
+@testable import MarkdownEngineSyntax
 
 @Suite("Backtick census")
 struct BacktickCensusTests {

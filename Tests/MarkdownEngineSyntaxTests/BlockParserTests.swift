@@ -1,6 +1,6 @@
 //
 //  BlockParserTests.swift
-//  MarkdownEngineTests
+//  MarkdownEngineSyntaxTests
 //
 //  Phase 1 — test-first specification of the block-structure pass. Each test
 //  pins an exact, tiling block decomposition (every UTF-16 unit covered once).
@@ -8,7 +8,6 @@
 
 import Foundation
 import Testing
-@testable import MarkdownEngine
 @testable import MarkdownEngineSyntax
 
 @Suite("Phase 1 — block parser")
