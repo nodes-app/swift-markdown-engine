@@ -29,7 +29,7 @@ extension MarkdownTokenizer {
     private static var cachedTokenFingerprint: String = ""
 
     /// The live tokenizer: block-level tokens + inline AST tokens; fenced code emits only its code-block token.
-    static func parseTokensViaAST(in text: String, registry: ExtensionRegistry = .empty) -> [MarkdownToken] {
+    package static func parseTokensViaAST(in text: String, registry: ExtensionRegistry = .empty) -> [MarkdownToken] {
         let t0 = DispatchTime.now().uptimeNanoseconds
         defer {
             PerfTrace.note { "🗜️ tokenizer.static \(String(format: "%.2f", Double(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000))ms" }

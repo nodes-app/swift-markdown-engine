@@ -12,31 +12,31 @@
 import Foundation
 
 /// One list-item line: marker run, optional GFM checkbox, and indent column count.
-struct ListItem: Equatable {
-    let range: NSRange          // the item's full line (incl. trailing newline)
-    let marker: NSRange
-    let ordered: Bool
-    let number: Int?            // ordered start value, e.g. `5.` → 5
-    let checkbox: NSRange?
-    let checked: Bool
-    let indent: Int
-    let contentRange: NSRange   // text after the marker (and checkbox)
-    let inlines: [InlineNode]
+package struct ListItem: Equatable {
+    package let range: NSRange          // the item's full line (incl. trailing newline)
+    package let marker: NSRange
+    package let ordered: Bool
+    package let number: Int?            // ordered start value, e.g. `5.` → 5
+    package let checkbox: NSRange?
+    package let checked: Bool
+    package let indent: Int
+    package let contentRange: NSRange   // text after the marker (and checkbox)
+    package let inlines: [InlineNode]
 }
 
 /// An extension-supplied fenced block. `closeFence` is nil when the block is
 /// unclosed (it then runs to the end of the document).
-struct ExtensionBlockNode: Equatable {
-    let extensionID: String
-    let range: NSRange
-    let openFence: NSRange      // opening fence line incl. its newline
-    let closeFence: NSRange?    // closing fence line, nil when unclosed
-    let contentRange: NSRange   // lines between the fences
-    let inlines: [InlineNode]
+package struct ExtensionBlockNode: Equatable {
+    package let extensionID: String
+    package let range: NSRange
+    package let openFence: NSRange      // opening fence line incl. its newline
+    package let closeFence: NSRange?    // closing fence line, nil when unclosed
+    package let contentRange: NSRange   // lines between the fences
+    package let inlines: [InlineNode]
 }
 
 /// A top-level block in the document AST.
-indirect enum BlockNode: Equatable {
+package indirect enum BlockNode: Equatable {
     case paragraph(range: NSRange, inlines: [InlineNode])
     case heading(level: Int, range: NSRange, markers: [NSRange], inlines: [InlineNode])
     case blockquote(range: NSRange, inlines: [InlineNode])
@@ -48,7 +48,7 @@ indirect enum BlockNode: Equatable {
     case blank(range: NSRange)
     case ext(ExtensionBlockNode)
 
-    var range: NSRange {
+    package var range: NSRange {
         switch self {
         case .paragraph(let r, _), .heading(_, let r, _, _), .blockquote(let r, _),
              .list(let r, _), .codeBlock(let r), .blockLatex(let r), .table(let r),
@@ -60,7 +60,7 @@ indirect enum BlockNode: Equatable {
     }
 }
 
-enum DocumentAST {
+package enum DocumentAST {
 
     private static let hash: unichar = 0x23
     private static let space: unichar = 0x20
@@ -70,7 +70,7 @@ enum DocumentAST {
     /// `precomputedBlocks` (the keystroke's own parse state, handed down by the
     /// restyle) skips BlockParser.parse — whose cache "hit" still re-extracts
     /// and memcmps the full document buffer — entirely.
-    static func parse(_ text: String, scopedRanges: [NSRange]? = nil, precomputedBlocks: [Block]? = nil,
+    package static func parse(_ text: String, scopedRanges: [NSRange]? = nil, precomputedBlocks: [Block]? = nil,
                       registry: ExtensionRegistry = .empty) -> [BlockNode] {
         let ns = text as NSString
         let blocks = precomputedBlocks ?? BlockParser.parse(text, registry: registry)

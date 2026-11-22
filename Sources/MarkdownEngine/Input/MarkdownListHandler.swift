@@ -8,6 +8,7 @@
 // Makes list editing feel natural by continuing items, handling indentation,
 // and applying spacing/alignment that keeps lists easy to read.
 import AppKit
+import MarkdownEngineSyntax
 
 struct MarkdownLists {
     static func performEdit(_ textView: NSTextView, replace range: NSRange, with string: String) {

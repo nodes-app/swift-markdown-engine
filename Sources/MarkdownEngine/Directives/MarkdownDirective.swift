@@ -38,6 +38,7 @@
 
 import AppKit
 import Foundation
+import MarkdownEngineSyntax
 
 // MARK: - Styling result
 
@@ -296,4 +297,29 @@ func defaultDirectiveSnippet(for syntax: DirectiveSyntax) -> String {
         }
     }
     return cleaned
+}
+
+extension DirectiveRegistry {
+    /// The registry for `directives`' syntax, in registration order.
+    init(directives: [any MarkdownDirective], settings: DirectiveRegistrySettings = .default) {
+        self.init(syntax: directives.map { (id: $0.id, syntax: $0.syntax) }, settings: settings)
+    }
+}
+
+// MARK: - Configuration bridge
+
+public extension MarkdownEditorConfiguration {
+    /// Styler-facing lookup: directive behaviour by id.
+    var directivesByID: [String: any MarkdownDirective] {
+        var out: [String: any MarkdownDirective] = [:]
+        for directive in directives { out[directive.id] = directive }
+        return out
+    }
+}
+
+extension MarkdownEditorConfiguration {
+    /// The parser-facing directive registry derived from `directives`.
+    var directiveRegistry: DirectiveRegistry {
+        DirectiveRegistry(directives: directives, settings: directiveSettings)
+    }
 }

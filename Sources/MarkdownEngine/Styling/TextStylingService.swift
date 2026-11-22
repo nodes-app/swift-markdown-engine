@@ -9,6 +9,7 @@
 // stays smooth while Markdown formatting updates.
 import AppKit
 import Foundation
+import MarkdownEngineSyntax
 
 struct TextStylingService {
     enum RestyleContent {

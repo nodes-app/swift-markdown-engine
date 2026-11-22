@@ -28,6 +28,7 @@
 
 import AppKit
 import Foundation
+import MarkdownEngineSyntax
 
 extension MarkdownASTStyler {
 

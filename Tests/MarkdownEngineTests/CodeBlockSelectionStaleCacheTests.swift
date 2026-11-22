@@ -15,6 +15,7 @@ import AppKit
 import SwiftUI
 import Testing
 @testable import MarkdownEngine
+@testable import MarkdownEngineSyntax
 
 @MainActor
 @Suite("Code block selection survives a programmatic content swap")

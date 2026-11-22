@@ -11,6 +11,7 @@
 import AppKit
 import Testing
 @testable import MarkdownEngine
+@testable import MarkdownEngineSyntax
 
 @Suite("Table cell source")
 @MainActor

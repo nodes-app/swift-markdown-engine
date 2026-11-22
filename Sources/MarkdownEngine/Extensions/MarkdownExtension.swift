@@ -20,6 +20,7 @@
 
 import AppKit
 import Foundation
+import MarkdownEngineSyntax
 
 // MARK: - Extension protocol
 
@@ -62,108 +63,11 @@ public extension MarkdownExtension {
     var block: BlockSyntax? { nil }
 }
 
-// MARK: - Parser-facing registry (internal)
-
-/// Precompiled, purely syntactic view of the registered extensions — the only
-/// thing the parser sees. Built once per parse entry from the configuration.
-struct ExtensionRegistry {
-    struct Entry {
-        let id: String
-        let open: [unichar]
-        let close: [unichar]
-        let syntax: InlineSyntax
-    }
-
-    struct BlockEntry {
-        let id: String
-        let fence: String
-        let fenceChars: [unichar]
-    }
-
-    /// Inline span rules, in registration order.
-    let entries: [Entry]
-    /// Fenced block rules, in registration order.
-    let blockEntries: [BlockEntry]
-    /// Directive rules (`@font(size: 18){…}`). Carried here so the directive
-    /// fingerprint folds into the one grammar fingerprint every parse cache
-    /// already keys on — registering a directive invalidates those caches with
-    /// no second key to thread through the pipeline.
-    let directives: DirectiveRegistry
-    /// Stable fingerprint for cache keying ("" when empty). Two registries with
-    /// the same fingerprint produce identical parses for identical text.
-    let fingerprint: String
-
-    static let empty = ExtensionRegistry(entries: [], blockEntries: [], directives: .empty, fingerprint: "")
-
-    private init(entries: [Entry], blockEntries: [BlockEntry], directives: DirectiveRegistry, fingerprint: String) {
-        self.entries = entries
-        self.blockEntries = blockEntries
-        self.directives = directives
-        self.fingerprint = fingerprint
-    }
-
+extension ExtensionRegistry {
+    /// The registry for `extensions`' syntax, in registration order.
     init(extensions: [any MarkdownExtension], directives: DirectiveRegistry = .empty) {
-        // Directives alone are a non-empty grammar: only bail out when BOTH
-        // halves are empty, or a directive-only configuration would parse as
-        // pure markdown.
-        guard !extensions.isEmpty || !directives.isEmpty else {
-            self = .empty
-            return
-        }
-        self.directives = directives
-        self.entries = extensions.compactMap { ext in
-            guard let syntax = ext.inline else { return nil }
-            return Entry(
-                id: ext.id,
-                open: Array(syntax.open.utf16),
-                close: Array(syntax.close.utf16),
-                syntax: syntax
-            )
-        }
-        self.blockEntries = extensions.compactMap { ext in
-            guard let block = ext.block, !block.fence.isEmpty else { return nil }
-            return BlockEntry(id: ext.id, fence: block.fence, fenceChars: Array(block.fence.utf16))
-        }
-        // Every syntax field participates: registries that differ in ANY flag
-        // must never share cached parse results. Free-text fields (id, open,
-        // close, fence) are length-prefixed so the concatenation is injective —
-        // an id containing the separator characters cannot alias another
-        // registry.
-        func framed(_ str: String) -> String { "\(str.utf16.count).\(str)" }
-        let extensionFingerprint = extensions
-            .map { ext in
-                var parts = [framed(ext.id)]
-                if let s = ext.inline {
-                    parts += ["i", framed(s.open), framed(s.close),
-                              "\(s.parsesContent)", "\(s.requiresNonEmptyContent)",
-                              "\(s.rejectsOpenerRun)", "\(s.rejectsCloserRun)"]
-                }
-                if let b = ext.block {
-                    parts += ["b", framed(b.fence)]
-                }
-                return parts.joined(separator: ",")
-            }
-            .joined(separator: "|")
-        // One grammar fingerprint covering both seams. The `~` separator keeps
-        // the halves distinguishable; an empty half contributes nothing, so a
-        // directive-free registry keeps the fingerprint it had before
-        // directives existed.
-        self.fingerprint = directives.isEmpty
-            ? extensionFingerprint
-            : extensionFingerprint + "~" + directives.fingerprint
-    }
-
-    var isEmpty: Bool { entries.isEmpty && blockEntries.isEmpty && directives.isEmpty }
-
-    /// The first registered block rule whose fence opens `line` (column 0),
-    /// or nil. Registration order is precedence, matching the inline rules.
-    func blockEntry(opening line: String) -> BlockEntry? {
-        blockEntries.first { line.hasPrefix($0.fence) }
-    }
-
-    /// The block rule with the given extension id, or nil.
-    func blockEntry(for id: String) -> BlockEntry? {
-        blockEntries.first { $0.id == id }
+        self.init(syntax: extensions.map { (id: $0.id, inline: $0.inline, block: $0.block) },
+                  directives: directives)
     }
 }
 

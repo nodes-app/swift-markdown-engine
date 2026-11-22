@@ -9,6 +9,7 @@
 // links, and other editing behavior in one place.
 import AppKit
 import SwiftUI
+import MarkdownEngineSyntax
 
 /// `NSTextViewDelegate` that bridges ``NativeTextViewWrapper`` and the
 /// underlying `NSTextView`.

@@ -23,7 +23,7 @@
 import Foundation
 
 /// The block-level classification of a run of lines.
-enum BlockKind: Equatable {
+package enum BlockKind: Equatable {
     case paragraph       // inline-bearing
     case heading         // single ATX line (`# …`), inline-bearing content
     case blockquote      // consecutive `>` lines, inline-bearing per line
@@ -37,9 +37,9 @@ enum BlockKind: Equatable {
 }
 
 /// One block; `range` is the absolute UTF-16 span of its lines, tiling with no gaps.
-struct Block: Equatable {
-    let kind: BlockKind
-    let range: NSRange
+package struct Block: Equatable {
+    package let kind: BlockKind
+    package let range: NSRange
 }
 
 /// A resolved contiguous change between two buffer states, in UTF-16 units.
@@ -53,7 +53,7 @@ struct BufferDiff {
     let delta: Int
 }
 
-enum BlockParser {
+package enum BlockParser {
 
     private static let cacheLock = NSLock()
     private static var cachedChars: [unichar]?     // UTF-16 buffer of the last parse

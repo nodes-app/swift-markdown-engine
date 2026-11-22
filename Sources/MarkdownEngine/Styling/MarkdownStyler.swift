@@ -14,6 +14,7 @@
 //   - MarkdownStyler+Tables.swift  (rendered tables)
 import AppKit
 import Foundation
+import MarkdownEngineSyntax
 
 // MARK: - Styling Context
 

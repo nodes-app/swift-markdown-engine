@@ -13,6 +13,7 @@
 //
 
 import AppKit
+import MarkdownEngineSyntax
 
 extension NativeTextViewCoordinator {
 
