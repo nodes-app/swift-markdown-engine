@@ -17,6 +17,7 @@
 
 import AppKit
 import Foundation
+import MarkdownEngineSyntax
 
 // MARK: - @font(size: 18){…}  — container, font composition
 

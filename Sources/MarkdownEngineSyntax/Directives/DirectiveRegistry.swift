@@ -53,7 +53,7 @@ public struct DirectiveRegistrySettings: Sendable, Equatable {
 
 /// Precompiled directive rules. Built once per parse entry from the
 /// configuration, exactly like `ExtensionRegistry`.
-struct DirectiveRegistry {
+package struct DirectiveRegistry {
 
     /// Directive nodes are represented in the AST as extension-shaped nodes
     /// (`InlineNode.ext`) whose id carries this prefix. That gives directives
@@ -69,12 +69,12 @@ struct DirectiveRegistry {
     static func nodeID(for directiveID: String) -> String { idPrefix + directiveID }
 
     /// The directive id for an AST id, or nil when the node isn't a directive.
-    static func directiveID(forNodeID nodeID: String) -> String? {
+    package static func directiveID(forNodeID nodeID: String) -> String? {
         nodeID.hasPrefix(idPrefix) ? String(nodeID.dropFirst(idPrefix.count)) : nil
     }
 
-    struct Entry {
-        let id: String
+    package struct Entry {
+        package let id: String
         let name: String
         let marker: unichar
         let form: DirectiveSyntax.Form
@@ -84,12 +84,12 @@ struct DirectiveRegistry {
     /// marker → name → entry. Two-level so the scanner rejects a non-marker
     /// character in a single dictionary probe — the common case on every
     /// character of every parse.
-    let byMarker: [unichar: [String: Entry]]
+    package let byMarker: [unichar: [String: Entry]]
     /// Stable fingerprint for cache keying ("" when empty). Two registries
     /// with the same fingerprint produce identical parses for identical text.
     let fingerprint: String
 
-    static let empty = DirectiveRegistry(byMarker: [:], fingerprint: "")
+    package static let empty = DirectiveRegistry(byMarker: [:], fingerprint: "")
 
     private init(byMarker: [unichar: [String: Entry]], fingerprint: String) {
         self.byMarker = byMarker
@@ -97,7 +97,7 @@ struct DirectiveRegistry {
     }
 
     /// Built from each directive's id and syntax, so the parser needs no `MarkdownDirective`.
-    init(syntax directives: [(id: String, syntax: DirectiveSyntax)], settings: DirectiveRegistrySettings = .default) {
+    package init(syntax directives: [(id: String, syntax: DirectiveSyntax)], settings: DirectiveRegistrySettings = .default) {
         guard !directives.isEmpty else {
             self = .empty
             return
@@ -138,7 +138,7 @@ struct DirectiveRegistry {
             .joined(separator: "|")
     }
 
-    var isEmpty: Bool { byMarker.isEmpty }
+    package var isEmpty: Bool { byMarker.isEmpty }
 
     func entry(marker: unichar, name: String) -> Entry? { byMarker[marker]?[name] }
 

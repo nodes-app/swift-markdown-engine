@@ -9,6 +9,7 @@
 import Foundation
 import Testing
 @testable import MarkdownEngine
+@testable import MarkdownEngineSyntax
 
 @Suite("Phase 1 — block parser")
 struct BlockParserTests {

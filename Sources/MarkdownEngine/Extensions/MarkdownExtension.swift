@@ -20,6 +20,7 @@
 
 import AppKit
 import Foundation
+import MarkdownEngineSyntax
 
 // MARK: - Extension protocol
 

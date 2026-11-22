@@ -14,6 +14,7 @@ import AppKit
 import Foundation
 import Testing
 @testable import MarkdownEngine
+@testable import MarkdownEngineSyntax
 
 @Suite("Directives — completion context")
 struct DirectiveCompletionTests {

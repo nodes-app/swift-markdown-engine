@@ -10,6 +10,7 @@
 import Foundation
 import Testing
 @testable import MarkdownEngine
+@testable import MarkdownEngineSyntax
 
 @Suite("Phase A — list parsing")
 struct ListParsingTests {

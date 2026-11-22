@@ -11,6 +11,7 @@
 //
 
 import AppKit
+import MarkdownEngineSyntax
 
 extension NativeTextViewCoordinator {
     /// Atomically rebuilds contents + base attrs + Markdown styling from storage-form `text`.

@@ -84,34 +84,34 @@ public struct BlockSyntax: Sendable, Equatable {
 
 /// Precompiled, purely syntactic view of the registered extensions — the only
 /// thing the parser sees. Built once per parse entry from the configuration's extensions' syntax.
-struct ExtensionRegistry {
+package struct ExtensionRegistry {
     struct Entry {
-        let id: String
+        package let id: String
         let open: [unichar]
         let close: [unichar]
         let syntax: InlineSyntax
     }
 
-    struct BlockEntry {
-        let id: String
-        let fence: String
+    package struct BlockEntry {
+        package let id: String
+        package let fence: String
         let fenceChars: [unichar]
     }
 
     /// Inline span rules, in registration order.
     let entries: [Entry]
     /// Fenced block rules, in registration order.
-    let blockEntries: [BlockEntry]
+    package let blockEntries: [BlockEntry]
     /// Directive rules (`@font(size: 18){…}`). Carried here so the directive
     /// fingerprint folds into the one grammar fingerprint every parse cache
     /// already keys on — registering a directive invalidates those caches with
     /// no second key to thread through the pipeline.
-    let directives: DirectiveRegistry
+    package let directives: DirectiveRegistry
     /// Stable fingerprint for cache keying ("" when empty). Two registries with
     /// the same fingerprint produce identical parses for identical text.
-    let fingerprint: String
+    package let fingerprint: String
 
-    static let empty = ExtensionRegistry(entries: [], blockEntries: [], directives: .empty, fingerprint: "")
+    package static let empty = ExtensionRegistry(entries: [], blockEntries: [], directives: .empty, fingerprint: "")
 
     private init(entries: [Entry], blockEntries: [BlockEntry], directives: DirectiveRegistry, fingerprint: String) {
         self.entries = entries
@@ -121,10 +121,10 @@ struct ExtensionRegistry {
     }
 
     /// One registered extension's syntax: its id and either form.
-    typealias Syntax = (id: String, inline: InlineSyntax?, block: BlockSyntax?)
+    package typealias Syntax = (id: String, inline: InlineSyntax?, block: BlockSyntax?)
 
     /// Built from the syntax each extension declares, so the parser needs no `MarkdownExtension`.
-    init(syntax extensions: [Syntax], directives: DirectiveRegistry = .empty) {
+    package init(syntax extensions: [Syntax], directives: DirectiveRegistry = .empty) {
         // Directives alone are a non-empty grammar: only bail out when BOTH
         // halves are empty, or a directive-only configuration would parse as
         // pure markdown.

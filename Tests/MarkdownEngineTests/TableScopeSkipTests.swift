@@ -16,6 +16,7 @@ import AppKit
 import Foundation
 import Testing
 @testable import MarkdownEngine
+@testable import MarkdownEngineSyntax
 
 @Suite("styleTables scope skip")
 struct TableScopeSkipTests {

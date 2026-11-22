@@ -16,12 +16,19 @@ import Foundation
 /// A contiguous edit in NEW-text coordinates plus the length delta, as
 /// delivered by shouldChangeTextIn/textDidChange. The described region may be
 /// wider than the minimal diff — splice logic only requires containment.
-struct ParseEditDescriptor {
+package struct ParseEditDescriptor {
     let editedRange: NSRange   // post-edit coords: location + replacement length
     let delta: Int
+
+    package init(editedRange: NSRange, delta: Int) {
+        self.editedRange = editedRange
+        self.delta = delta
+    }
 }
 
-final class DocumentParseState {
+package final class DocumentParseState {
+    package init() {}
+
     private let lock = NSLock()
     private var chars: [unichar] = []
     private var blocks: [Block] = []
@@ -37,14 +44,14 @@ final class DocumentParseState {
 
     /// The block list matching the most recent `tokens(for:edit:)` call —
     /// handed to the restyle so DocumentAST.parse skips the block parser.
-    var currentBlocks: [Block] {
+    package var currentBlocks: [Block] {
         lock.lock(); defer { lock.unlock() }
         return blocks
     }
 
     /// Drop all state (document switch / full rebuild) — the next parse
     /// re-extracts and re-parses from scratch.
-    func invalidate() {
+    package func invalidate() {
         lock.lock()
         valid = false
         chars = []; blocks = []; tokens = []
@@ -54,7 +61,7 @@ final class DocumentParseState {
     /// Tokens for `text`. With a trustworthy `edit` the update is
     /// O(edit + touched blocks + suffix shift); without one, a single shared
     /// O(doc) diff scan replaces the two independent scans of the static path.
-    func tokens(for text: String, edit: ParseEditDescriptor?, registry: ExtensionRegistry = .empty) -> [MarkdownToken] {
+    package func tokens(for text: String, edit: ParseEditDescriptor?, registry: ExtensionRegistry = .empty) -> [MarkdownToken] {
         let ns = text as NSString
         let newLen = ns.length
         let tStart = DispatchTime.now().uptimeNanoseconds

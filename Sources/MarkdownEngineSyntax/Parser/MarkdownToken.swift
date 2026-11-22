@@ -9,7 +9,7 @@
 // links, code, LaTeX, etc.).
 import Foundation
 
-enum MarkdownTokenKind: Equatable {
+package enum MarkdownTokenKind: Equatable {
     case italic
     case boldItalic
     case bold
@@ -35,15 +35,15 @@ enum MarkdownTokenKind: Equatable {
     case extensionBlock(String)
 }
 
-struct MarkdownToken {
-    let kind: MarkdownTokenKind
-    let range: NSRange
-    let contentRange: NSRange
-    let markerRanges: [NSRange]
+package struct MarkdownToken {
+    package let kind: MarkdownTokenKind
+    package let range: NSRange
+    package let contentRange: NSRange
+    package let markerRanges: [NSRange]
 }
 
 extension MarkdownToken {
-    func standaloneParagraphRange(in text: NSString) -> NSRange? {
+    package func standaloneParagraphRange(in text: NSString) -> NSRange? {
         let paragraphRange = text.paragraphRange(for: range)
         let paragraphText = text.substring(with: paragraphRange) as NSString
         let tokenRelativeRange = NSRange(
@@ -55,7 +55,7 @@ extension MarkdownToken {
         return mutableParagraph.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? paragraphRange : nil
     }
 
-    func containsSelectionOrStandaloneParagraph(_ selectionLocation: Int, in text: NSString) -> Bool {
+    package func containsSelectionOrStandaloneParagraph(_ selectionLocation: Int, in text: NSString) -> Bool {
         let start = range.location
         let end = NSMaxRange(range) - 1
         if selectionLocation >= start && selectionLocation <= end {

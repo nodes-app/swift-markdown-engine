@@ -8,6 +8,7 @@
 // Handles Markdown typing shortcuts, like continuing lists and keeping block
 // LaTeX on its own line while you type.
 import AppKit
+import MarkdownEngineSyntax
 
 enum MarkdownInputHandler {
 

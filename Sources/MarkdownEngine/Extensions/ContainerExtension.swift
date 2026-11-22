@@ -24,6 +24,7 @@
 
 import AppKit
 import Foundation
+import MarkdownEngineSyntax
 
 public struct ContainerExtension: MarkdownExtension {
 

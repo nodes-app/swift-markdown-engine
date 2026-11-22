@@ -9,7 +9,6 @@ Sources/
 │   ├── Extensions/                          # the extension seam: MarkdownExtension + bundled opt-ins
 │   ├── Directives/                          # the directive seam: @font(size: 18){…} — parsing, styling, glyphs, completion
 │   ├── Services/                            # 4 protocols, no-op defaults, WikiLinkService
-│   ├── Parser/                              # two-phase AST: BlockParser → InlineParser → DocumentAST (+ token projection)
 │   ├── Styling/                             # MarkdownASTStyler (AST walk) + MarkdownStyler facade for NSImage passes
 │   ├── Renderer/                            # LayoutBridge, MarkdownTextLayoutFragment, EmbeddedImageCache
 │   ├── Input/                               # MarkdownInputHandler + MarkdownListHandler
@@ -21,6 +20,11 @@ Sources/
 │   │   ├── NativeTextView/                  # AppKit subclass + UX extensions (paste, drag-select, …)
 │   │   └── Coordinator/                     # NSTextViewDelegate split by concern (restyling, find, …)
 │   └── MarkdownEngine.docc/                 # DocC catalog
+├── MarkdownEngineSyntax/                    # the grammar — Foundation only; MarkdownEngine depends on it and re-exports it
+│   ├── Parser/                              # two-phase AST: BlockParser → InlineParser → DocumentAST (+ token projection)
+│   ├── Extensions/ExtensionSyntax.swift     # the extension seam's syntax: InlineSyntax, BlockSyntax, ExtensionRegistry
+│   ├── Directives/                          # the directive seam's syntax: DirectiveSyntax, arguments, registry, scanner
+│   └── Diagnostics/PerfTrace.swift          # timing traces, shared with the editor
 ├── MarkdownEngineCodeBlocks/                # opt-in SPM product — bundles highlight.js
 │   ├── HighlightJSBridge.swift              # SyntaxHighlighter conformance (JavaScriptCore)
 │   ├── CodeHighlightTheme.swift             # colour per highlight.js scope
@@ -32,7 +36,7 @@ Sources/
 The rest of this file is a per-directory tour, in the order text flows
 through the engine.
 
-## [`Parser/`](Sources/MarkdownEngine/Parser): text → AST → tokens
+## [`Parser/`](Sources/MarkdownEngineSyntax/Parser): text → AST → tokens
 
 A two-phase AST pipeline following CommonMark's model — block structure first,
 inline content second. There is no regex tokenizer anymore; the structural

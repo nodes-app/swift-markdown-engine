@@ -43,7 +43,7 @@ struct DirectiveMatch: Equatable {
     /// The name run, without the marker (`font` in `@font(…)`).
     let nameRange: NSRange
     /// Inside the parens; `nil` when the call has no argument list.
-    let argumentsRange: NSRange?
+    package let argumentsRange: NSRange?
     /// Inside the braces; `nil` for a self-contained call.
     let bodyRange: NSRange?
     /// Ranges that shrink when the caret leaves: `[prefix, closingBrace]` for
@@ -57,7 +57,7 @@ struct DirectiveMatch: Equatable {
     let parsesContent: Bool
 }
 
-enum DirectiveScanner {
+package enum DirectiveScanner {
 
     private static let lparen: unichar = 0x28
     private static let rparen: unichar = 0x29
@@ -174,7 +174,7 @@ enum DirectiveScanner {
     /// the parser already emitted. The prefix is well-formed by construction —
     /// this scanner produced it — so the walk is a short, total re-derivation
     /// rather than a second parse of the document.
-    static func argumentsRange(inPrefix prefix: NSRange, of ns: NSString) -> NSRange? {
+    package static func argumentsRange(inPrefix prefix: NSRange, of ns: NSString) -> NSRange? {
         let end = min(NSMaxRange(prefix), ns.length)
         var k = prefix.location + 1                    // past the marker
         while k < end, isIdentChar(ns.character(at: k)) || ns.character(at: k) == dot { k += 1 }

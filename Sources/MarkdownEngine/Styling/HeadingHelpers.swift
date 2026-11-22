@@ -7,6 +7,7 @@
 
 // Small helper values for heading size/spacing, plus shared text measurements.
 import AppKit
+import MarkdownEngineSyntax
 
 enum HeadingHelpers {
 

@@ -18,6 +18,7 @@
 
 import AppKit
 import Foundation
+import MarkdownEngineSyntax
 
 public struct HighlightExtension: MarkdownExtension {
 

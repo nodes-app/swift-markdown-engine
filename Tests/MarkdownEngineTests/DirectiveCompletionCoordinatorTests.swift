@@ -14,6 +14,7 @@ import AppKit
 import SwiftUI
 import Testing
 @testable import MarkdownEngine
+@testable import MarkdownEngineSyntax
 
 @MainActor
 @Suite("Directive completion — coordinator gates")

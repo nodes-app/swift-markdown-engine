@@ -9,6 +9,7 @@
 import Foundation
 import Testing
 @testable import MarkdownEngine
+@testable import MarkdownEngineSyntax
 
 @Suite("Registries — built from syntax values")
 struct RegistrySyntaxTests {

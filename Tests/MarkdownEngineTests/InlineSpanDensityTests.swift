@@ -35,6 +35,7 @@
 import Foundation
 import Testing
 @testable import MarkdownEngine
+@testable import MarkdownEngineSyntax
 
 /// The TIMED cost-curve assertions run only under `MDE_PERF=1 swift test`.
 /// The counted ones next to them always run.
@@ -91,7 +92,9 @@ struct InlineSpanDensityTests {
         }
         for s in strings {
             fold(s)
-            fold(String(describing: InlineParser.parse(s, registry: registry)))
+            // The AST lives in `MarkdownEngineSyntax`; folding it under the old module name keeps the fingerprint.
+            fold(String(describing: InlineParser.parse(s, registry: registry))
+                .replacingOccurrences(of: "MarkdownEngineSyntax.", with: "MarkdownEngine."))
         }
         return String(fnv, radix: 16)
     }
