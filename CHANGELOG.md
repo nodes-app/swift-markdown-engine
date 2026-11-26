@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Over a fenced code block the pointer is the system I-beam again. With `cursorFollowsSpanInk` on, any run with a background and an ink of its own got the recolored I-beam, and every syntax-colored code token has both (the highlighter's background, the token's color), so the I-beam was redrawn in token colors and looked see-through. Only an extension's own content gets it now, recognised by the exact ink and block its `contentAttributes` paint. That also brings it to a block painted with `.markdownBlockBackground` (an inverted `==highlight==`), which the old test did not see, so the system I-beam disappeared into the block there.
+
 ## [0.16.0] - 2026-11-15
 
 ### Added
