@@ -17,7 +17,8 @@ import SwiftUI
 public struct CodeBlockSelection: Identifiable, Sendable {
     /// Index of the source token, stable for as long as the block exists.
     public let id: Int
-    /// Frame of the rendered code block in the text view's coordinate space.
+    /// Frame of the rendered code block in the scroll view's points, measured from
+    /// its visible top-left (magnification applied).
     public let rect: CGRect
     /// Language tag declared after the opening fence (`` ```swift ``).
     public let language: String?

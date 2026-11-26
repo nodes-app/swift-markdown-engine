@@ -370,7 +370,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         // upfront; otherwise TextKit 2 viewport layout causes scroll drift.
         textLayoutManager.ensureLayout(for: textLayoutManager.documentRange)
 
-        scrollView.contentView.scroll(to: NSPoint(x: 0, y: -scrollView.contentInsets.top))
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: -scrollView.contentView.contentInsets.top))
         scrollView.clampToInsets()
         scrollView.reflectScrolledClipView(scrollView.contentView)
 
@@ -397,7 +397,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         }
         scrollView.contentView.postsBoundsChangedNotifications = true
         var lastObservedViewportWidth = scrollView.contentView.bounds.width
-        NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: scrollView.contentView, queue: nil) { _ in
+        let viewportDidResize = {
             // Refresh code-block overlays only on real viewport width changes, not on TextKit height-only echoes during typing.
             let newWidth = scrollView.contentView.bounds.width
             if abs(newWidth - lastObservedViewportWidth) > 0.5 {
@@ -408,6 +408,12 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
                 // makeNSView time — the embedder may change readingWidth between updates.
                 if textView.configuration.readingWidth != nil {
                     textView.centerReadingColumn(forClipWidth: newWidth)
+                }
+                // Magnified, the page is sized here, not by autoresizing (see the mask below).
+                if scrollView.magnification != 1,
+                   let container = scrollView.documentView as? NativeTextViewContainer,
+                   abs(container.frame.width - newWidth) > 0.001 {
+                    container.setFrameSize(NSSize(width: newWidth, height: container.frame.height))
                 }
                 context.coordinator.didEnsureLayoutForCurrentDocument = false
                 context.coordinator.updateCodeBlockSelection(textView: textView)
@@ -435,7 +441,42 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             textView.recalcOverscroll(for: scrollView)
             scrollView.clampToInsets()
         }
+        NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: scrollView.contentView, queue: nil) { _ in
+            viewportDidResize()
+        }
+        var lastObservedMagnification = scrollView.magnification
+        // A pinch stretches cached drawing until it ends; the header redraws once, then.
+        var isLiveMagnifying = false
+        NotificationCenter.default.addObserver(forName: NSScrollView.willStartLiveMagnifyNotification, object: scrollView, queue: nil) { _ in
+            isLiveMagnifying = true
+        }
+        NotificationCenter.default.addObserver(forName: NSScrollView.didEndLiveMagnifyNotification, object: scrollView, queue: nil) { _ in
+            isLiveMagnifying = false
+            MainActor.assumeIsolated { context.coordinator.headerController?.matchMagnification() }
+        }
         NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: scrollView.contentView, queue: nil) { _ in
+            // Magnification rescales the clip view's bounds and never touches its frame,
+            // so the frame observer above does not hear it: the viewport resized all the same.
+            if scrollView.magnification != lastObservedMagnification {
+                lastObservedMagnification = scrollView.magnification
+                // AppKit solves an autoresizing subview of a magnified clip view in mixed
+                // units (the constant in bounds, the clip's width in frame points): the
+                // header band came out 1060 wide over a 707-wide page (measured).
+                if let container = scrollView.documentView as? NativeTextViewContainer {
+                    container.autoresizingMask = scrollView.magnification == 1 ? [.width] : []
+                }
+                viewportDidResize()
+                if !isLiveMagnifying {
+                    MainActor.assumeIsolated { context.coordinator.headerController?.matchMagnification() }
+                }
+                // Magnifying about a point scrolls sideways; the page is never wider
+                // than the viewport once re-centred, so there is nothing to the side.
+                let clip = scrollView.contentView
+                if abs(clip.bounds.origin.x) > 0.001 {
+                    clip.scroll(to: NSPoint(x: 0, y: clip.bounds.origin.y))
+                    scrollView.reflectScrolledClipView(clip)
+                }
+            }
             textView.ensureVisibleLayout()
             if context.coordinator.isWritingToolsActive {
                 context.coordinator.fixWritingToolsChildWindowIfNeeded(textView: textView)
@@ -701,7 +742,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             textView.removeCorrectionUnderlines()
             // Park at top during the rebuild; the new document's own saved offset
             // (if any) is restored after its height is known (see below).
-            nsView.contentView.scroll(to: NSPoint(x: 0, y: -nsView.contentInsets.top))
+            nsView.contentView.scroll(to: NSPoint(x: 0, y: -nsView.contentView.contentInsets.top))
             nsView.reflectScrolledClipView(nsView.contentView)
             (nsView as? ClampedScrollView)?.clampToInsets()
         }

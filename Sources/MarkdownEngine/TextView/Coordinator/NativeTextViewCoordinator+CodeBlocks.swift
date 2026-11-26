@@ -83,8 +83,11 @@ extension NativeTextViewCoordinator {
             if let visibleRange, NSIntersectionRange(token.range, visibleRange).length == 0 { return nil }
             guard var boundingRect = textView.viewRect(forCharacterRange: token.range, using: layoutBridge) else { return nil }
 
-            boundingRect.origin.x = textView.rectInClipView(NSRect(origin: textView.textContainerOrigin, size: .zero)).minX - scrollOffset.x
-            boundingRect.size.width = textContainer.containerSize.width
+            // `viewRect` is already in the scroll view's points; these two are in the
+            // clip view's units until scaled the same way.
+            let scale = textView.enclosingScrollView?.magnification ?? 1
+            boundingRect.origin.x = (textView.rectInClipView(NSRect(origin: textView.textContainerOrigin, size: .zero)).minX - scrollOffset.x) * scale
+            boundingRect.size.width = textContainer.containerSize.width * scale
 
             return CodeBlockSelection(
                 id: originalIndex,

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The editor can be magnified. An embedder that sets `magnification` on its scroll view (page zoom, a pinch) gets the page scaled as one: the reading column stays centred, the header band spans the page and redraws sharp, the top inset and the scroll clamp work in page units, and the rects reported for overlays (`onCaretRectChange`, `CodeBlockSelection.rect`) are in the scroll view's points. Magnified, the column used to sit off-centre, the header was laid out for a wider page than the one shown, and resizing the window could loop the scroll clamp into a stack overflow.
+
 ## [0.16.0] - 2026-11-15
 
 ### Added
