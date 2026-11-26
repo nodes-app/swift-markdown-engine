@@ -137,32 +137,41 @@ extension NativeTextView {
         return lineString.attributes(at: idx, effectiveRange: nil)
     }
 
-    /// Ink + block of a span that repaints its foreground under `event`, or nil.
-    /// Same rule as the caret color: only a run that carries BOTH a background
-    /// and a foreground of its own is inverted — inline code and find matches
-    /// paint a background but keep the body ink, and the system I-beam is
-    /// already right on those.
+    /// Ink + block of an inverted extension span under `event`, or nil. Same rule
+    /// as the caret color: only an extension's content, recognised by the exact
+    /// ink and block its `contentAttributes` paint. A background plus ink of its
+    /// own is not enough: every syntax-colored code token carries both, and the
+    /// recolored I-beam turned see-through in code blocks.
     func invertedRunColors(at event: NSEvent) -> (ink: NSColor, block: NSColor)? {
         guard configuration.cursorFollowsSpanInk else { return nil }
         let attrs = attributes(at: convert(event.locationInWindow, from: nil))
         guard let attrs,
-              let block = attrs[.backgroundColor] as? NSColor,
-              let ink = attrs[.foregroundColor] as? NSColor else { return nil }
+              let ink = attrs[.foregroundColor] as? NSColor,
+              let block = Self.block(in: attrs) else { return nil }
+        let theme = configuration.theme
         // Resolve inside the view's appearance: these are dynamic colors, and
         // `NSAppearance.current` during a mouse event is not necessarily ours —
         // a dark editor would otherwise get the light-mode pair.
-        var resolved: (ink: NSColor, block: NSColor, body: NSColor)?
+        var resolved: (ink: NSColor, block: NSColor)?
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            guard let ink = ink.usingColorSpace(.deviceRGB),
-                  let block = block.usingColorSpace(.deviceRGB),
-                  let body = configuration.theme.bodyText.usingColorSpace(.deviceRGB) else { return }
-            resolved = (ink, block, body)
+            let rgb = { (color: NSColor) in color.usingColorSpace(.deviceRGB) }
+            guard let ink = rgb(ink), let block = rgb(block),
+                  // Body ink on a block: the system I-beam is already right there.
+                  ink != rgb(theme.bodyText) else { return }
+            let painted = configuration.extensions.contains { ext in
+                let content = ext.contentAttributes(theme: theme)
+                guard let extInk = content[.foregroundColor] as? NSColor,
+                      let extBlock = Self.block(in: content) else { return false }
+                return rgb(extInk) == ink && rgb(extBlock) == block
+            }
+            if painted { resolved = (ink, block) }
         }
-        guard let resolved else { return nil }
-        // Body ink on a background is inline code or a find match — the system
-        // I-beam is already right there; only a run that repaints its ink needs us.
-        guard resolved.ink != resolved.body else { return nil }
-        return (resolved.ink, resolved.block)
+        return resolved
+    }
+
+    /// A span's block: the line-box fill (`==highlight==`) or a glyph-box background.
+    private static func block(in attrs: [NSAttributedString.Key: Any]) -> NSColor? {
+        (attrs[.markdownBlockBackground] ?? attrs[.backgroundColor]) as? NSColor
     }
 
     /// Over an inverted span the system I-beam is drawn in the block's own
