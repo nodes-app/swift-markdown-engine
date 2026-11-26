@@ -211,7 +211,7 @@ extension NativeTextViewCoordinator {
         }
         tlm.enumerateTextLayoutFragments(from: matchStart, options: [.ensuresLayout]) { fragment in
             let cv = scrollView.contentView
-            let insetsTop = scrollView.contentInsets.top
+            let insetsTop = scrollView.contentView.contentInsets.top
             // Fragment frames are text-view-local; the scroll offset is in the clip view's space.
             let frame = tv.rectInClipView(fragment.layoutFragmentFrame)
             let visibleTop = cv.bounds.origin.y + insetsTop
@@ -232,7 +232,7 @@ extension NativeTextViewCoordinator {
         guard let tv = textView else { return }
         let scrollView = tv.enclosingScrollView
         let preY = scrollView?.contentView.bounds.origin.y ?? 0
-        let insetsTop = scrollView?.contentInsets.top ?? 0
+        let insetsTop = scrollView?.contentView.contentInsets.top ?? 0
         let visualTopDocY = preY + insetsTop
         var anchorOffsetFromTop: CGFloat = 0
         var anchorTextRange: NSTextRange? = nil

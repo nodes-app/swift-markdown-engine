@@ -589,7 +589,20 @@ extension NSTextView {
             let contentOffset = scrollView.contentView.bounds.origin
             boundingRect.origin.x -= contentOffset.x
             boundingRect.origin.y -= contentOffset.y
+            boundingRect = scrollView.viewportPoints(boundingRect)
         }
         return boundingRect
+    }
+}
+
+extension NSScrollView {
+    /// A rect measured from the visible top-left in the clip view's bounds units, in
+    /// the scroll view's own points - where an embedder places an overlay. The two
+    /// differ by `magnification`, which scales the bounds and leaves the frame alone.
+    func viewportPoints(_ rect: CGRect) -> CGRect {
+        let scale = magnification
+        guard scale != 1 else { return rect }
+        return CGRect(x: rect.minX * scale, y: rect.minY * scale,
+                      width: rect.width * scale, height: rect.height * scale)
     }
 }

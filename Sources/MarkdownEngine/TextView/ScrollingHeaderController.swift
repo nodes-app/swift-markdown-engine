@@ -104,6 +104,44 @@ final class ScrollingHeaderController {
         }
         adoptSwitchedContentHeight(container: container)
         applyExpansion(collapsedHeight: collapsedHeight, expanded: expanded, container: container)
+        matchMagnification()
+    }
+
+    /// The scale the header's layers were last raised to; nil while unmagnified.
+    private var raisedScale: CGFloat?
+
+    /// Draws the hosted header at the scroll view's magnification. SwiftUI rasterizes at
+    /// the window's backing scale only, so a magnified page stretched the header from a
+    /// 1× bitmap, soft beside the body text (measured). Layers SwiftUI adds later start
+    /// at the backing scale again: every reconcile and height change asks, and once more
+    /// a turn later, after SwiftUI has drawn.
+    func matchMagnification() {
+        guard let host = hostingView, let window = host.window,
+              let magnification = host.enclosingScrollView?.magnification,
+              magnification != 1 || raisedScale != nil else { return }
+        let target = window.backingScaleFactor * magnification
+        raisedScale = magnification == 1 ? nil : target
+        Self.raise(host.layer, to: target)
+        guard raisedScale != nil, !isMatchQueued else { return }
+        isMatchQueued = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.isMatchQueued = false
+            if let scale = self.raisedScale { Self.raise(self.hostingView?.layer, to: scale) }
+        }
+    }
+    private var isMatchQueued = false
+
+    /// Only SwiftUI's own CG drawing layers, which draw again when asked. A layer whose
+    /// contents SwiftUI hands over itself (RenderBox, images) went blank when asked to
+    /// redraw: the paused tag graph emptied (seen). AppKit raises its views' layers itself.
+    private static func raise(_ layer: CALayer?, to scale: CGFloat) {
+        guard let layer else { return }
+        if layer.contentsScale != scale, NSStringFromClass(type(of: layer)).hasSuffix("CGDrawingLayer") {
+            layer.contentsScale = scale
+            layer.setNeedsDisplay()
+        }
+        layer.sublayers?.forEach { raise($0, to: scale) }
     }
 
     /// The embedder just swapped the document. Take the new content's height NOW,
@@ -288,6 +326,7 @@ final class ScrollingHeaderController {
             MainActor.assumeIsolated {
                 guard let self, let container else { return }
                 self.hostHeightChanged(container: container)
+                self.matchMagnification()
             }
         }
 

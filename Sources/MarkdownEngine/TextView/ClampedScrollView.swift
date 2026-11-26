@@ -171,7 +171,9 @@ final class ClampedScrollView: NSScrollView {
     func clampToInsets() {
         guard !fitsContent else { return }
         guard let doc = documentView else { return }
-        let minY = -contentInsets.top
+        // The clip view keeps the inset in its bounds units, which magnification scales;
+        // the scroll view's own `contentInsets` stay in points.
+        let minY = -contentView.contentInsets.top
         // Use the real content height (not the inflated frame) so small
         // documents can't scroll past their actual content. The document view is
         // always a `NativeTextViewContainer` (header band + text column).
@@ -194,7 +196,9 @@ final class ClampedScrollView: NSScrollView {
 
         let maxY = max(minY, realHeight - contentView.bounds.height)
         let clampedY = min(max(b.origin.y, minY), maxY)
-        if clampedY != b.origin.y {
+        // Not `!=`: magnified, a scrolled origin lands a rounding error off its target,
+        // and every miss posted another bounds change into this clamp (a stack overflow).
+        if abs(clampedY - b.origin.y) > 0.001 {
             contentView.scroll(to: NSPoint(x: b.origin.x, y: clampedY))
             reflectScrolledClipView(contentView)
         }

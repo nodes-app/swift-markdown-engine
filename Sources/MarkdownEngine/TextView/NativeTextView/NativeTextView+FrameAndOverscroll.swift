@@ -387,7 +387,7 @@ extension NativeTextView {
         }
         tlm.enumerateTextLayoutFragments(from: start, options: [.ensuresLayout]) { fragment in
             let cv = scrollView.contentView
-            let insetsTop = scrollView.contentInsets.top
+            let insetsTop = scrollView.contentView.contentInsets.top
             // Reveal the CARET's line, not the whole layout fragment. An active image/latex embed
             // renders its block below the source line via paragraphSpacing, so layoutFragmentFrame is
             // as tall as the image; revealing its maxY would scroll the viewport down by the block
