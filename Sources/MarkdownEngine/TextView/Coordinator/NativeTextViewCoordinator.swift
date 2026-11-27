@@ -140,6 +140,9 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     var lastImageFingerprint: AnyHashable?
     var lastWikiFingerprint: AnyHashable?
     private var busObservers: [NSObjectProtocol] = []
+    /// The clip view's frame and bounds observers. A block observer stays registered
+    /// until it is removed, so an editor that is let go has to remove them (#227).
+    var viewportObservers: [NSObjectProtocol] = []
     private var registeredAppearanceObserverName: Notification.Name?
     weak var textView: NSTextView?
     /// Owns the scroll-away header (build, content refresh, collapse/expand,
@@ -538,6 +541,12 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
         pendingScrollRestoreDeadline = nil
     }
 
+    /// Only for an editor that is let go: a parked one keeps its observers.
+    func stopObservingViewport() {
+        viewportObservers.forEach(NotificationCenter.default.removeObserver(_:))
+        viewportObservers.removeAll()
+    }
+
     func wikiLinkID(for range: NSRange) -> String? {
         wikiLinkMetadata[WikiLinkService.RangeKey(range)]?.id
     }
@@ -569,6 +578,7 @@ public final class NativeTextViewCoordinator: NSObject, NSTextViewDelegate {
     deinit {
         NotificationCenter.default.removeObserver(self)
         busObservers.forEach(NotificationCenter.default.removeObserver(_:))
+        viewportObservers.forEach(NotificationCenter.default.removeObserver(_:))
     }
 }
 

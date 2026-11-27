@@ -49,13 +49,19 @@ final class WideTableOverlay: NSScrollView {
     }
 
     private let tableImageView: WideTableImageView
+    private var image: NSImage
+
+    /// An image view turns its whole image into a bitmap as soon as it has one, off
+    /// screen or hidden too, so a table gets its image only near the viewport (#227).
+    /// A view drawing the image itself took a full-size backing store each (measured).
+    private(set) var isRevealed = false
 
     init(sourceID: Int, image: NSImage, ownerTextView: NativeTextView, anchorLocation: Int) {
         self.sourceID = sourceID
         self.anchorTextLocation = anchorLocation
         self.ownerTextView = ownerTextView
+        self.image = image
         self.tableImageView = WideTableImageView(frame: CGRect(origin: .zero, size: image.size))
-        tableImageView.image = image
         tableImageView.imageScaling = .scaleNone
         tableImageView.imageAlignment = .alignTopLeft
 
@@ -118,11 +124,18 @@ final class WideTableOverlay: NSScrollView {
     }
 
 
+    func reveal() {
+        guard !isRevealed else { return }
+        isRevealed = true
+        tableImageView.image = image
+    }
+
     /// Swap the rendered image after a restyle regenerated it.
     func updateImage(_ image: NSImage) {
-        if tableImageView.image !== image {
-            tableImageView.image = image
+        if self.image !== image {
+            self.image = image
             tableImageView.frame = CGRect(origin: .zero, size: image.size)
+            if isRevealed { tableImageView.image = image }
         }
     }
 
@@ -336,6 +349,23 @@ extension NativeTextView {
             host.setNeedsDisplay(overlay.frame)
             overlay.removeFromSuperview()
             wideTableOverlays.removeValue(forKey: sourceID)
+        }
+        revealWideTablesNearViewport()
+    }
+
+    /// Reveals each wide table within a screen of the viewport. Called on every
+    /// scroll and resize of the viewport, and whenever the overlays move.
+    func revealWideTablesNearViewport() {
+        guard wideTableOverlays.values.contains(where: { !$0.isRevealed }) else { return }
+        // Only an editor that scrolls itself hears its viewport move.
+        guard configuration.heightBehavior == .scrolls, let clip = enclosingScrollView?.contentView else {
+            for overlay in wideTableOverlays.values { overlay.reveal() }
+            return
+        }
+        let near = clip.bounds.insetBy(dx: 0, dy: -clip.bounds.height)
+        for overlay in wideTableOverlays.values where !overlay.isRevealed {
+            guard let host = overlay.superview else { continue }
+            if clip.convert(overlay.frame, from: host).intersects(near) { overlay.reveal() }
         }
     }
 
