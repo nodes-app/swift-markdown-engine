@@ -397,7 +397,12 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         }
         scrollView.contentView.postsBoundsChangedNotifications = true
         var lastObservedViewportWidth = scrollView.contentView.bounds.width
-        NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: scrollView.contentView, queue: nil) { _ in
+        // Weak, so an editor whose observers were not removed is still freed (#227).
+        context.coordinator.viewportObservers.append(NotificationCenter.default.addObserver(
+            forName: NSView.frameDidChangeNotification, object: scrollView.contentView, queue: nil
+        ) { [weak scrollView, weak textView, weak coordinator = context.coordinator] _ in
+            guard let scrollView, let textView, let coordinator else { return }
+            textView.revealWideTablesNearViewport()
             // Refresh code-block overlays only on real viewport width changes, not on TextKit height-only echoes during typing.
             let newWidth = scrollView.contentView.bounds.width
             if abs(newWidth - lastObservedViewportWidth) > 0.5 {
@@ -409,8 +414,8 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
                 if textView.configuration.readingWidth != nil {
                     textView.centerReadingColumn(forClipWidth: newWidth)
                 }
-                context.coordinator.didEnsureLayoutForCurrentDocument = false
-                context.coordinator.updateCodeBlockSelection(textView: textView)
+                coordinator.didEnsureLayoutForCurrentDocument = false
+                coordinator.updateCodeBlockSelection(textView: textView)
             }
             // Only react with overscroll recalc when the viewport itself resizes
             // (window resize). Without this guard, TextKit-induced frame changes echo
@@ -434,16 +439,20 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
             guard abs(container.frame.height - scrollView.contentView.bounds.height) > 1 else { return }
             textView.recalcOverscroll(for: scrollView)
             scrollView.clampToInsets()
-        }
-        NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: scrollView.contentView, queue: nil) { _ in
+        })
+        context.coordinator.viewportObservers.append(NotificationCenter.default.addObserver(
+            forName: NSView.boundsDidChangeNotification, object: scrollView.contentView, queue: nil
+        ) { [weak scrollView, weak textView, weak coordinator = context.coordinator] _ in
+            guard let scrollView, let textView, let coordinator else { return }
             textView.ensureVisibleLayout()
-            if context.coordinator.isWritingToolsActive {
-                context.coordinator.fixWritingToolsChildWindowIfNeeded(textView: textView)
+            if coordinator.isWritingToolsActive {
+                coordinator.fixWritingToolsChildWindowIfNeeded(textView: textView)
             }
             scrollView.clampToInsets()
-            context.coordinator.refreshActiveLinkCaretRect()
-            context.coordinator.updateCodeBlockSelection(textView: textView)
-        }
+            textView.revealWideTablesNearViewport()
+            coordinator.refreshActiveLinkCaretRect()
+            coordinator.updateCodeBlockSelection(textView: textView)
+        })
         reconcileHeader(textView: textView, context: context)
         return scrollView
     }
@@ -856,17 +865,20 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
            coordinator.pendingScrollRestoreDocumentId == nil {
             coordinator.onPersistScrollOffset?(documentId, nsView.contentView.bounds.origin.y)
         }
-        park(nsView, coordinator: coordinator)
+        if !park(nsView, coordinator: coordinator) {
+            coordinator.stopObservingViewport()
+        }
     }
 
-    /// Keeps a removed editor for the next one with its `parkingKey`.
-    private static func park(_ scrollView: NSScrollView, coordinator: Coordinator) {
-        guard let key = coordinator.parkingKey else { return }
+    /// Keeps a removed editor for the next one with its `parkingKey`; false when
+    /// the editor is let go.
+    private static func park(_ scrollView: NSScrollView, coordinator: Coordinator) -> Bool {
+        guard let key = coordinator.parkingKey else { return false }
         let stillMounted = max(0, (EditorParking.mounted[key] ?? 1) - 1)
         EditorParking.mounted[key] = stillMounted
         // Another editor with this key is up already: it is the current one, and
         // this one would come back with older state.
-        guard stillMounted == 0, let textView = scrollView.nativeTextView else { return }
+        guard stillMounted == 0, let textView = scrollView.nativeTextView else { return false }
         // Nothing may keep running into a view that is off screen.
         coordinator.cancelDeferredNodeSwitch()
         coordinator.resetWritingToolsSession()
@@ -876,7 +888,12 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         // The embedder may rewrite the file while the editor is away.
         coordinator.noteUndoBaseline(for: coordinator.documentId, text: textView.string)
         coordinator.noteSelection(for: coordinator.documentId, in: textView)
+        // An editor parked earlier and never taken back (see makeNSView) is let go here.
+        if let replaced = EditorParking.parked[key], replaced.coordinator !== coordinator {
+            replaced.coordinator.stopObservingViewport()
+        }
         EditorParking.parked[key] = (scrollView, coordinator)
+        return true
     }
 }
 

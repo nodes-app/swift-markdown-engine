@@ -30,12 +30,23 @@ extension MarkdownStyler {
     /// instead of re-rendering every inactive table on every keystroke.
     private static let tableImageCache: NSCache<NSString, NSImage> = {
         let cache = NSCache<NSString, NSImage>()
-        // Must exceed a document's unique-table count or a full restyle (load /
+        // Should exceed a document's unique-table count or a full restyle (load /
         // theme / font change) re-renders every table (same thrash class as the
-        // metadata cap). NSCache still auto-evicts under memory pressure.
+        // metadata cap).
         cache.countLimit = 2048
+        // And by bytes: a drawn image keeps its bitmap and the cache outlives every
+        // editor, so under the count alone 40 tables kept 517 MB (#227, measured).
+        cache.totalCostLimit = tableImageCacheBudget
         return cache
     }()
+
+    static let tableImageCacheBudget = 64 << 20
+
+    /// The bitmap an image keeps once drawn, at most: 2x, 8 bytes a pixel (the
+    /// snapshot is 64 bpp on a wide-color display, measured).
+    static func tableImageCost(_ size: NSSize) -> Int {
+        Int(ceil(size.width * 2) * ceil(size.height * 2) * 8)
+    }
 
     /// Pixel-level fingerprint of a theme color: its sRGB components resolved
     /// under `appearance`. NSColor descriptions are not sound identities —
@@ -164,7 +175,7 @@ extension MarkdownStyler {
             availableWidth: availableWidth,
             extensions: ctx.configuration.extensions
         )
-        tableImageCache.setObject(image, forKey: key)
+        tableImageCache.setObject(image, forKey: key, cost: tableImageCost(image.size))
         return (image, true)
     }
 

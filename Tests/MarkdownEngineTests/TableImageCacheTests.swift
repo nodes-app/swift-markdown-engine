@@ -102,6 +102,42 @@ struct TableImageCacheTests {
         #expect(repeatedFirst.image === first.image)
     }
 
+    // A drawn image keeps its bitmap and the cache outlives every editor, so Quick
+    // Look's process kept every table it ever previewed (#227).
+    @Test func cacheKeepsNoMoreThanItsBudget() throws {
+        final class Weak { weak var image: NSImage? }
+        let aqua = try #require(NSAppearance(named: .aqua))
+        var rendered: [Weak] = []
+        var costs: [Int] = []
+        var lastSource = ""
+        for n in 0..<16 {
+            try autoreleasepool {
+                let header = (0..<8).map { "Budget \(n) column \($0)" }
+                let rows = (0..<24).map { r in (0..<8).map { "cell \(r)-\($0)" } }
+                let source = ([header, Array(repeating: "---", count: 8)] + rows)
+                    .map { "| " + $0.joined(separator: " | ") + " |" }.joined(separator: "\n")
+                let parsed = try #require(MarkdownStyler.parseTableSource(source))
+                let image = MarkdownStyler.tableImage(
+                    for: source, parsed: parsed, ctx: makeContext(for: source),
+                    appearance: aqua, availableWidth: 700).image
+                let weak = Weak()
+                weak.image = image
+                rendered.append(weak)
+                costs.append(MarkdownStyler.tableImageCost(image.size))
+                lastSource = source
+            }
+        }
+        let budget = MarkdownStyler.tableImageCacheBudget
+        let keptBytes = rendered.compactMap(\.image).reduce(0) { $0 + MarkdownStyler.tableImageCost($1.size) }
+        #expect(costs.reduce(0, +) > 2 * budget, "the tables outgrow the budget")
+        #expect(keptBytes <= budget)
+
+        let again = MarkdownStyler.tableImage(
+            for: lastSource, parsed: try #require(MarkdownStyler.parseTableSource(lastSource)),
+            ctx: makeContext(for: lastSource), appearance: aqua, availableWidth: 700)
+        #expect(!again.rendered, "the latest table is still cached")
+    }
+
     @Test func appearanceChangeRendersFresh() throws {
         let source = "| gamma | delta |\n|---|---|\n| 3 | 4 |"
         let parsed = try #require(MarkdownStyler.parseTableSource(source))

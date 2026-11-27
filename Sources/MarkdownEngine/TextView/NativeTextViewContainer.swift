@@ -159,7 +159,11 @@ final class NativeTextViewContainer: NSView {
     /// Shows the text view at `(columnOriginX, headerHeight)` while it stays at (0, 0).
     private func applyBoundsOrigin() {
         let origin = NSPoint(x: -columnOriginX, y: -headerHeight)
-        if bounds.origin != origin { setBoundsOrigin(origin) }
+        if bounds.origin != origin {
+            setBoundsOrigin(origin)
+            // The band moves the page under a viewport that did not scroll.
+            textView?.revealWideTablesNearViewport()
+        }
         guard let headerPins else { return }
         headerPins.top.constant = origin.y
         headerPins.left.constant = origin.x
