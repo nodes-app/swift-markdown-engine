@@ -18,6 +18,7 @@ import Testing
 @testable import MarkdownEngine
 
 @Suite("Directives — self-contained glyphs")
+@MainActor
 struct DirectiveGlyphTests {
 
     private let base: CGFloat = 14
@@ -35,6 +36,14 @@ struct DirectiveGlyphTests {
     /// A directive that declines to draw anything.
     private struct PlainDirective: MarkdownDirective {
         var syntax: DirectiveSyntax { DirectiveSyntax(name: "plain", form: .selfContained) }
+    }
+
+    private struct TextDirective: MarkdownDirective {
+        var text = "ABC"
+        var syntax: DirectiveSyntax { DirectiveSyntax(name: "text", form: .selfContained) }
+        func presentation(arguments: DirectiveArguments, context: DirectiveContext) -> DirectivePresentation {
+            .text(text)
+        }
     }
 
     /// A directive supplying its own image, sized from an argument.
@@ -206,6 +215,127 @@ struct DirectiveGlyphTests {
     }
 
     // MARK: - Text presentation
+
+    private func glyph(_ source: String, bodyColor: NSColor = .labelColor) throws -> NSImage {
+        let configuration = MarkdownEditorConfiguration(
+            theme: MarkdownEditorTheme(bodyText: bodyColor),
+            directives: [TextDirective(), GlyphDirective(), RegionDirective()]
+        )
+        let attributes = MarkdownASTStyler.styleAttributes(
+            text: source, fontName: fontName, fontSize: base,
+            caretLocation: -1, configuration: configuration
+        )
+        return try #require(attributes.compactMap { $0.attributes[.latexImage] as? NSImage }.last)
+    }
+
+    /// Draw through the layout fragment's plain image path, excluding antialiased edges.
+    private func opaquePixels(_ image: NSImage, appearance: NSAppearance) throws -> [NSColor] {
+        let scale: CGFloat = 4
+        let bitmap = try #require(NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: Int(ceil(image.size.width * scale)),
+            pixelsHigh: Int(ceil(image.size.height * scale)), bitsPerSample: 8,
+            samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+        ))
+        bitmap.size = image.size
+        let context = try #require(NSGraphicsContext(bitmapImageRep: bitmap))
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        NSGraphicsContext.current = context
+        appearance.performAsCurrentDrawingAppearance {
+            NSColor.clear.setFill()
+            NSRect(origin: .zero, size: image.size).fill(using: .copy)
+            image.draw(in: NSRect(origin: .zero, size: image.size))
+        }
+        var pixels: [NSColor] = []
+        for y in 0..<bitmap.pixelsHigh {
+            for x in 0..<bitmap.pixelsWide {
+                if let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB),
+                   color.alphaComponent > 0 {
+                    pixels.append(color)
+                }
+            }
+        }
+        // System label colors are translucent even in fully covered pixels.
+        let maximumAlpha = pixels.map(\.alphaComponent).max() ?? 0
+        let ink = pixels.filter { $0.alphaComponent >= maximumAlpha * 0.95 }
+        #expect(ink.count >= 5)
+        return ink
+    }
+
+    @Test("text and untinted symbols follow the drawing appearance across cache hits")
+    func glyphsFollowAppearance() throws {
+        let aqua = try #require(NSAppearance(named: .aqua))
+        let dark = try #require(NSAppearance(named: .darkAqua))
+        for source in ["@text", "@glyph(star.fill)"] {
+            let image = try glyph(source)
+            for appearance in [aqua, dark, aqua] {
+                var cached: NSImage?
+                appearance.performAsCurrentDrawingAppearance {
+                    cached = try? glyph(source)
+                }
+                for candidate in [image, try #require(cached)] {
+                    let pixels = try opaquePixels(candidate, appearance: appearance)
+                    let brightness = pixels.reduce(0) {
+                        $0 + ($1.redComponent + $1.greenComponent + $1.blueComponent) / 3
+                    } / CGFloat(max(pixels.count, 1))
+                    if appearance.name == .darkAqua {
+                        #expect(brightness > 0.7)
+                    } else {
+                        #expect(brightness < 0.3)
+                    }
+                }
+            }
+        }
+    }
+
+    @Test("glyph caches preserve body colors and explicit symbol tints")
+    func glyphColorsStayIsolated() throws {
+        let colors = [NSColor(srgbRed: 0.8, green: 0.1, blue: 0.2, alpha: 1),
+                      NSColor(srgbRed: 0.1, green: 0.2, blue: 0.8, alpha: 1)]
+        for appearanceName in [NSAppearance.Name.aqua, .darkAqua] {
+            let appearance = try #require(NSAppearance(named: appearanceName))
+            for bodyColor in colors + colors {
+                for source in ["@text", "@glyph(star.fill)", "@glyph(star.fill, color: green)"] {
+                    let image = try glyph(source, bodyColor: bodyColor)
+                    var expected: NSColor?
+                    appearance.performAsCurrentDrawingAppearance {
+                        expected = (source.contains("color:") ? NSColor.systemGreen : bodyColor)
+                            .usingColorSpace(.sRGB)
+                    }
+                    let resolved = try #require(expected)
+                    let pixels = try opaquePixels(image, appearance: appearance)
+                    #expect(pixels.allSatisfy {
+                        abs($0.redComponent - resolved.redComponent) < 0.08 &&
+                        abs($0.greenComponent - resolved.greenComponent) < 0.08 &&
+                        abs($0.blueComponent - resolved.blueComponent) < 0.08
+                    })
+                }
+            }
+        }
+    }
+
+    @Test("color emoji keep their intrinsic colors across appearances")
+    func emojiColorsSurvive() throws {
+        let image = try glyph("@region(JP)")
+        for name in [NSAppearance.Name.aqua, .darkAqua, .aqua] {
+            let pixels = try opaquePixels(image, appearance: #require(NSAppearance(named: name)))
+            #expect(pixels.contains { $0.redComponent > 0.7 && $0.greenComponent < 0.4 })
+            #expect(pixels.contains { $0.redComponent > 0.8 && $0.greenComponent > 0.8 && $0.blueComponent > 0.8 })
+        }
+    }
+
+    @Test("an empty text presentation leaves its source visible")
+    func emptyTextStaysVisible() {
+        let configuration = MarkdownEditorConfiguration(directives: [TextDirective(text: "")])
+        for (range, attributes) in MarkdownASTStyler.styleAttributes(
+            text: "@text", fontName: fontName, fontSize: base,
+            caretLocation: -1, configuration: configuration
+        ) where NSLocationInRange(0, range) {
+            #expect(attributes[.latexImage] == nil)
+            #expect((attributes[.font] as? NSFont)?.pointSize != hiddenSize)
+        }
+    }
 
     @Test("a text presentation renders as a glyph, not a storage substitution")
     func textPresentationRenders() {

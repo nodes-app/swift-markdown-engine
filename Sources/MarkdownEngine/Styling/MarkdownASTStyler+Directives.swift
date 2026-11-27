@@ -128,7 +128,7 @@ extension MarkdownASTStyler {
         case .literal:
             resolved = nil
         case .symbol(let name, let tint):
-            resolved = symbolImage(named: name, tint: tint, font: font).map { image in
+            resolved = symbolImage(named: name, tint: tint ?? ctx.theme.bodyText, font: font).map { image in
                 // Optically centre the glyph on the text's x-height:
                 // `descent` is how far the image's bottom sits below the
                 // baseline, so centring wants (height - xHeight) / 2.
@@ -137,7 +137,7 @@ extension MarkdownASTStyler {
         case .text(let string):
             // Text renders on the same image channel: substituting characters
             // into the storage would violate "the source is never removed".
-            resolved = textImage(string, font: font).map { ($0, -font.descender) }
+            resolved = textImage(string, font: font, color: ctx.theme.bodyText).map { ($0, -font.descender) }
         case .image(let image, let baselineOffset):
             resolved = (image, baselineOffset)
         }
@@ -171,47 +171,46 @@ extension MarkdownASTStyler {
         }
     }
 
-    /// An SF Symbol sized to the inherited font, optionally tinted. `nil` when
+    /// An SF Symbol sized to the inherited font with its effective tint. `nil` when
     /// the system doesn't know the name — the caller then leaves the source
     /// visible instead of collapsing it to an empty gap.
-    private static func symbolImage(named name: String, tint: NSColor?, font: NSFont) -> NSImage? {
-        let key = "sym|\(name)|\(font.pointSize)|\(tint?.description ?? "-")" as NSString
+    private static func symbolImage(named name: String, tint: NSColor, font: NSFont) -> NSImage? {
+        let key = ["sym", name, font.fontName, font.pointSize, tint] as NSArray
         if let cached = glyphCache.object(forKey: key) { return cached }
-        var configuration = NSImage.SymbolConfiguration(pointSize: font.pointSize, weight: .regular)
-        if let tint {
-            configuration = configuration.applying(NSImage.SymbolConfiguration(paletteColors: [tint]))
-        }
+        let configuration = NSImage.SymbolConfiguration(pointSize: font.pointSize, weight: .regular)
+            .applying(NSImage.SymbolConfiguration(paletteColors: [tint]))
         guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
             .withSymbolConfiguration(configuration) else { return nil }
         glyphCache.setObject(image, forKey: key)
         return image
     }
 
-    /// Rasterise replacement text in the inherited font.
-    private static func textImage(_ string: String, font: NSFont) -> NSImage? {
+    /// Draw replacement text in the inherited font and current drawing appearance.
+    private static func textImage(_ string: String, font: NSFont, color: NSColor) -> NSImage? {
         guard !string.isEmpty else { return nil }
-        let key = "txt|\(string)|\(font.fontName)|\(font.pointSize)" as NSString
+        let key = ["txt", string, font.fontName, font.pointSize, color] as NSArray
         if let cached = glyphCache.object(forKey: key) { return cached }
-        let attributed = NSAttributedString(string: string, attributes: [.font: font])
+        let attributed = NSAttributedString(string: string, attributes: [.font: font, .foregroundColor: color])
         let size = attributed.size()
         guard size.width > 0, size.height > 0 else { return nil }
-        let image = NSImage(size: CGSize(width: ceil(size.width), height: ceil(size.height)))
-        image.lockFocus()
-        attributed.draw(at: .zero)
-        image.unlockFocus()
+        let image = NSImage(size: CGSize(width: ceil(size.width), height: ceil(size.height)),
+                            flipped: false) { _ in
+            attributed.draw(at: .zero)
+            return true
+        }
         glyphCache.setObject(image, forKey: key)
         return image
     }
 
-    /// Rendered glyphs, keyed by everything that determines the pixels.
+    /// Appearance-aware glyphs, keyed by content, font, and unresolved foreground color.
     ///
     /// Restyling re-runs presentation for every visible directive on every
-    /// keystroke; rasterising text each time is the one part of this path
-    /// expensive enough to matter. `NSCache` is thread-safe and evicts under
-    /// pressure, so this needs no invalidation of its own — a changed font or
-    /// tint simply produces a different key.
-    private static let glyphCache: NSCache<NSString, NSImage> = {
-        let cache = NSCache<NSString, NSImage>()
+    /// keystroke; reuse the image representations while letting dynamic colors
+    /// resolve at drawing time. Color objects in the key distinguish custom
+    /// palettes without resolving them to one appearance's pixels. `NSCache`
+    /// evicts under pressure; changed fonts or colors produce different keys.
+    private static let glyphCache: NSCache<NSArray, NSImage> = {
+        let cache = NSCache<NSArray, NSImage>()
         cache.countLimit = 512
         return cache
     }()
