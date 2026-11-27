@@ -140,8 +140,11 @@ struct MarkdownLists {
             }
         }
 
-        // Autocomplete Obsidian-style node brackets and single square brackets
+        // Autocomplete Obsidian-style node brackets and single square brackets.
+        // Both behaviors are bracket auto-closing, so both honor `autoClosePairsEnabled` —
+        // embedders that edit plain Markdown source expect `[` to insert exactly `[`.
         if replacementString == "[" {
+            guard autoClosePairsEnabled else { return true }
             let nsText = textView.string as NSString
             let insertionLocation = affectedCharRange.location
             if insertionLocation > 0 {
