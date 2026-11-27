@@ -19,8 +19,14 @@ extension NativeTextView {
             guard let ts = textStorage, idx >= 0, idx < ts.length else { return false }
             return ts.attribute(.link, at: idx, effectiveRange: nil) != nil
         }()
+        // The open tokens before this click: a click into a link that was
+        // already open is meant to edit its syntax (NativeTextView+LinkSyntaxClick).
+        let activeBefore = (delegate as? NativeTextViewCoordinator)?.activeTokenIndices ?? []
         if let toggled = toggleTaskCheckboxIfHit(event: event), toggled { return }
-        if remapClickInParagraphSpacing(event: event) { return }
+        if remapClickInParagraphSpacing(event: event) {
+            moveCaretOutOfHiddenLinkSyntax(after: event, activeBefore: activeBefore)
+            return
+        }
         dragStartMouseScreenLoc = NSEvent.mouseLocation
         let boostTimer = Timer(timeInterval: 1.0 / configuration.dragSelection.ticksPerSecond, repeats: true) { [weak self] _ in
             self?.performDragBoostTick()
@@ -68,6 +74,12 @@ extension NativeTextView {
             let loc = min(preClickSelection.location, docLen)
             let len = min(preClickSelection.length, max(0, docLen - loc))
             setSelectedRange(NSRange(location: loc, length: len))
+        }
+
+        // A plain click beside a closed link's words is no link click: AppKit
+        // parked the caret in the hidden syntax.
+        if !linkClickDidFire, travel < 2 {
+            moveCaretOutOfHiddenLinkSyntax(after: event, activeBefore: activeBefore)
         }
     }
 
